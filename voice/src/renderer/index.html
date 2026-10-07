@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src wss: https: ws://localhost:* ws://127.0.0.1:* http://localhost:* http://127.0.0.1:*; media-src 'self' blob: mediastream:; img-src 'self' data:"
+    />
+    <title>9th Fleet Voice</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <h1>9th Fleet Voice</h1>
+        <span class="tag" id="version">Gate A spike</span>
+      </div>
+      <span class="pill" id="link" data-state="disconnected">Not connected</span>
+    </header>
+
+    <main>
+      <section class="panel join" aria-labelledby="join-title">
+        <h2 id="join-title">Join</h2>
+        <div class="join-grid">
+          <label class="field grow">
+            <span>Join code</span>
+            <input id="join-code" type="text" spellcheck="false" autocomplete="off" placeholder="wss://…livekit.cloud#eyJ…" />
+          </label>
+          <label class="field">
+            <span>Microphone</span>
+            <select id="mic"></select>
+          </label>
+          <button id="connect" class="primary" type="button">Connect</button>
+        </div>
+        <div class="join-foot">
+          <span id="join-status" class="muted">Paste the join code you were sent, then connect.</span>
+          <span class="meter" title="Microphone level"><span id="mic-level"></span></span>
+        </div>
+      </section>
+
+      <section class="nets" id="nets" aria-label="Nets"></section>
+
+      <section class="panel log" aria-labelledby="log-title">
+        <div class="panel-head">
+          <h2 id="log-title">Test record</h2>
+          <div class="actions">
+            <button id="reset" type="button">Reset counts</button>
+            <button id="copy" type="button">Copy</button>
+            <button id="save" type="button">Save…</button>
+          </div>
+        </div>
+        <table class="counts" id="counts">
+          <thead>
+            <tr>
+              <th scope="col">Sent from this PC</th>
+              <th scope="col">Presses</th>
+              <th scope="col">Releases</th>
+              <th scope="col">Cut by app</th>
+              <th scope="col">Key to live</th>
+              <th scope="col">Release to closed</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <table class="counts" id="heard">
+          <thead>
+            <tr>
+              <th scope="col">Heard on this PC</th>
+              <th scope="col">Transmissions</th>
+              <th scope="col">Longest</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <pre id="log-lines" aria-live="off"></pre>
+      </section>
+
+      <aside class="side">
+        <section class="panel" aria-labelledby="roster-title">
+          <h2 id="roster-title">In the room</h2>
+          <ul id="roster" class="roster"></ul>
+        </section>
+        <section class="panel" aria-labelledby="health-title">
+          <h2 id="health-title">Input health</h2>
+          <dl id="health" class="health"></dl>
+        </section>
+        <section class="panel" aria-labelledby="options-title">
+          <h2 id="options-title">Options</h2>
+          <label class="check"><input id="permit-tone" type="checkbox" /> Tone when my microphone goes live</label>
+          <p class="muted small">Transmissions are cut after 60 seconds in case a key release is missed.</p>
+        </section>
+      </aside>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

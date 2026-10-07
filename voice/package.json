@@ -1,0 +1,62 @@
+{
+  "name": "ninth-fleet-voice",
+  "version": "0.1.0",
+  "private": true,
+  "description": "UEE 9th Fleet voice app. Gate A spike: one event room, two nets, global push-to-talk.",
+  "author": "UEE 9th Fleet",
+  "main": "dist/main.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node build.mjs && electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "node build.mjs --test && node --test \"dist-test/*.test.cjs\"",
+    "e2e": "node build.mjs && node e2e/run.mjs",
+    "token": "node scripts/token.mjs",
+    "dist": "node build.mjs && electron-builder --win portable --publish never"
+  },
+  "build": {
+    "appId": "org.ninthfleet.voice",
+    "productName": "9th Fleet Voice",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "!dist/**/*.map",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/uiohook-napi/**"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "9thFleetVoice-${version}.exe"
+    }
+  },
+  "dependencies": {
+    "uiohook-napi": "^1.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "electron": "^44.6.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "livekit-client": "^2.22.3",
+    "livekit-server-sdk": "^2.19.1",
+    "playwright-core": "^1.63.0",
+    "typescript": "^7.0.2"
+  }
+}

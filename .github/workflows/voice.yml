@@ -1,0 +1,106 @@
+name: Voice app
+
+on:
+  push:
+    branches: [main]
+    paths: ['voice/**', '.github/workflows/voice.yml']
+  pull_request:
+    paths: ['voice/**', '.github/workflows/voice.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voice-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LIVEKIT_VERSION: '1.13.8'
+
+jobs:
+  linux:
+    name: Checks and end-to-end test (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: voice
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: voice/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Get the LiveKit server and X11 test tools
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/livekit.tar.gz" "https://github.com/livekit/livekit/releases/download/v${LIVEKIT_VERSION}/livekit_${LIVEKIT_VERSION}_linux_amd64.tar.gz"
+          mkdir -p "$RUNNER_TEMP/livekit"
+          tar -xzf "$RUNNER_TEMP/livekit.tar.gz" -C "$RUNNER_TEMP/livekit"
+          echo "LIVEKIT_SERVER=$RUNNER_TEMP/livekit/livekit-server" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y xvfb python3-xlib libxtst6 libxkbcommon-x11-0
+      - name: End-to-end test
+        run: xvfb-run -a npm run e2e
+      - name: Keep the end-to-end output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-linux
+          path: voice/dist-test/e2e
+          if-no-files-found: ignore
+
+  windows:
+    name: Test and build (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: voice
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: voice/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Get the LiveKit server
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'livekit.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'livekit'
+          Invoke-WebRequest -Uri "https://github.com/livekit/livekit/releases/download/v$env:LIVEKIT_VERSION/livekit_${env:LIVEKIT_VERSION}_windows_amd64.zip" -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir
+          "LIVEKIT_SERVER=$dir\livekit-server.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: End-to-end test
+        run: npm run e2e
+      - name: Build the portable app
+        run: npm run dist
+      - name: Start the packaged app and check its key hook
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'smoke.json'
+          $app = Start-Process -FilePath 'release\win-unpacked\9th Fleet Voice.exe' -ArgumentList "--smoke=$report" -PassThru
+          if (-not $app.WaitForExit(60000)) { $app.Kill(); throw 'The packaged app did not finish its start-up check in 60 seconds.' }
+          Get-Content $report
+          if ($app.ExitCode -ne 0) { throw "Start-up check failed with exit code $($app.ExitCode)." }
+      - name: Keep the Windows app
+        uses: actions/upload-artifact@v4
+        with:
+          name: 9thFleetVoice-windows
+          path: voice/release/*.exe
+          if-no-files-found: error
+      - name: Keep the end-to-end output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-windows
+          path: voice/dist-test/e2e
+          if-no-files-found: ignore
