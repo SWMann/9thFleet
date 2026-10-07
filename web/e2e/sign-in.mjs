@@ -103,6 +103,16 @@ try {
     assert.equal(new URL(page.url()).pathname, "/sign-in");
     assert.match(await page.locator(".notice").innerText(), /left Discord before finishing/);
   });
+  await check("a fault in the sign-in service is not blamed on the visitor", async () => {
+    // What Supabase sends back when Discord refuses its Client Secret.
+    await page.goto(
+      `${site}/auth/callback?error=server_error&error_code=unexpected_failure&error_description=Unable+to+exchange+external+code`,
+    );
+    assert.equal(new URL(page.url()).pathname, "/sign-in");
+    const notice = await page.locator(".notice").innerText();
+    assert.match(notice, /fault on our side/);
+    assert.doesNotMatch(notice, /left Discord/);
+  });
   await check("a made-up code does not sign anyone in", async () => {
     await page.goto(`${site}/auth/callback?code=made-up`);
     assert.equal(new URL(page.url()).pathname, "/sign-in");

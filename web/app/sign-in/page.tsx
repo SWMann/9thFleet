@@ -12,6 +12,7 @@ const problems: Record<string, string> = {
   setup: "Sign-in is not set up on this site yet.",
   discord: "Discord could not be reached. Try again in a minute.",
   cancelled: "You left Discord before finishing, so you are not signed in.",
+  service: "Discord let you through, but the sign-in service could not finish. This is a fault on our side, not something you did. Tell the fleet's staff.",
   callback: "Discord sent you back, but the sign-in could not be completed. Try again.",
 };
 
