@@ -30,8 +30,8 @@ const work = [
 ];
 
 const night = [
-  { step: "Warning order", detail: "Three days before, you get the task, the time and the slots." },
-  { step: "Slotting", detail: "You take a slot. The roster closes the day before." },
+  { step: "Warning order", detail: "Three days before, you get the task and the time." },
+  { step: "Attendance", detail: "You confirm whether you are coming. The roll closes the day before." },
   { step: "Muster", detail: "Fifteen minutes before: attendance, kit, and a radio check on every net." },
   { step: "Orders", detail: "The commander briefs the plan in five paragraphs." },
   { step: "The operation", detail: "Two hours, on the nets." },
