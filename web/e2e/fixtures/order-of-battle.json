@@ -1,0 +1,1381 @@
+{
+ "units": [
+  {
+   "id": "6c309836-71d7-43e1-b04d-69c2712b347f",
+   "parent_id": null,
+   "name": "UEE 9th Fleet",
+   "kind": "fleet",
+   "service": null,
+   "opens_at_stage": 1,
+   "sort_order": 0
+  },
+  {
+   "id": "4cbe21e0-0a76-4f6f-9684-7d40b8e432b6",
+   "parent_id": "5bb903f7-2386-4c93-8f58-26615527f435",
+   "name": "Bridge",
+   "kind": "department",
+   "service": "navy",
+   "opens_at_stage": 2,
+   "sort_order": 1
+  },
+  {
+   "id": "f7d929bf-4b88-4a63-a26e-646a41bdb508",
+   "parent_id": "6c309836-71d7-43e1-b04d-69c2712b347f",
+   "name": "Fleet Command",
+   "kind": "command",
+   "service": null,
+   "opens_at_stage": 1,
+   "sort_order": 1
+  },
+  {
+   "id": "ec6709e2-a034-4e96-8cf0-321f7a6fffab",
+   "parent_id": "eb7ffdc0-4d5f-4232-bcfa-a018db4f6aa6",
+   "name": "Training Ship",
+   "kind": "ship",
+   "service": "navy",
+   "opens_at_stage": 1,
+   "sort_order": 1
+  },
+  {
+   "id": "eefd4552-ee29-4aef-8355-68426b0429e9",
+   "parent_id": "6c309836-71d7-43e1-b04d-69c2712b347f",
+   "name": "Fleet Staff",
+   "kind": "staff",
+   "service": null,
+   "opens_at_stage": 1,
+   "sort_order": 2
+  },
+  {
+   "id": "ee95b875-005a-4bbb-a32a-9a3360099473",
+   "parent_id": "5bb903f7-2386-4c93-8f58-26615527f435",
+   "name": "Gunnery",
+   "kind": "department",
+   "service": "navy",
+   "opens_at_stage": 2,
+   "sort_order": 2
+  },
+  {
+   "id": "5bb903f7-2386-4c93-8f58-26615527f435",
+   "parent_id": "eb7ffdc0-4d5f-4232-bcfa-a018db4f6aa6",
+   "name": "UEES Nexus",
+   "kind": "ship",
+   "service": "navy",
+   "opens_at_stage": 2,
+   "sort_order": 2
+  },
+  {
+   "id": "49478a9d-a0fa-42b7-bea7-ea8b1265b94f",
+   "parent_id": "eb7ffdc0-4d5f-4232-bcfa-a018db4f6aa6",
+   "name": "A Flight",
+   "kind": "flight",
+   "service": "navy",
+   "opens_at_stage": 3,
+   "sort_order": 3
+  },
+  {
+   "id": "c4e7c296-5e43-4c46-b52a-e1f794fdf9e3",
+   "parent_id": "5bb903f7-2386-4c93-8f58-26615527f435",
+   "name": "Engineering",
+   "kind": "department",
+   "service": "navy",
+   "opens_at_stage": 2,
+   "sort_order": 3
+  },
+  {
+   "id": "eb7ffdc0-4d5f-4232-bcfa-a018db4f6aa6",
+   "parent_id": "6c309836-71d7-43e1-b04d-69c2712b347f",
+   "name": "Task Force Jericho",
+   "kind": "task force",
+   "service": "navy",
+   "opens_at_stage": 1,
+   "sort_order": 3
+  },
+  {
+   "id": "a986b7c7-aa6a-4b3b-ac5a-07091d501ba1",
+   "parent_id": "eb7ffdc0-4d5f-4232-bcfa-a018db4f6aa6",
+   "name": "Escort One",
+   "kind": "ship",
+   "service": "navy",
+   "opens_at_stage": 3,
+   "sort_order": 4
+  },
+  {
+   "id": "0ce50e77-2af0-4059-9044-207903a24968",
+   "parent_id": "5bb903f7-2386-4c93-8f58-26615527f435",
+   "name": "Medical",
+   "kind": "department",
+   "service": "navy",
+   "opens_at_stage": 2,
+   "sort_order": 4
+  },
+  {
+   "id": "9d7f993f-c745-42dc-a515-6bca7450ee34",
+   "parent_id": "5bb903f7-2386-4c93-8f58-26615527f435",
+   "name": "Flight Deck",
+   "kind": "department",
+   "service": "navy",
+   "opens_at_stage": 3,
+   "sort_order": 5
+  },
+  {
+   "id": "55663075-5abc-4ea4-8e47-14e3027d2408",
+   "parent_id": "5bb903f7-2386-4c93-8f58-26615527f435",
+   "name": "Security",
+   "kind": "department",
+   "service": "navy",
+   "opens_at_stage": 3,
+   "sort_order": 6
+  }
+ ],
+ "positions": [
+  {
+   "id": "0e7493d8-e4c3-432b-941d-b57f5d4b1029",
+   "unit_id": "c4e7c296-5e43-4c46-b52a-e1f794fdf9e3",
+   "title": "Chief Engineer",
+   "kind": "primary",
+   "nominal_grade": "E6",
+   "min_grade": "E5",
+   "max_grade": "E7",
+   "is_entry": false,
+   "opens_at_stage": 2,
+   "sort_order": 1
+  },
+  {
+   "id": "e9aaee8f-4ee4-406a-a429-b3c4bfb0daec",
+   "unit_id": "4cbe21e0-0a76-4f6f-9684-7d40b8e432b6",
+   "title": "Commanding Officer",
+   "kind": "primary",
+   "nominal_grade": "O4",
+   "min_grade": "O3",
+   "max_grade": "O5",
+   "is_entry": false,
+   "opens_at_stage": 5,
+   "sort_order": 1
+  },
+  {
+   "id": "0b9b8127-855a-4cda-a916-205d4fbf3719",
+   "unit_id": "a986b7c7-aa6a-4b3b-ac5a-07091d501ba1",
+   "title": "Commanding Officer",
+   "kind": "primary",
+   "nominal_grade": "O2",
+   "min_grade": "O1",
+   "max_grade": "O3",
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 1
+  },
+  {
+   "id": "ea43ef1c-e719-43e9-8e17-c3fea4acc7af",
+   "unit_id": "f7d929bf-4b88-4a63-a26e-646a41bdb508",
+   "title": "Fleet Commander",
+   "kind": "primary",
+   "nominal_grade": "O10",
+   "min_grade": "O4",
+   "max_grade": "O10",
+   "is_entry": false,
+   "opens_at_stage": 1,
+   "sort_order": 1
+  },
+  {
+   "id": "9c287218-54ab-401c-aa66-7b71b85b98a5",
+   "unit_id": "9d7f993f-c745-42dc-a515-6bca7450ee34",
+   "title": "Flight Deck Chief",
+   "kind": "primary",
+   "nominal_grade": "E5",
+   "min_grade": "E4",
+   "max_grade": "E6",
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 1
+  },
+  {
+   "id": "12c4a9f5-88c7-448f-ba5a-c063e7ae4536",
+   "unit_id": "49478a9d-a0fa-42b7-bea7-ea8b1265b94f",
+   "title": "Flight Lead",
+   "kind": "primary",
+   "nominal_grade": "O2",
+   "min_grade": "O1",
+   "max_grade": "O3",
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 1
+  },
+  {
+   "id": "2d5222e1-8205-474f-b857-74cb6c382376",
+   "unit_id": "ee95b875-005a-4bbb-a32a-9a3360099473",
+   "title": "Gunnery Chief",
+   "kind": "primary",
+   "nominal_grade": "E5",
+   "min_grade": "E4",
+   "max_grade": "E6",
+   "is_entry": false,
+   "opens_at_stage": 2,
+   "sort_order": 1
+  },
+  {
+   "id": "f0fb126a-8423-4411-8dd4-eeb602007b6c",
+   "unit_id": "ec6709e2-a034-4e96-8cf0-321f7a6fffab",
+   "title": "Helmsman",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 1,
+   "sort_order": 1
+  },
+  {
+   "id": "744e5df0-ea74-4e91-a5b9-06b7788a7640",
+   "unit_id": "55663075-5abc-4ea4-8e47-14e3027d2408",
+   "title": "Master-at-Arms",
+   "kind": "primary",
+   "nominal_grade": "E5",
+   "min_grade": "E4",
+   "max_grade": "E6",
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 1
+  },
+  {
+   "id": "3fa9597e-bc5e-4bf3-84b8-3136982c72d5",
+   "unit_id": "0ce50e77-2af0-4059-9044-207903a24968",
+   "title": "Medic",
+   "kind": "primary",
+   "nominal_grade": "E4",
+   "min_grade": "E3",
+   "max_grade": "E5",
+   "is_entry": false,
+   "opens_at_stage": 2,
+   "sort_order": 1
+  },
+  {
+   "id": "2df2a108-1a7f-4da0-b47e-59235abeb93a",
+   "unit_id": "eefd4552-ee29-4aef-8355-68426b0429e9",
+   "title": "Recruiter",
+   "kind": "duty",
+   "nominal_grade": null,
+   "min_grade": "E4",
+   "max_grade": null,
+   "is_entry": false,
+   "opens_at_stage": 1,
+   "sort_order": 1
+  },
+  {
+   "id": "ec877aa6-d8bd-426e-a4eb-8540db3baf75",
+   "unit_id": "9d7f993f-c745-42dc-a515-6bca7450ee34",
+   "title": "Deck Hand",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 3,
+   "sort_order": 2
+  },
+  {
+   "id": "d531cbef-f825-4494-aea8-14ab03c43db1",
+   "unit_id": "ec6709e2-a034-4e96-8cf0-321f7a6fffab",
+   "title": "Engineer",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 1,
+   "sort_order": 2
+  },
+  {
+   "id": "8bde825d-b52b-4f28-899b-970554da5f7c",
+   "unit_id": "a986b7c7-aa6a-4b3b-ac5a-07091d501ba1",
+   "title": "Engineer",
+   "kind": "primary",
+   "nominal_grade": "E4",
+   "min_grade": "E3",
+   "max_grade": "E5",
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 2
+  },
+  {
+   "id": "3bc691c6-1ded-49d5-9a72-c4078d7b0ba9",
+   "unit_id": "4cbe21e0-0a76-4f6f-9684-7d40b8e432b6",
+   "title": "Executive Officer",
+   "kind": "primary",
+   "nominal_grade": "O3",
+   "min_grade": "O2",
+   "max_grade": "O4",
+   "is_entry": false,
+   "opens_at_stage": 2,
+   "sort_order": 2
+  },
+  {
+   "id": "835b8649-d661-447a-a69e-1683c7a09c57",
+   "unit_id": "eefd4552-ee29-4aef-8355-68426b0429e9",
+   "title": "Instructor",
+   "kind": "duty",
+   "nominal_grade": null,
+   "min_grade": null,
+   "max_grade": null,
+   "is_entry": false,
+   "opens_at_stage": 1,
+   "sort_order": 2
+  },
+  {
+   "id": "cce726b6-e782-4616-aeec-a66f6af50d67",
+   "unit_id": "49478a9d-a0fa-42b7-bea7-ea8b1265b94f",
+   "title": "Pilot 2",
+   "kind": "primary",
+   "nominal_grade": "E4",
+   "min_grade": "E3",
+   "max_grade": "E6",
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 2
+  },
+  {
+   "id": "3345887b-5c41-4d62-aefb-58cc7ff8fc52",
+   "unit_id": "c4e7c296-5e43-4c46-b52a-e1f794fdf9e3",
+   "title": "Senior Engineer",
+   "kind": "primary",
+   "nominal_grade": "E4",
+   "min_grade": "E3",
+   "max_grade": "E5",
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 2
+  },
+  {
+   "id": "a0a269eb-b728-4112-a75e-9e4aa949e387",
+   "unit_id": "ee95b875-005a-4bbb-a32a-9a3360099473",
+   "title": "Turret Gunner 1",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 2,
+   "sort_order": 2
+  },
+  {
+   "id": "517c3e74-39e6-48cf-abb3-52dacce998b0",
+   "unit_id": "c4e7c296-5e43-4c46-b52a-e1f794fdf9e3",
+   "title": "Engineer 1",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 2,
+   "sort_order": 3
+  },
+  {
+   "id": "610ad290-99c7-429a-b4da-0af55229f433",
+   "unit_id": "a986b7c7-aa6a-4b3b-ac5a-07091d501ba1",
+   "title": "Gunner 1",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 3,
+   "sort_order": 3
+  },
+  {
+   "id": "05655385-9593-4a16-8bec-0568565d1a32",
+   "unit_id": "ec6709e2-a034-4e96-8cf0-321f7a6fffab",
+   "title": "Gunner 1",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 1,
+   "sort_order": 3
+  },
+  {
+   "id": "3f98b4a7-c8c3-4ccc-9fc7-6fd2901be649",
+   "unit_id": "eefd4552-ee29-4aef-8355-68426b0429e9",
+   "title": "Head of Personnel and Recruiting",
+   "kind": "duty",
+   "nominal_grade": null,
+   "min_grade": null,
+   "max_grade": null,
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 3
+  },
+  {
+   "id": "5cd48d2d-03fb-4279-82d5-db59490fc41e",
+   "unit_id": "49478a9d-a0fa-42b7-bea7-ea8b1265b94f",
+   "title": "Pilot 3",
+   "kind": "primary",
+   "nominal_grade": "E4",
+   "min_grade": "E3",
+   "max_grade": "E6",
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 3
+  },
+  {
+   "id": "830ea274-31a4-4b11-ac47-4cb8656307c3",
+   "unit_id": "4cbe21e0-0a76-4f6f-9684-7d40b8e432b6",
+   "title": "Tactical Officer",
+   "kind": "primary",
+   "nominal_grade": "O2",
+   "min_grade": "O1",
+   "max_grade": "O3",
+   "is_entry": false,
+   "opens_at_stage": 2,
+   "sort_order": 3
+  },
+  {
+   "id": "27b330be-0a1d-4611-afaa-40c5b4e29cdd",
+   "unit_id": "ee95b875-005a-4bbb-a32a-9a3360099473",
+   "title": "Turret Gunner 2",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 2,
+   "sort_order": 3
+  },
+  {
+   "id": "9ed92f3a-b45c-4564-9001-5e285d06eed6",
+   "unit_id": "4cbe21e0-0a76-4f6f-9684-7d40b8e432b6",
+   "title": "Chief of the Boat",
+   "kind": "primary",
+   "nominal_grade": "E6",
+   "min_grade": "E5",
+   "max_grade": "E7",
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 4
+  },
+  {
+   "id": "315f5869-e06e-4699-8476-547493bb1ffa",
+   "unit_id": "eefd4552-ee29-4aef-8355-68426b0429e9",
+   "title": "Commandant, Training School",
+   "kind": "duty",
+   "nominal_grade": null,
+   "min_grade": null,
+   "max_grade": null,
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 4
+  },
+  {
+   "id": "ddb26381-44d9-484b-9ebf-abb1b20a8975",
+   "unit_id": "c4e7c296-5e43-4c46-b52a-e1f794fdf9e3",
+   "title": "Engineer 2",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 3,
+   "sort_order": 4
+  },
+  {
+   "id": "825b5003-bce2-40ed-9dc8-bab6638dbde1",
+   "unit_id": "ec6709e2-a034-4e96-8cf0-321f7a6fffab",
+   "title": "Gunner 2",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 1,
+   "sort_order": 4
+  },
+  {
+   "id": "a048c731-8ad0-4852-9d5c-7eedcc8b3eb4",
+   "unit_id": "a986b7c7-aa6a-4b3b-ac5a-07091d501ba1",
+   "title": "Gunner 2",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 3,
+   "sort_order": 4
+  },
+  {
+   "id": "4bc42af0-1c34-4724-85d8-f858f62020fc",
+   "unit_id": "49478a9d-a0fa-42b7-bea7-ea8b1265b94f",
+   "title": "Pilot 4",
+   "kind": "primary",
+   "nominal_grade": "E4",
+   "min_grade": "E3",
+   "max_grade": "E6",
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 4
+  },
+  {
+   "id": "1a7904f7-5233-4ed5-98a5-69320b52d57f",
+   "unit_id": "ee95b875-005a-4bbb-a32a-9a3360099473",
+   "title": "Turret Gunner 3",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 2,
+   "sort_order": 4
+  },
+  {
+   "id": "e87ad55a-e833-4005-942c-830569342aff",
+   "unit_id": "ec6709e2-a034-4e96-8cf0-321f7a6fffab",
+   "title": "Gunner 3",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 1,
+   "sort_order": 5
+  },
+  {
+   "id": "21bc6d45-40b1-4baf-934b-70f3c9d1114a",
+   "unit_id": "a986b7c7-aa6a-4b3b-ac5a-07091d501ba1",
+   "title": "Gunner 3",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 3,
+   "sort_order": 5
+  },
+  {
+   "id": "88ec7b4a-75eb-4794-b87f-ff1373425369",
+   "unit_id": "eefd4552-ee29-4aef-8355-68426b0429e9",
+   "title": "Head of Operations and Planning",
+   "kind": "duty",
+   "nominal_grade": null,
+   "min_grade": null,
+   "max_grade": null,
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 5
+  },
+  {
+   "id": "e60f7289-4c73-4c99-b13e-dd112e5e4f5c",
+   "unit_id": "4cbe21e0-0a76-4f6f-9684-7d40b8e432b6",
+   "title": "Helmsman",
+   "kind": "primary",
+   "nominal_grade": "E5",
+   "min_grade": "E4",
+   "max_grade": "E6",
+   "is_entry": false,
+   "opens_at_stage": 2,
+   "sort_order": 5
+  },
+  {
+   "id": "790a9ce1-2180-4492-bf81-375ffd49c681",
+   "unit_id": "ee95b875-005a-4bbb-a32a-9a3360099473",
+   "title": "Turret Gunner 4",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 2,
+   "sort_order": 5
+  },
+  {
+   "id": "8300db56-d90a-4734-873e-b4ef49676c4f",
+   "unit_id": "ec6709e2-a034-4e96-8cf0-321f7a6fffab",
+   "title": "Gunner 4",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 1,
+   "sort_order": 6
+  },
+  {
+   "id": "5f57f72e-6a74-461b-b0cb-00ff0062414f",
+   "unit_id": "eefd4552-ee29-4aef-8355-68426b0429e9",
+   "title": "Head of Logistics and Medical",
+   "kind": "duty",
+   "nominal_grade": null,
+   "min_grade": null,
+   "max_grade": null,
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 6
+  },
+  {
+   "id": "f87927bf-6201-4655-bca7-a32427437ec1",
+   "unit_id": "4cbe21e0-0a76-4f6f-9684-7d40b8e432b6",
+   "title": "Navigator",
+   "kind": "primary",
+   "nominal_grade": "E4",
+   "min_grade": "E3",
+   "max_grade": "E5",
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 6
+  },
+  {
+   "id": "498fd4b7-c98b-4149-aa37-c6abab353626",
+   "unit_id": "ee95b875-005a-4bbb-a32a-9a3360099473",
+   "title": "Turret Gunner 5",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 2,
+   "sort_order": 6
+  },
+  {
+   "id": "a13d5334-5678-4188-b61d-8cb41284edd5",
+   "unit_id": "4cbe21e0-0a76-4f6f-9684-7d40b8e432b6",
+   "title": "Signaller",
+   "kind": "primary",
+   "nominal_grade": "E4",
+   "min_grade": "E3",
+   "max_grade": "E5",
+   "is_entry": false,
+   "opens_at_stage": 2,
+   "sort_order": 7
+  },
+  {
+   "id": "7c6d2a31-bedd-4fcc-8c0b-1ac4460354d2",
+   "unit_id": "eefd4552-ee29-4aef-8355-68426b0429e9",
+   "title": "Staff Clerk",
+   "kind": "duty",
+   "nominal_grade": null,
+   "min_grade": "E3",
+   "max_grade": null,
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 7
+  },
+  {
+   "id": "01541231-1552-4f0c-8b99-5696bb71c0ef",
+   "unit_id": "ee95b875-005a-4bbb-a32a-9a3360099473",
+   "title": "Turret Gunner 6",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 2,
+   "sort_order": 7
+  },
+  {
+   "id": "23d30e8b-48b6-4224-8d05-142d73a02f05",
+   "unit_id": "eefd4552-ee29-4aef-8355-68426b0429e9",
+   "title": "Conduct Panel Member",
+   "kind": "duty",
+   "nominal_grade": null,
+   "min_grade": "E6",
+   "max_grade": null,
+   "is_entry": false,
+   "opens_at_stage": 3,
+   "sort_order": 8
+  },
+  {
+   "id": "c50c1b53-c9b5-43cc-997c-19bc7b87bd53",
+   "unit_id": "ee95b875-005a-4bbb-a32a-9a3360099473",
+   "title": "Turret Gunner 7",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 2,
+   "sort_order": 8
+  },
+  {
+   "id": "7c02f4f1-7f6c-45b6-a6e1-72ce57d45d05",
+   "unit_id": "eefd4552-ee29-4aef-8355-68426b0429e9",
+   "title": "Planner",
+   "kind": "duty",
+   "nominal_grade": null,
+   "min_grade": "E5",
+   "max_grade": null,
+   "is_entry": false,
+   "opens_at_stage": 4,
+   "sort_order": 9
+  },
+  {
+   "id": "abfe70fe-35ac-44e8-9c49-12dd0aac59f7",
+   "unit_id": "ee95b875-005a-4bbb-a32a-9a3360099473",
+   "title": "Remote Weapons Operator 1",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 3,
+   "sort_order": 9
+  },
+  {
+   "id": "71ac473b-21eb-4320-a770-445463b79ba9",
+   "unit_id": "eefd4552-ee29-4aef-8355-68426b0429e9",
+   "title": "Head of Systems",
+   "kind": "duty",
+   "nominal_grade": null,
+   "min_grade": null,
+   "max_grade": null,
+   "is_entry": false,
+   "opens_at_stage": 6,
+   "sort_order": 10
+  },
+  {
+   "id": "5508336e-8cb2-4cf7-a9dc-a6c26549dd34",
+   "unit_id": "ee95b875-005a-4bbb-a32a-9a3360099473",
+   "title": "Remote Weapons Operator 2",
+   "kind": "primary",
+   "nominal_grade": "E2",
+   "min_grade": "E2",
+   "max_grade": "E4",
+   "is_entry": true,
+   "opens_at_stage": 3,
+   "sort_order": 10
+  },
+  {
+   "id": "d10cc27d-cc6f-42a6-bd27-21de9c20c8dd",
+   "unit_id": "eefd4552-ee29-4aef-8355-68426b0429e9",
+   "title": "Developer",
+   "kind": "duty",
+   "nominal_grade": null,
+   "min_grade": null,
+   "max_grade": null,
+   "is_entry": false,
+   "opens_at_stage": 6,
+   "sort_order": 11
+  }
+ ],
+ "position_qualifications": [
+  {
+   "position_id": "21bc6d45-40b1-4baf-934b-70f3c9d1114a",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "21bc6d45-40b1-4baf-934b-70f3c9d1114a",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "a048c731-8ad0-4852-9d5c-7eedcc8b3eb4",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "a048c731-8ad0-4852-9d5c-7eedcc8b3eb4",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "610ad290-99c7-429a-b4da-0af55229f433",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "610ad290-99c7-429a-b4da-0af55229f433",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "8300db56-d90a-4734-873e-b4ef49676c4f",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "8300db56-d90a-4734-873e-b4ef49676c4f",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "e87ad55a-e833-4005-942c-830569342aff",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "e87ad55a-e833-4005-942c-830569342aff",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "825b5003-bce2-40ed-9dc8-bab6638dbde1",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "825b5003-bce2-40ed-9dc8-bab6638dbde1",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "05655385-9593-4a16-8bec-0568565d1a32",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "05655385-9593-4a16-8bec-0568565d1a32",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "d531cbef-f825-4494-aea8-14ab03c43db1",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "d531cbef-f825-4494-aea8-14ab03c43db1",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "f0fb126a-8423-4411-8dd4-eeb602007b6c",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "f0fb126a-8423-4411-8dd4-eeb602007b6c",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "ec877aa6-d8bd-426e-a4eb-8540db3baf75",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "ec877aa6-d8bd-426e-a4eb-8540db3baf75",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "ddb26381-44d9-484b-9ebf-abb1b20a8975",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "ddb26381-44d9-484b-9ebf-abb1b20a8975",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "517c3e74-39e6-48cf-abb3-52dacce998b0",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "517c3e74-39e6-48cf-abb3-52dacce998b0",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "5508336e-8cb2-4cf7-a9dc-a6c26549dd34",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "5508336e-8cb2-4cf7-a9dc-a6c26549dd34",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "abfe70fe-35ac-44e8-9c49-12dd0aac59f7",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "abfe70fe-35ac-44e8-9c49-12dd0aac59f7",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "c50c1b53-c9b5-43cc-997c-19bc7b87bd53",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "c50c1b53-c9b5-43cc-997c-19bc7b87bd53",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "01541231-1552-4f0c-8b99-5696bb71c0ef",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "01541231-1552-4f0c-8b99-5696bb71c0ef",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "498fd4b7-c98b-4149-aa37-c6abab353626",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "498fd4b7-c98b-4149-aa37-c6abab353626",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "790a9ce1-2180-4492-bf81-375ffd49c681",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "790a9ce1-2180-4492-bf81-375ffd49c681",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "1a7904f7-5233-4ed5-98a5-69320b52d57f",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "1a7904f7-5233-4ed5-98a5-69320b52d57f",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "27b330be-0a1d-4611-afaa-40c5b4e29cdd",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "27b330be-0a1d-4611-afaa-40c5b4e29cdd",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "a0a269eb-b728-4112-a75e-9e4aa949e387",
+   "qualification_id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "a0a269eb-b728-4112-a75e-9e4aa949e387",
+   "qualification_id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "0b9b8127-855a-4cda-a916-205d4fbf3719",
+   "qualification_id": "14d2f904-8cbe-48b0-91c1-7ac1a70c866f",
+   "waived_when_acting": true
+  },
+  {
+   "position_id": "12c4a9f5-88c7-448f-ba5a-c063e7ae4536",
+   "qualification_id": "14d2f904-8cbe-48b0-91c1-7ac1a70c866f",
+   "waived_when_acting": true
+  },
+  {
+   "position_id": "830ea274-31a4-4b11-ac47-4cb8656307c3",
+   "qualification_id": "14d2f904-8cbe-48b0-91c1-7ac1a70c866f",
+   "waived_when_acting": true
+  },
+  {
+   "position_id": "3bc691c6-1ded-49d5-9a72-c4078d7b0ba9",
+   "qualification_id": "14d2f904-8cbe-48b0-91c1-7ac1a70c866f",
+   "waived_when_acting": true
+  },
+  {
+   "position_id": "e9aaee8f-4ee4-406a-a429-b3c4bfb0daec",
+   "qualification_id": "14d2f904-8cbe-48b0-91c1-7ac1a70c866f",
+   "waived_when_acting": true
+  },
+  {
+   "position_id": "a13d5334-5678-4188-b61d-8cb41284edd5",
+   "qualification_id": "79bc7cc8-a462-43c8-8f74-3245c02ed8c0",
+   "waived_when_acting": false
+  },
+  {
+   "position_id": "835b8649-d661-447a-a69e-1683c7a09c57",
+   "qualification_id": "4e60155a-c971-46ad-a3f9-e16cfe61cec1",
+   "waived_when_acting": false
+  }
+ ],
+ "qualifications": [
+  {
+   "id": "14d2f904-8cbe-48b0-91c1-7ac1a70c866f",
+   "code": "commission",
+   "name": "Commission"
+  },
+  {
+   "id": "f3f016b9-7e3c-4f4b-820e-92ea3334b708",
+   "code": "induction",
+   "name": "General induction"
+  },
+  {
+   "id": "4e60155a-c971-46ad-a3f9-e16cfe61cec1",
+   "code": "instructor",
+   "name": "Instructor"
+  },
+  {
+   "id": "6d92f223-c5ef-4b28-a77c-6bb94fb0e19b",
+   "code": "navy-crew",
+   "name": "Navy crew"
+  },
+  {
+   "id": "79bc7cc8-a462-43c8-8f74-3245c02ed8c0",
+   "code": "net-controller",
+   "name": "Net controller"
+  },
+  {
+   "id": "d0244311-f30d-4935-8e82-d11053a5d8aa",
+   "code": "radio-user",
+   "name": "Radio user"
+  }
+ ],
+ "grades": [
+  {
+   "code": "E1",
+   "sort_order": 1
+  },
+  {
+   "code": "E2",
+   "sort_order": 2
+  },
+  {
+   "code": "E3",
+   "sort_order": 3
+  },
+  {
+   "code": "E4",
+   "sort_order": 4
+  },
+  {
+   "code": "E5",
+   "sort_order": 5
+  },
+  {
+   "code": "E6",
+   "sort_order": 6
+  },
+  {
+   "code": "E7",
+   "sort_order": 7
+  },
+  {
+   "code": "OC",
+   "sort_order": 8
+  },
+  {
+   "code": "O1",
+   "sort_order": 9
+  },
+  {
+   "code": "O2",
+   "sort_order": 10
+  },
+  {
+   "code": "O3",
+   "sort_order": 11
+  },
+  {
+   "code": "O4",
+   "sort_order": 12
+  },
+  {
+   "code": "O5",
+   "sort_order": 13
+  },
+  {
+   "code": "O6",
+   "sort_order": 14
+  },
+  {
+   "code": "O7",
+   "sort_order": 15
+  },
+  {
+   "code": "O8",
+   "sort_order": 16
+  },
+  {
+   "code": "O9",
+   "sort_order": 17
+  },
+  {
+   "code": "O10",
+   "sort_order": 18
+  }
+ ],
+ "ranks": [
+  {
+   "service": "navy",
+   "grade_code": "E1",
+   "name": "Starman Recruit"
+  },
+  {
+   "service": "navy",
+   "grade_code": "E2",
+   "name": "Starman"
+  },
+  {
+   "service": "navy",
+   "grade_code": "E3",
+   "name": "Leading Starman"
+  },
+  {
+   "service": "navy",
+   "grade_code": "E4",
+   "name": "Jr. Petty Officer"
+  },
+  {
+   "service": "navy",
+   "grade_code": "E5",
+   "name": "Petty Officer"
+  },
+  {
+   "service": "navy",
+   "grade_code": "E6",
+   "name": "Chief Petty Officer"
+  },
+  {
+   "service": "navy",
+   "grade_code": "E7",
+   "name": "Master Chief Petty Officer"
+  },
+  {
+   "service": "navy",
+   "grade_code": "OC",
+   "name": "Cadet"
+  },
+  {
+   "service": "navy",
+   "grade_code": "O1",
+   "name": "Ensign"
+  },
+  {
+   "service": "navy",
+   "grade_code": "O2",
+   "name": "Lieutenant Junior Grade"
+  },
+  {
+   "service": "navy",
+   "grade_code": "O3",
+   "name": "Lieutenant"
+  },
+  {
+   "service": "navy",
+   "grade_code": "O4",
+   "name": "Lt. Commander"
+  },
+  {
+   "service": "navy",
+   "grade_code": "O5",
+   "name": "Commander"
+  },
+  {
+   "service": "navy",
+   "grade_code": "O6",
+   "name": "Captain"
+  },
+  {
+   "service": "navy",
+   "grade_code": "O7",
+   "name": "Commodore"
+  },
+  {
+   "service": "navy",
+   "grade_code": "O8",
+   "name": "Rear Admiral"
+  },
+  {
+   "service": "navy",
+   "grade_code": "O9",
+   "name": "Vice Admiral"
+  },
+  {
+   "service": "navy",
+   "grade_code": "O10",
+   "name": "Admiral"
+  },
+  {
+   "service": "army",
+   "grade_code": "E1",
+   "name": "Private"
+  },
+  {
+   "service": "army",
+   "grade_code": "E2",
+   "name": "Private First Class"
+  },
+  {
+   "service": "army",
+   "grade_code": "E3",
+   "name": "Specialist"
+  },
+  {
+   "service": "army",
+   "grade_code": "E4",
+   "name": "Corporal"
+  },
+  {
+   "service": "army",
+   "grade_code": "E5",
+   "name": "Sergeant"
+  },
+  {
+   "service": "army",
+   "grade_code": "E6",
+   "name": "Master Sergeant"
+  },
+  {
+   "service": "army",
+   "grade_code": "E7",
+   "name": "Sergeant Major"
+  },
+  {
+   "service": "army",
+   "grade_code": "OC",
+   "name": "Officer Cadet"
+  },
+  {
+   "service": "army",
+   "grade_code": "O1",
+   "name": "2nd Lieutenant"
+  },
+  {
+   "service": "army",
+   "grade_code": "O2",
+   "name": "Lieutenant"
+  },
+  {
+   "service": "army",
+   "grade_code": "O3",
+   "name": "Captain"
+  },
+  {
+   "service": "army",
+   "grade_code": "O4",
+   "name": "Major"
+  },
+  {
+   "service": "army",
+   "grade_code": "O5",
+   "name": "Lieutenant Colonel"
+  },
+  {
+   "service": "army",
+   "grade_code": "O6",
+   "name": "Colonel"
+  },
+  {
+   "service": "army",
+   "grade_code": "O7",
+   "name": "Brigadier General"
+  },
+  {
+   "service": "army",
+   "grade_code": "O8",
+   "name": "Brigadier General"
+  },
+  {
+   "service": "army",
+   "grade_code": "O9",
+   "name": "General"
+  },
+  {
+   "service": "army",
+   "grade_code": "O10",
+   "name": "General"
+  },
+  {
+   "service": "marines",
+   "grade_code": "E1",
+   "name": "Trooper"
+  },
+  {
+   "service": "marines",
+   "grade_code": "E2",
+   "name": "Trooper First Class"
+  },
+  {
+   "service": "marines",
+   "grade_code": "E3",
+   "name": "Lance Corporal"
+  },
+  {
+   "service": "marines",
+   "grade_code": "E4",
+   "name": "Corporal"
+  },
+  {
+   "service": "marines",
+   "grade_code": "E5",
+   "name": "Gunnery Sergeant"
+  },
+  {
+   "service": "marines",
+   "grade_code": "E6",
+   "name": "Gunnery Sergeant"
+  },
+  {
+   "service": "marines",
+   "grade_code": "E7",
+   "name": "Sergeant Major"
+  },
+  {
+   "service": "marines",
+   "grade_code": "OC",
+   "name": "Cadet"
+  },
+  {
+   "service": "marines",
+   "grade_code": "O1",
+   "name": "2nd Lieutenant"
+  },
+  {
+   "service": "marines",
+   "grade_code": "O2",
+   "name": "Lieutenant"
+  },
+  {
+   "service": "marines",
+   "grade_code": "O3",
+   "name": "Captain"
+  },
+  {
+   "service": "marines",
+   "grade_code": "O4",
+   "name": "Major"
+  },
+  {
+   "service": "marines",
+   "grade_code": "O5",
+   "name": "Lieutenant Colonel"
+  },
+  {
+   "service": "marines",
+   "grade_code": "O6",
+   "name": "Colonel"
+  },
+  {
+   "service": "marines",
+   "grade_code": "O7",
+   "name": "Brigadier General"
+  },
+  {
+   "service": "marines",
+   "grade_code": "O8",
+   "name": "Major General"
+  },
+  {
+   "service": "marines",
+   "grade_code": "O9",
+   "name": "Lieutenant General"
+  },
+  {
+   "service": "marines",
+   "grade_code": "O10",
+   "name": "General"
+  }
+ ]
+}

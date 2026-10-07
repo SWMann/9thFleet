@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getSession, type Member, type Role, type Service, type Status } from "@/lib/member";
@@ -101,6 +102,14 @@ async function Record() {
             <Line label="Roles on this site" value={member.roles.map((role) => roleNames[role]).join(", ")} />
           ) : null}
           <Line label="Discord" value={member.discordName ?? "Unknown"} />
+          {member.status === "applicant" || member.status === "discharged" ? null : (
+            <div>
+              <dt>The fleet</dt>
+              <dd>
+                <Link href="/order-of-battle">See the order of battle</Link>
+              </dd>
+            </div>
+          )}
         </dl>
       </section>
 

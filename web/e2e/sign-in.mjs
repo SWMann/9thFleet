@@ -98,6 +98,11 @@ try {
     assert.match(await nav(), /Sign in/);
     await shot("sign-in");
   });
+  await check("the order of battle sends a signed-out visitor to sign-in", async () => {
+    await page.goto(`${site}/order-of-battle`);
+    assert.equal(new URL(page.url()).pathname, "/sign-in");
+    assert.doesNotMatch(await nav(), /Fleet/);
+  });
   await check("leaving Discord early is explained", async () => {
     await page.goto(`${site}/auth/callback?error=access_denied`);
     assert.equal(new URL(page.url()).pathname, "/sign-in");
@@ -267,6 +272,136 @@ try {
     await result().filter({ hasText: "Saved." }).waitFor();
     assert.equal(mock.state.member.rsi_handle, "Ada_Vance");
     assert.equal(mock.state.member.character_name, "Ada Vance");
+  });
+
+  console.log("Order of battle");
+  const postId = (unitName, title) => {
+    const unit = mock.orderOfBattle.units.find((row) => row.name === unitName);
+    return mock.orderOfBattle.positions.find((row) => row.unit_id === unit.id && row.title === title).id;
+  };
+  const tally = async () =>
+    Object.fromEntries(
+      await page.locator(".tally > div").evaluateAll((items) =>
+        items.map((item) => [item.querySelector("dt").textContent, Number(item.querySelector("dd").textContent)]),
+      ),
+    );
+  const line = (unitName, title) =>
+    page
+      .locator("section.band", { has: page.getByRole("heading", { name: unitName, exact: true }) })
+      .locator("li.post", { has: page.locator(".post-title", { hasText: new RegExp(`^${title}$`) }) });
+
+  await check("an applicant is told the order of battle is for the serving fleet", async () => {
+    await setMock({ member: { status: "applicant" } });
+    await page.goto(`${site}/order-of-battle`);
+    await page.getByText("is for the serving fleet").waitFor();
+    assert.equal(await page.locator(".posts").count(), 0);
+    await page.goto(`${site}/profile`);
+    await page.getByText("Applicant", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("link", { name: "See the order of battle" }).count(), 0);
+  });
+  await check("a serving member reaches it from the menu and from their record", async () => {
+    await setMock({
+      ...fleetCommander,
+      member: { ...fleetCommander.member, position_id: postId("Fleet Command", "Fleet Commander") },
+      stage: 1,
+      crew: [
+        {
+          member_id: "00000000-0000-4000-8000-000000000001",
+          character_name: "Kit Marlow",
+          rank_name: "Starman",
+          acting: false,
+          position_id: postId("Training Ship", "Helmsman"),
+        },
+        {
+          member_id: "00000000-0000-4000-8000-000000000002",
+          character_name: null,
+          rank_name: "Starman",
+          acting: false,
+          position_id: null,
+        },
+      ],
+      duties: [
+        { member_id: "00000000-0000-4000-8000-000000000001", position_id: postId("Fleet Staff", "Recruiter") },
+        { member_id: "00000000-0000-4000-8000-000000000002", position_id: postId("Fleet Staff", "Recruiter") },
+      ],
+    });
+    await page.reload();
+    await page.getByRole("link", { name: "See the order of battle" }).click();
+    await page.waitForURL(`${site}/order-of-battle`);
+    await headingIs("Order of battle");
+    await page.goto(`${site}/`);
+    await page.locator("nav[aria-label='Main']").getByRole("link", { name: "Fleet", exact: true }).click();
+    await page.waitForURL(`${site}/order-of-battle`);
+  });
+  await check("it counts the posts that are open, filled, vacant and still to open", async () => {
+    await page.locator(".tally").waitFor();
+    assert.deepEqual(await tally(), { Stage: 1, "Posts open": 7, Filled: 2, Vacant: 5, "Opening later": 34 });
+  });
+  await check("it shows who holds each post, and marks your own", async () => {
+    const yours = await line("Fleet Command", "Fleet Commander").innerText();
+    assert.match(yours, /Lt\. Commander Ada Vance/);
+    assert.match(yours, /You/);
+    assert.match(yours, /O4 to O10/);
+
+    const helm = await line("Training Ship", "Helmsman").innerText();
+    assert.match(helm, /Starman Kit Marlow/);
+    assert.match(helm, /Starman to Jr\. Petty Officer \(E2 to E4\)\. Entry post\. Needs Navy crew, Radio user\./);
+    assert.doesNotMatch(helm, /You/);
+
+    assert.match(await line("Training Ship", "Gunner 1").innerText(), /Vacant/);
+    assert.match(
+      await page.locator("section.band", { has: page.getByRole("heading", { name: "Training Ship" }) }).innerText(),
+      /Navy\. 1 of 6 posts filled\./,
+    );
+  });
+  await check("a duty lists everyone who holds it", async () => {
+    const recruiter = await line("Fleet Staff", "Recruiter").innerText();
+    assert.match(recruiter, /Duty, open to E4 and above/);
+    assert.match(recruiter, /Starman Kit Marlow/);
+    assert.match(recruiter, /Starman Name not set/);
+    const instructor = await line("Fleet Staff", "Instructor").innerText();
+    assert.match(instructor, /Nobody yet/);
+    assert.match(instructor, /Duty\. Needs Instructor\./);
+    assert.match(
+      await page.locator("section.band", { has: page.getByRole("heading", { name: "Fleet Staff" }) }).innerText(),
+      /2 duties open\./,
+    );
+  });
+  await check("units and posts that open later are listed but tucked away", async () => {
+    const nexus = page.locator("section.band", { has: page.getByRole("heading", { name: "UEES Nexus", exact: true }) });
+    assert.match(await nexus.innerText(), /Ship, Navy\. Opens at stage 2\./);
+    const executive = nexus.locator(".post-title", { hasText: "Executive Officer" });
+    assert.equal(await executive.isVisible(), false);
+    await nexus.getByText("Show its 25 posts").click();
+    assert.equal(await executive.isVisible(), true);
+    const text = await line("UEES Nexus", "Executive Officer").innerText();
+    assert.match(text, /Needs Commission \(not when acting\)\./);
+    assert.match(text, /Lieutenant Junior Grade to Lt\. Commander \(O2 to O4\)/);
+    assert.match(text, /Opens at stage 2/);
+    assert.match(await line("UEES Nexus", "Commanding Officer").first().innerText(), /Opens at stage 5/);
+
+    const staff = page.locator("section.band", { has: page.getByRole("heading", { name: "Fleet Staff", exact: true }) });
+    assert.equal(await staff.locator(".post-title", { hasText: "Planner" }).isVisible(), false);
+    await staff.getByText("9 more open later").click();
+    assert.match(await line("Fleet Staff", "Planner").innerText(), /Opens at stage 4/);
+    await shot("order-of-battle-stage-1");
+  });
+  await check("a new stage opens the flagship's posts", async () => {
+    await setMock({ stage: 2 });
+    await page.reload();
+    await page.locator(".tally").waitFor();
+    assert.deepEqual(await tally(), { Stage: 2, "Posts open": 22, Filled: 2, Vacant: 20, "Opening later": 19 });
+    assert.match(await line("UEES Nexus", "Executive Officer").innerText(), /Vacant/);
+    const nexus = page.locator("section.band", { has: page.getByRole("heading", { name: "UEES Nexus", exact: true }) });
+    const text = await nexus.innerText();
+    assert.match(text, /0 of 15 posts filled/);
+    assert.match(text, /Flight Deck\s*Opens at stage 3/);
+    assert.equal(await nexus.locator(".post-title", { hasText: "Commanding Officer" }).isVisible(), false);
+    await shot("order-of-battle-stage-2");
+    await setMock({ stage: 1, crew: [], duties: [] });
+    // Back to the record, where the checks that follow start from.
+    await page.goto(`${site}/profile`);
+    await headingIs("Lt. Commander Ada Vance");
   });
 
   console.log("Session upkeep");

@@ -5,7 +5,13 @@
 // rows. It holds one member in memory. It is never part of the running site.
 
 import { createHash, createSign, generateKeyPairSync, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
+
+// The units, posts and ranks exactly as the database migrations create them.
+// To refresh it, dump those tables from a database built from supabase/migrations.
+const orderOfBattle = JSON.parse(readFileSync(new URL("./fixtures/order-of-battle.json", import.meta.url), "utf8"));
+const SERVING = ["recruit", "auxiliary", "member", "reserve"];
 
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const KEY_ID = "mock-key-1";
@@ -31,6 +37,10 @@ export function startMockSupabase(port) {
     recruitmentOpen: false,
     challenge: null,
     holdAtDiscord: false,
+    stage: 1,
+    // Other members of the fleet, as rows of the roster, and who holds which duty.
+    crew: [],
+    duties: [],
     nextLifetime: 3600,
     refreshes: 0,
     signOuts: 0,
@@ -132,12 +142,26 @@ export function startMockSupabase(port) {
     if (url.pathname.startsWith("/rest/v1/") && !signedIn()) {
       return send(401, { code: "42501", message: "permission denied" });
     }
-    if (url.pathname === "/rest/v1/roster") return rows(state.member ? [state.member] : []);
+    // Like the database's own rules: you always see yourself, and the serving
+    // fleet and its order of battle only once you serve in it.
+    const serving = Boolean(state.member) && SERVING.includes(state.member.status);
+    if (url.pathname === "/rest/v1/roster") {
+      if (!state.member) return rows([]);
+      if (url.searchParams.has("member_id") || !serving) return rows([state.member]);
+      return rows([state.member, ...state.crew]);
+    }
+    if (url.pathname === "/rest/v1/ranks") return send(200, orderOfBattle.ranks);
+    for (const table of ["units", "positions", "position_qualifications", "qualifications"]) {
+      if (url.pathname === `/rest/v1/${table}`) return send(200, serving ? orderOfBattle[table] : []);
+    }
+    if (url.pathname === "/rest/v1/assignments") return send(200, serving ? state.duties : []);
     if (url.pathname === "/rest/v1/member_accounts") {
       return rows(state.member ? [{ discord_name: "ada_on_discord" }] : []);
     }
     if (url.pathname === "/rest/v1/member_roles") return send(200, state.roles.map((role) => ({ role })));
-    if (url.pathname === "/rest/v1/fleet_settings") return rows([{ recruitment_open: state.recruitmentOpen }]);
+    if (url.pathname === "/rest/v1/fleet_settings") {
+      return rows([{ recruitment_open: state.recruitmentOpen, current_stage: state.stage }]);
+    }
     if (url.pathname === "/rest/v1/members" && request.method === "PATCH") {
       if (!state.member) return send(200, []);
       if (body.character_name === "Taken Name") {
@@ -165,6 +189,9 @@ export function startMockSupabase(port) {
       if (typeof body.nextLifetime === "number") state.nextLifetime = body.nextLifetime;
       if (typeof body.recruitmentOpen === "boolean") state.recruitmentOpen = body.recruitmentOpen;
       if (typeof body.holdAtDiscord === "boolean") state.holdAtDiscord = body.holdAtDiscord;
+      if (typeof body.stage === "number") state.stage = body.stage;
+      if (body.crew) state.crew = body.crew;
+      if (body.duties) state.duties = body.duties;
       return send(200, { ok: true });
     }
 
@@ -172,7 +199,7 @@ export function startMockSupabase(port) {
   });
 
   return new Promise((resolve) => {
-    server.listen(port, "127.0.0.1", () => resolve({ origin, state, close: () => server.close() }));
+    server.listen(port, "127.0.0.1", () => resolve({ origin, state, orderOfBattle, close: () => server.close() }));
   });
 }
 
@@ -186,6 +213,7 @@ function resetMember(state) {
     grade_code: null,
     rank_name: null,
     acting: null,
+    position_id: null,
     position_title: null,
     unit_name: null,
   };
