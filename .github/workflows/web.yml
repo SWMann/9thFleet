@@ -3,9 +3,9 @@ name: Website
 on:
   push:
     branches: [main]
-    paths: ['web/**', '.github/workflows/web.yml']
+    paths: ['web/**', 'supabase/migrations/**', 'supabase/tests/supabase-shim.sql', '.github/workflows/web.yml']
   pull_request:
-    paths: ['web/**', '.github/workflows/web.yml']
+    paths: ['web/**', 'supabase/migrations/**', 'supabase/tests/supabase-shim.sql', '.github/workflows/web.yml']
   workflow_dispatch:
 
 permissions:
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   check:
-    name: Types, lint, build and sign-in
+    name: Types, lint, build and browser tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
@@ -34,6 +34,6 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
-      - name: Install a browser for the sign-in test
+      - name: Install a browser for the browser tests
         run: npx playwright-core install --with-deps chromium
       - run: npm run e2e

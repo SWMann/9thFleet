@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 const values = [
-  { term: "Teamwork", detail: "You fill your slot and back the person next to you before chasing a kill." },
+  { term: "Teamwork", detail: "You fill your post and back the person next to you before chasing a kill." },
   { term: "Communication", detail: "You use the net correctly, briefly, and only when you have something to send." },
   { term: "Precision", detail: "You do the drill as written, including the checks." },
   { term: "Diligence", detail: "You turn up when you signed up, prepared and in the right kit." },

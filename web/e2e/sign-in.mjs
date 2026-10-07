@@ -5,85 +5,30 @@
 // Run it with `npm run e2e`. It builds nothing: run `npm run build` first.
 
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
-import { chromium } from "playwright-core";
+import { createChecks, openBrowser, startSite } from "./harness.mjs";
 import { startMockSupabase } from "./mock-supabase.mjs";
 
 const SITE_PORT = 3111;
 const MOCK_PORT = 54399;
-const site = `http://localhost:${SITE_PORT}`;
-const shotsDir = process.env.SHOTS_DIR;
 
-const failures = [];
-let passed = 0;
-async function check(name, run) {
-  try {
-    await run();
-    passed += 1;
-    console.log(`  ok    ${name}`);
-  } catch (error) {
-    failures.push(name);
-    console.log(`  FAIL  ${name}\n        ${String(error.message).split("\n").join("\n        ")}`);
-  }
-}
+const { check, finish } = createChecks();
 
 const mock = await startMockSupabase(MOCK_PORT);
 const setMock = (body) =>
   fetch(`${mock.origin}/__mock/set`, { method: "POST", body: JSON.stringify(body) }).then((r) => r.json());
 
-// Started in its own process group, so that stopping it also stops the worker
-// processes it starts.
-const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(SITE_PORT)], {
-  env: { ...process.env, SUPABASE_URL: mock.origin, SUPABASE_PUBLISHABLE_KEY: "sb_publishable_for_tests" },
-  stdio: ["ignore", "pipe", "pipe"],
-  detached: process.platform !== "win32",
-});
-function stopServer() {
-  try {
-    if (process.platform === "win32") server.kill();
-    else process.kill(-server.pid, "SIGTERM");
-  } catch {
-    // already gone
-  }
-}
-let serverLog = "";
-server.stdout.on("data", (chunk) => (serverLog += chunk));
-server.stderr.on("data", (chunk) => (serverLog += chunk));
-
-async function waitForSite() {
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    try {
-      const response = await fetch(`${site}/robots.txt`);
-      if (response.ok) return;
-    } catch {
-      // not up yet
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error(`The site did not start.\n${serverLog}`);
-}
-
+let running;
 let browser;
 try {
-  await waitForSite();
-  browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
-  const width = Number(process.env.VIEWPORT_WIDTH ?? 1280);
-  const context = await browser.newContext({ viewport: { width, height: 900 } });
-  const page = await context.newPage();
-  const pageErrors = [];
-  page.on("pageerror", (error) => pageErrors.push(String(error)));
+  running = await startSite({
+    port: SITE_PORT,
+    env: { SUPABASE_URL: mock.origin, SUPABASE_PUBLISHABLE_KEY: "sb_publishable_for_tests" },
+  });
+  const { site } = running;
+  const opened = await openBrowser();
+  browser = opened.browser;
+  const { context, page, pageErrors, shot, headingIs, nav } = opened;
 
-  const shot = async (name) => {
-    if (!shotsDir) return;
-    mkdirSync(shotsDir, { recursive: true });
-    await page.screenshot({ path: `${shotsDir}/${name}.png`, fullPage: true });
-  };
-  // The member's record arrives a moment after the page's frame, so wait for
-  // the heading that is expected instead of reading whichever is there first.
-  const headingIs = (text) =>
-    page.locator("h1:visible").filter({ hasText: new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) }).waitFor();
-  const nav = () => page.locator("nav[aria-label='Main']").innerText();
   const signIn = async () => {
     await page.goto(`${site}/sign-in`);
     await page.getByRole("button", { name: "Sign in with Discord" }).click();
@@ -442,12 +387,8 @@ try {
   });
 } finally {
   await browser?.close();
-  stopServer();
+  running?.stop();
   mock.close();
 }
 
-console.log(`\n${passed} passed, ${failures.length} failed`);
-if (failures.length > 0) {
-  console.log(serverLog.split("\n").slice(-30).join("\n"));
-}
-process.exit(failures.length > 0 ? 1 : 0);
+finish(running?.log());
