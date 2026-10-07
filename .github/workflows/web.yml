@@ -17,9 +17,9 @@ concurrency:
 
 jobs:
   check:
-    name: Types, lint and build
+    name: Types, lint, build and sign-in
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: web
@@ -34,3 +34,6 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
+      - name: Install a browser for the sign-in test
+        run: npx playwright-core install --with-deps chromium
+      - run: npm run e2e
