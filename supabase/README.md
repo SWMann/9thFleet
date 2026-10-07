@@ -76,16 +76,20 @@ GitHub runs them on every push that touches `supabase/`.
 `tests/supabase-shim.sql` stands in for the parts Supabase provides: the API roles, the sign-in
 tables and Supabase's own default privileges. It is only for the tests.
 
-## Put it on Supabase
+## The live database
 
-Do this once the Supabase project exists.
+The three migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
+database was compared with the tested copy after they were applied, and matched.
 
-1. Apply the three migrations in order. With the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started)
-   that is `supabase link` and then `supabase db push`, run from the root of this repository.
-2. In Supabase, under Authentication, switch on the Discord provider and switch off sign-ups by
-   email. The database ignores accounts that did not come from Discord, so this is a second lock.
-3. Leave the API's exposed schemas as they are. The `app` schema must never be added to that list.
-4. Name the founder. In the SQL editor, with your own Discord user ID in place of the number:
+Each file name starts with the version number Supabase recorded when it was applied, so this folder
+and the database's own migration history agree.
+
+Three settings live in the Supabase dashboard, not in these files:
+
+1. **Sign-in.** Under Authentication, the Discord provider is on and sign-ups by email are off. The
+   database ignores accounts that did not come from Discord, so this is a second lock.
+2. **The API.** The exposed schemas stay as they are. The `app` schema must never be added.
+3. **The founder.** One line, run once in the SQL editor with the founder's Discord user ID:
 
    ```sql
    update app.bootstrap set founder_discord_id = '123456789012345678';
@@ -109,5 +113,7 @@ When you add a migration:
 - **Grant inserts and updates column by column** wherever the database fills in a date or a name.
 - **Run migrations as the `postgres` role,** which is what the Supabase CLI and SQL editor do. The
   locked-by-default settings belong to that role.
+- **Name the file after the version Supabase records** once the migration is applied, so the folder
+  and the database keep agreeing.
 - **Add a test for every rule.** `tests/structure.test.mjs` fails if a table or function is left
   open by accident.
