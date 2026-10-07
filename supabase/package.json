@@ -1,0 +1,16 @@
+{
+  "name": "ninth-fleet-database",
+  "version": "0.1.0",
+  "private": true,
+  "description": "UEE 9th Fleet database: migrations and the tests that prove its access rules.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"tests/*.test.mjs\""
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  }
+}

@@ -6,6 +6,7 @@ Tools for the UEE 9th Fleet, a Star Citizen organisation.
 | --- | --- | --- |
 | [`voice/`](voice/README.md) | The Windows voice app that carries the radio nets | Gate A spike: two nets, global push-to-talk |
 | [`web/`](web/README.md) | The fleet's website | Public pages. Sign-in and the member platform come next |
+| [`supabase/`](supabase/README.md) | The database: members, the order of battle, recruiting and the access rules | Tested, not yet applied to a live database |
 | [`docs/`](docs/gate-a-test.md) | Test scripts and records | Gate A test script |
 
 No keys or secrets belong in this repository. LiveKit keys live in `voice/.env`, which git ignores.
