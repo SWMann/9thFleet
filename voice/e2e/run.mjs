@@ -13,6 +13,7 @@
 // Python 3, and on Linux an X display plus python-xlib (run under `xvfb-run -a`).
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, openSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +26,8 @@ const OUT = path.join(VOICE, 'dist-test', 'e2e');
 const WINDOWS = process.platform === 'win32';
 const SERVER = process.env.LIVEKIT_SERVER || 'livekit-server';
 const PYTHON = process.env.PYTHON || (WINDOWS ? 'python' : 'python3');
-const ELECTRON = path.join(VOICE, 'node_modules', 'electron', 'dist', WINDOWS ? 'electron.exe' : 'electron');
+// Asking the electron package for its path also downloads the binary if it is not there yet.
+const ELECTRON = createRequire(import.meta.url)('electron');
 const SILENT = 0.001;
 const AUDIBLE = 0.003;
 
