@@ -36,6 +36,7 @@ cookies, the redirects and saving names. It needs a browser: `npx playwright-cor
 | Address | What it does |
 | --- | --- |
 | `/sign-in` | The button that sends you to Discord |
+| `/auth/discord` | Where the button posts. It answers with a redirect to Discord |
 | `/auth/callback` | Where Discord sends you back. It turns Discord's one-time code into a session |
 | `/profile` | Your record: status, service, rank, post, and your names |
 
@@ -46,6 +47,9 @@ How it is kept safe:
 - **The session is in cookies that scripts cannot read.** Only the server talks to the database.
 - **Every page and action checks the session again.** `proxy.ts` sends signed-out visitors to
   sign-in, but that is a convenience, not the lock.
+- **Leaving the site is done with a plain form and a plain redirect.** A Server Action that
+  redirects to another site leaves the page's router pointing there, and in Safari the button then
+  stops working after Back. Use a route handler for anything that sends the visitor elsewhere.
 
 The site finds the database through two settings, which the Supabase integration on Vercel provides:
 `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Both are public values. To

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { site } from "@/lib/site";
-import { signInWithDiscord } from "./actions";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -27,7 +26,8 @@ export default function SignInPage({ searchParams }: PageProps<"/sign-in">) {
         <Suspense fallback={null}>
           <Problem searchParams={searchParams} />
         </Suspense>
-        <form action={signInWithDiscord}>
+        {/* A plain form post, not a Server Action: see app/auth/discord/route.ts. */}
+        <form method="post" action="/auth/discord">
           <button className="button" type="submit">
             Sign in with Discord
           </button>

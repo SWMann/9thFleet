@@ -30,6 +30,7 @@ export function startMockSupabase(port) {
     roles: [],
     recruitmentOpen: false,
     challenge: null,
+    holdAtDiscord: false,
     nextLifetime: 3600,
     refreshes: 0,
     signOuts: 0,
@@ -92,9 +93,19 @@ export function startMockSupabase(port) {
 
     // --- Sign-in service ---------------------------------------------------
     if (url.pathname === "/auth/v1/authorize") {
+      // Like the real service, this only answers a browser arriving with GET.
+      if (request.method !== "GET") {
+        response.writeHead(405);
+        return response.end();
+      }
       state.challenge = url.searchParams.get("code_challenge");
       const back = new URL(url.searchParams.get("redirect_to"));
       back.searchParams.set("code", "mock-code");
+      if (state.holdAtDiscord) {
+        // Stop where Discord's own page would be, so the test can press Back.
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        return response.end(`<!doctype html><title>Discord stand-in</title><h1>Discord stand-in</h1><a href="${back}">Authorise</a>`);
+      }
       response.writeHead(302, { location: back.toString() });
       return response.end();
     }
@@ -153,6 +164,7 @@ export function startMockSupabase(port) {
       if (body.roles) state.roles = body.roles;
       if (typeof body.nextLifetime === "number") state.nextLifetime = body.nextLifetime;
       if (typeof body.recruitmentOpen === "boolean") state.recruitmentOpen = body.recruitmentOpen;
+      if (typeof body.holdAtDiscord === "boolean") state.holdAtDiscord = body.holdAtDiscord;
       return send(200, { ok: true });
     }
 

@@ -111,6 +111,51 @@ try {
     assert.equal(new URL(page.url()).pathname, "/sign-in");
   });
 
+  console.log("The hand-off to Discord");
+  const startButton = () => page.getByRole("button", { name: "Sign in with Discord" });
+  const handOffs = () => mock.state.requests.filter((line) => line.endsWith(" /auth/v1/authorize"));
+  await check("the button is a plain form post that the site answers with a redirect", async () => {
+    await page.goto(`${site}/sign-in`);
+    const form = page.locator("form", { has: startButton() });
+    assert.equal(await form.getAttribute("method"), "post");
+    assert.equal(await form.getAttribute("action"), "/auth/discord");
+    const response = await fetch(`${site}/auth/discord`, { method: "POST", redirect: "manual", headers: { origin: site } });
+    assert.equal(response.status, 303);
+    assert.ok(response.headers.get("location").startsWith(`${mock.origin}/auth/v1/authorize?provider=discord`));
+    assert.match(response.headers.get("set-cookie") ?? "", /code-verifier/, "the sign-in was not tied to this browser");
+  });
+  await check("another site cannot start a sign-in", async () => {
+    const response = await fetch(`${site}/auth/discord`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { origin: "https://elsewhere.example" },
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await fetch(`${site}/auth/discord`, { redirect: "manual" })).status, 405, "a plain visit must not start one");
+  });
+  await check("pressing Back from Discord and trying again starts a fresh sign-in", async () => {
+    await setMock({ holdAtDiscord: true });
+    try {
+      await page.goto(`${site}/sign-in`);
+      const before = handOffs().length;
+      await startButton().click();
+      await page.getByRole("heading", { name: "Discord stand-in" }).waitFor();
+      await page.goBack();
+      await headingIs("Sign in");
+      await startButton().click();
+      await page.getByRole("heading", { name: "Discord stand-in" }).waitFor();
+      assert.deepEqual(handOffs().slice(before), ["GET /auth/v1/authorize", "GET /auth/v1/authorize"]);
+
+      // Carrying on from Discord's page finishes the sign-in.
+      await page.getByRole("link", { name: "Authorise" }).click();
+      await page.waitForURL(`${site}/profile`);
+      await page.getByRole("button", { name: "Sign out" }).click();
+      await page.waitForURL(`${site}/`);
+    } finally {
+      await setMock({ holdAtDiscord: false });
+    }
+  });
+
   console.log("Signing in");
   await check("signing in with Discord lands on the member's record", async () => {
     await signIn();
