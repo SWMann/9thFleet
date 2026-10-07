@@ -10,8 +10,13 @@ export async function GET(request: NextRequest) {
   const origin = originOf(request.headers, request.nextUrl.origin);
   const params = request.nextUrl.searchParams;
 
-  if (params.has("error")) {
-    return NextResponse.redirect(`${origin}/sign-in?problem=cancelled`);
+  // Discord reports access_denied when the visitor pressed Cancel. Anything
+  // else is a fault in the sign-in service or its settings, not in what the
+  // visitor did, and the page must not blame them for it.
+  const reported = params.get("error");
+  if (reported) {
+    const problem = reported === "access_denied" ? "cancelled" : "service";
+    return NextResponse.redirect(`${origin}/sign-in?problem=${problem}`);
   }
 
   const code = params.get("code");

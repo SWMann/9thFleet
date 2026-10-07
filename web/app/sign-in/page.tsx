@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { site } from "@/lib/site";
-import { signInWithDiscord } from "./actions";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -13,6 +12,7 @@ const problems: Record<string, string> = {
   setup: "Sign-in is not set up on this site yet.",
   discord: "Discord could not be reached. Try again in a minute.",
   cancelled: "You left Discord before finishing, so you are not signed in.",
+  service: "Discord let you through, but the sign-in service could not finish. This is a fault on our side, not something you did. Tell the fleet's staff.",
   callback: "Discord sent you back, but the sign-in could not be completed. Try again.",
 };
 
@@ -27,7 +27,8 @@ export default function SignInPage({ searchParams }: PageProps<"/sign-in">) {
         <Suspense fallback={null}>
           <Problem searchParams={searchParams} />
         </Suspense>
-        <form action={signInWithDiscord}>
+        {/* A plain form post, not a Server Action: see app/auth/discord/route.ts. */}
+        <form method="post" action="/auth/discord">
           <button className="button" type="submit">
             Sign in with Discord
           </button>
