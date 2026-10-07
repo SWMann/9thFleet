@@ -60,7 +60,7 @@ export async function updateSession(request: NextRequest) {
 }
 
 /** Pages for signed-in people only. Keep the matcher in proxy.ts in step with this. */
-const MEMBER_PAGES = ["/profile", "/order-of-battle"];
+const MEMBER_PAGES = ["/profile", "/order-of-battle", "/apply", "/staff"];
 
 function redirectKeepingCookies(request: NextRequest, from: NextResponse, pathname: string) {
   const url = request.nextUrl.clone();

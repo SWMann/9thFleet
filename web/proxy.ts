@@ -7,5 +7,12 @@ export async function proxy(request: NextRequest) {
 
 // Only the pages that use a session. The public pages stay static.
 export const config = {
-  matcher: ["/profile/:path*", "/order-of-battle/:path*", "/sign-in", "/auth/:path*"],
+  matcher: [
+    "/profile/:path*",
+    "/order-of-battle/:path*",
+    "/apply/:path*",
+    "/staff/:path*",
+    "/sign-in",
+    "/auth/:path*",
+  ],
 };

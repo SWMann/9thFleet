@@ -4,29 +4,19 @@
 // code exchange, the keys that prove a session is genuine, and the member's own
 // rows. It holds one member in memory. It is never part of the running site.
 
-import { createHash, createSign, generateKeyPairSync, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { createSigner } from "./tokens.mjs";
 
 // The units, posts and ranks exactly as the database migrations create them.
 // To refresh it, dump those tables from a database built from supabase/migrations.
 const orderOfBattle = JSON.parse(readFileSync(new URL("./fixtures/order-of-battle.json", import.meta.url), "utf8"));
 const SERVING = ["recruit", "auxiliary", "member", "reserve"];
 
-const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
-const KEY_ID = "mock-key-1";
-const jwk = { ...publicKey.export({ format: "jwk" }), kid: KEY_ID, alg: "ES256", use: "sig", key_ops: ["verify"] };
-
-const base64url = (input) => Buffer.from(input).toString("base64url");
-
-function signToken(claims) {
-  const head = base64url(JSON.stringify({ alg: "ES256", typ: "JWT", kid: KEY_ID }));
-  const body = base64url(JSON.stringify(claims));
-  const signature = createSign("SHA256")
-    .update(`${head}.${body}`)
-    .sign({ key: privateKey, dsaEncoding: "ieee-p1363" });
-  return `${head}.${body}.${base64url(signature)}`;
-}
+const signer = createSigner();
+const jwk = signer.jwk;
+const signToken = (claims) => signer.sign(claims);
 
 export function startMockSupabase(port) {
   const origin = `http://127.0.0.1:${port}`;

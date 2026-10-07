@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { getSession, type Member, type Role, type Service, type Status } from "@/lib/member";
+import { getSession, isStaff, type Member, type Role, type Service, type Status } from "@/lib/member";
 import { site } from "@/lib/site";
 import { signOut } from "./actions";
 import { NamesForm } from "./NamesForm";
@@ -127,13 +127,34 @@ async function Record() {
           <h2 id="applying">Applying</h2>
           <div className="prose">
             {recruitmentOpen ? (
-              <p>Recruitment is open. The application form is being built and will appear here.</p>
+              <>
+                <p>Recruitment is open. Set your names above first, then apply.</p>
+                <p className="actions">
+                  <Link className="button" href="/apply">
+                    Apply, or see your application
+                  </Link>
+                </p>
+              </>
             ) : (
               <p>
                 Recruitment opens on {site.recruitmentOpens}. Until then there is nothing to apply for. Set your names
                 above so you are ready.
               </p>
             )}
+          </div>
+        </section>
+      ) : null}
+
+      {isStaff(member) ? (
+        <section className="wrap band" aria-labelledby="staff">
+          <h2 id="staff">Staff work</h2>
+          <div>
+            <p>Read applications, keep interview notes, and accept or decline.</p>
+            <p className="actions">
+              <Link className="button button-quiet" href="/staff/applications">
+                Applications
+              </Link>
+            </p>
           </div>
         </section>
       ) : null}
