@@ -25,7 +25,11 @@ const route = [
     time: "60 minutes",
     detail: "For the Navy: ship stations, emergency drills, turrets and damage control.",
   },
-  { step: "Auxiliary", time: "", detail: "You can now fill support slots on most operations." },
+  {
+    step: "Auxiliary",
+    time: "",
+    detail: "You can now join operations, filling a post that would be empty that night.",
+  },
   {
     step: "Full member",
     time: "",
