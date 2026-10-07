@@ -22,11 +22,17 @@ const subscribe = () => () => {};
 export function NavLinks() {
   const pathname = usePathname();
   const signedIn = useSyncExternalStore(subscribe, hasSignedInHint, () => false);
-  const account = signedIn ? { href: "/profile", label: "Your record" } : { href: "/sign-in", label: "Sign in" };
+  const forYou = signedIn
+    ? [
+        // The page is the order of battle. "Fleet" is short enough for a phone's menu.
+        { href: "/order-of-battle", label: "Fleet" },
+        { href: "/profile", label: "Your record" },
+      ]
+    : [{ href: "/sign-in", label: "Sign in" }];
 
   return (
     <ul className="nav-links">
-      {[...links, account].map((link) => (
+      {[...links, ...forYou].map((link) => (
         <li key={link.href}>
           <Link href={link.href} aria-current={pathname === link.href ? "page" : undefined}>
             {link.label}

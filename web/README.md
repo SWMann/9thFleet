@@ -23,13 +23,15 @@ Then open http://localhost:3000.
 | `npm run typecheck` | Types |
 | `npm run lint` | Code style and common mistakes |
 | `npm run build` | That every page builds |
-| `npm run e2e` | Signing in and out in a real browser. Run `npm run build` first |
+| `npm run e2e` | Signing in, the member pages and signing out, in a real browser. Run `npm run build` first |
 
 GitHub runs all four on every push that touches `web/`.
 
-The sign-in test does not touch Discord or the fleet's database. It runs the built site against a
+The browser test does not touch Discord or the fleet's database. It runs the built site against a
 small stand-in for Supabase, in `e2e/mock-supabase.mjs`, and checks the hand-off, the session
-cookies, the redirects and saving names. It needs a browser: `npx playwright-core install chromium`.
+cookies, the redirects, saving names and the order of battle. The stand-in serves the units and
+posts from `e2e/fixtures/order-of-battle.json`, which is a copy of what the database migrations
+create. It needs a browser: `npx playwright-core install chromium`.
 
 ## Sign-in
 
@@ -39,6 +41,7 @@ cookies, the redirects and saving names. It needs a browser: `npx playwright-cor
 | `/auth/discord` | Where the button posts. It answers with a redirect to Discord |
 | `/auth/callback` | Where Discord sends you back. It turns Discord's one-time code into a session |
 | `/profile` | Your record: status, service, rank, post, and your names |
+| `/order-of-battle` | Every unit and post, who holds each, what is vacant and what opens later. For the serving fleet |
 
 How it is kept safe:
 
@@ -72,6 +75,7 @@ Two things are set in the Supabase dashboard, under Authentication:
 | The standards page | `app/standards/page.tsx` |
 | The joining page | `app/joining/page.tsx` |
 | The sign-in page | `app/sign-in/page.tsx` |
+| The order of battle page | `app/order-of-battle/page.tsx`, and what it reads in `lib/order-of-battle.ts` |
 | The member's record | `app/profile/page.tsx` |
 | Colours and type | `app/globals.css` |
 

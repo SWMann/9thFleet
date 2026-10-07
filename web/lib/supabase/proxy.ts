@@ -50,7 +50,7 @@ export async function updateSession(request: NextRequest) {
   if (!signedIn && hinted) response.cookies.delete(SIGNED_IN_COOKIE);
 
   const { pathname } = request.nextUrl;
-  if (!signedIn && pathname.startsWith("/profile")) {
+  if (!signedIn && MEMBER_PAGES.some((page) => pathname === page || pathname.startsWith(`${page}/`))) {
     return redirectKeepingCookies(request, response, "/sign-in");
   }
   if (signedIn && pathname === "/sign-in") {
@@ -58,6 +58,9 @@ export async function updateSession(request: NextRequest) {
   }
   return response;
 }
+
+/** Pages for signed-in people only. Keep the matcher in proxy.ts in step with this. */
+const MEMBER_PAGES = ["/profile", "/order-of-battle"];
 
 function redirectKeepingCookies(request: NextRequest, from: NextResponse, pathname: string) {
   const url = request.nextUrl.clone();
