@@ -5,7 +5,7 @@ Tools for the UEE 9th Fleet, a Star Citizen organisation.
 | Folder | What it is | State |
 | --- | --- | --- |
 | [`voice/`](voice/README.md) | The Windows voice app that carries the radio nets | Gate A spike: two nets, global push-to-talk |
-| [`web/`](web/README.md) | The fleet's website | Public pages. Sign-in and the member platform come next |
+| [`web/`](web/README.md) | The fleet's website | Public pages, Discord sign-in and the member's own record |
 | [`supabase/`](supabase/README.md) | The database: members, the order of battle, recruiting and the access rules | Applied to the live database. Events and attendance come later |
 | [`docs/`](docs/gate-a-test.md) | Test scripts and records | Gate A test script |
 
