@@ -33,7 +33,7 @@ The browser tests do not touch Discord or the live database. They need a browser
 | Test | Stand-in | What it is for |
 | --- | --- | --- |
 | `e2e/sign-in.mjs` | `e2e/mock-supabase.mjs`, which answers from memory | Sign-in, cookies, redirects, the member's record and the order of battle |
-| `e2e/recruiting.mjs` | `e2e/supabase-with-database.mjs`, which runs the real migrations in an in-memory PostgreSQL | The ranks, roles and manual pages, applying and the staff pages, against the database's real rules |
+| `e2e/recruiting.mjs` | `e2e/supabase-with-database.mjs`, which runs the real migrations in an in-memory PostgreSQL | The ranks, roles and manual pages, applying, the staff pages and operations, against the database's real rules |
 
 Write new tests the second way. A refusal in that test is the database's own refusal, so the test
 fails if the site and the rules ever disagree. The stand-in understands only the kinds of query the
@@ -48,6 +48,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/auth/callback` | Where Discord sends you back. It turns Discord's one-time code into a session |
 | `/profile` | Your record: status, service, rank, post, and your names |
 | `/order-of-battle` | Every unit and post, who holds each, what is vacant and what opens later. For the serving fleet |
+| `/operations` | Training and operation nights: the orders, the roll, stand-ins, the attendance return and the after-action report. For the serving fleet. Command drafts events, and instructors draft training |
 | `/apply` | The application form, and the state of your application once it is sent |
 | `/staff/applications` | For staff: the applications, their answers, interview notes and the decision. An admin opens and closes recruitment here |
 | `/ranks` | Every grade and its rank name in each service, read from the database. Open to everyone |
@@ -94,6 +95,8 @@ Two things are set in the Supabase dashboard, under Authentication:
 | The joining page | `app/joining/page.tsx` |
 | The sign-in page | `app/sign-in/page.tsx` |
 | The order of battle page | `app/order-of-battle/page.tsx`, and what it reads in `lib/order-of-battle.ts` |
+| The operations pages | `app/operations/`, and what they read in `lib/operations.ts` |
+| The types of event, the weapons states, the order's five paragraphs and the event cycle | `lib/operations-form.ts` |
 | The questions on the application form | `lib/application-form.ts` |
 | The application page and the staff pages | `app/apply/` and `app/staff/applications/` |
 | The member's record | `app/profile/page.tsx` |

@@ -500,6 +500,167 @@ try {
     assert.equal(await page.getByRole("button", { name: "Send application" }).count(), 0);
   });
 
+  console.log("Operations");
+  const patrol = () => one("select * from public.events where title = 'Patrol 001'");
+  const lineOf = async (person) =>
+    one("select * from public.attendance where event_id = $1 and member_id = $2", [(await patrol()).id, (await memberOf(person)).id]);
+  const returnOf = async (person) =>
+    one("select * from public.attendance_returns where event_id = $1 and member_id = $2", [(await patrol()).id, (await memberOf(person)).id]);
+  const post = (title) => page.locator(".post", { has: page.locator(".post-title", { hasText: new RegExp(`^${title}$`) }) });
+  const openPatrol = async () => {
+    await page.goto(`${site}/operations/${(await patrol()).id}`);
+    await headingIs("Patrol 001");
+  };
+  await check("an applicant is not shown operations", async () => {
+    await signInAs(sam);
+    await page.goto(`${site}/operations`);
+    await leadIs(/for the serving fleet/);
+    assert.equal(await page.locator(".event").count(), 0);
+  });
+  await check("command drafts an event, and only the people working on it see the draft", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/operations`);
+    await headingIs("Operations");
+    await page.getByRole("link", { name: "Draft an event" }).click();
+    await headingIs("Draft an event");
+    await page.getByLabel("Title").waitFor();
+    await shot("operation-new");
+    await page.getByLabel("Type").selectOption({ label: "Patrol" });
+    await page.getByLabel("Title").fill("Patrol 001");
+    await page.getByLabel(/^Summary/).fill("The lane between ArcCorp and microTech");
+    await page.getByLabel(/^Weapons state/).selectOption({ label: "Weapons tight: identified hostiles only" });
+    await page.getByRole("button", { name: "Save as a draft" }).click();
+    await headingIs("Patrol 001");
+    await page.getByText("This is a draft. Only you, its commander and command can see it.").waitFor();
+
+    const event = await patrol();
+    assert.equal(event.state, "draft");
+    assert.equal(event.created_by, (await memberOf(founder)).id);
+    assert.equal(event.commander_id, (await memberOf(founder)).id, "the form offers the person drafting as commander");
+
+    await signInAs(kit);
+    await page.goto(`${site}/operations`);
+    await page.getByText("No event has been announced yet.").waitFor();
+    await page.goto(`${site}/operations/${event.id}`);
+    await headingIs("Nothing heard.");
+  });
+  await check("the commander writes the orders and announces the event", async () => {
+    await signInAs(founder);
+    await openPatrol();
+    await page.getByRole("link", { name: "Change the details and orders" }).click();
+    await page.getByLabel("Warning order").fill("Patrol the lane at 1900 UTC.\nCommander: Ada Vance.");
+    await page.getByLabel("2 Mission").fill("Task Force Jericho will patrol the lane in order to deter piracy against traders.");
+    await page.getByRole("button", { name: "Save the orders" }).click();
+    await page.locator(".form-result").filter({ hasText: "Saved." }).waitFor();
+    await shot("operation-edit");
+
+    await openPatrol();
+    assert.match(await page.locator(".orders").innerText(), /Commander: Ada Vance\./);
+    await page.locator(".decisions summary", { hasText: /^Announce$/ }).click();
+    await page.getByRole("button", { name: "Yes, announce it" }).click();
+    await page.locator(".form-result").filter({ hasText: "Announced." }).waitFor();
+    const event = await patrol();
+    assert.equal(event.state, "announced");
+    assert.ok(event.announced_at && event.roll_closes_at, "the database stamps the announcement and sets when the roll closes");
+    await shot("operation-announced");
+  });
+  await check("members reply for themselves and can change their minds while the roll is open", async () => {
+    await page.getByRole("button", { name: "Attending", exact: true }).click();
+    await page.locator(".form-result").filter({ hasText: "You are down as attending." }).waitFor();
+    assert.match(await post("Fleet Commander").innerText(), /Confirmed/i);
+
+    await signInAs(kit);
+    await page.goto(`${site}/operations`);
+    assert.match(await page.locator(".event", { hasText: "Patrol 001" }).innerText(), /Reply needed/i);
+    await shot("operations");
+    assert.match(await page.locator(".sequence").innerText(), /The roll closes 24 hours out/);
+    await page.getByRole("link", { name: "Patrol 001" }).click();
+    await headingIs("Patrol 001");
+    assert.match(await page.locator(".orders").innerText(), /in order to deter piracy/);
+    await page.getByRole("button", { name: "Not attending" }).click();
+    await page.locator(".form-result").filter({ hasText: "You are down as not attending." }).waitFor();
+    await page.getByRole("button", { name: "Attending", exact: true }).click();
+    await page.locator(".form-result").filter({ hasText: "You are down as attending." }).waitFor();
+    assert.equal((await lineOf(kit)).reply, "attending");
+    // A recruit holds no post, so they attend as a spare hand.
+    await page.locator(".names li", { hasText: "Kit Marlow" }).waitFor();
+    // Nobody holds the training ship's six entry posts yet, so each is known to be empty.
+    assert.equal(await page.getByRole("button", { name: "Stand in" }).count(), 6);
+
+    await signInAs(jo);
+    await openPatrol();
+    await page.getByRole("button", { name: "Attending", exact: true }).click();
+    await page.locator(".form-result").filter({ hasText: "You are down as attending." }).waitFor();
+  });
+  await check("once the roll has closed a reply is fixed, and a spare hand stands in for an empty entry post", async () => {
+    // Time cannot be wound on, so the event is moved instead: ten hours to go, announced three days ago.
+    await supabase.sql(
+      "update public.events set starts_at = now() + interval '10 hours', announced_at = now() - interval '3 days' where title = 'Patrol 001'",
+    );
+    await signInAs(kit);
+    await openPatrol();
+    await page.getByText("The roll has closed. You said you are attending.").waitFor();
+    assert.equal(await page.getByRole("button", { name: "Not attending" }).count(), 0);
+
+    await post("Gunner 1").getByRole("button", { name: "Stand in" }).click();
+    await page.getByText("You are standing in as Gunner 1 for the night.").waitFor();
+    const line = await lineOf(kit);
+    assert.equal(line.stand_in_set_by, (await memberOf(kit)).id);
+    assert.match(await post("Gunner 1").innerText(), /Stand-in: Starman Recruit Kit Marlow/);
+    // One post at a time.
+    assert.equal(await page.getByRole("button", { name: "Stand in" }).count(), 0);
+    await shot("operation-roll");
+  });
+  await check("whoever runs the event places a stand-in and takes one out", async () => {
+    await signInAs(founder);
+    await openPatrol();
+    await post("Helmsman").getByLabel("Stand-in for Helmsman").selectOption({ label: "Starman Recruit Jo Reyes" });
+    await post("Helmsman").getByRole("button", { name: "Place" }).click();
+    await post("Helmsman").getByText("Stand-in: Starman Recruit Jo Reyes").waitFor();
+    assert.equal((await lineOf(jo)).stand_in_set_by, (await memberOf(founder)).id);
+
+    await post("Gunner 1").getByRole("button", { name: /Remove/ }).click();
+    await post("Gunner 1").getByLabel("Stand-in for Gunner 1").waitFor();
+    assert.equal((await lineOf(kit)).stand_in_position_id, null);
+    const tally = await page.locator(".tally").innerText();
+    assert.match(tally, /Confirmed\s+2/i);
+    assert.match(tally, /Spare hands\s+1/i);
+  });
+  await check("after the start the commander makes the return and files the report, and the event closes", async () => {
+    await supabase.sql("update public.events set starts_at = now() - interval '1 hour' where title = 'Patrol 001'");
+    await openPatrol();
+    await page.getByLabel(/Jo Reyes/).selectOption({ label: "Absent, without notice" });
+    await page.getByRole("button", { name: "Make the return and close the event" }).click();
+    await page.locator(".form-result").filter({ hasText: "The attendance return is made." }).waitFor();
+    assert.equal((await patrol()).state, "done");
+    assert.equal((await returnOf(kit)).returned, "present");
+    const absent = await returnOf(jo);
+    assert.equal(absent.returned, "absent_without_notice");
+    assert.equal(absent.returned_by, (await memberOf(founder)).id);
+
+    await page.getByLabel("What happened").fill("Two contacts on the lane. Neither closed.\nNo engagement.");
+    await page.getByLabel(/^What to change/).fill("Brief the fallback sooner.");
+    await page.getByRole("button", { name: "File the report" }).click();
+    await page.locator(".form-result").filter({ hasText: "The after-action report is filed." }).waitFor();
+    const report = await one("select * from public.after_action_reports where event_id = $1", [(await patrol()).id]);
+    assert.equal(report.author_id, (await memberOf(founder)).id);
+    assert.equal(report.what_happened, "Two contacts on the lane. Neither closed.\nNo engagement.");
+  });
+  await check("the fleet reads the report, each member sees only their own attendance, and nothing more can be changed", async () => {
+    await signInAs(kit);
+    await page.goto(`${site}/operations`);
+    assert.match(await page.locator(".event", { hasText: "Patrol 001" }).innerText(), /Done/i);
+    await openPatrol();
+    await page.getByRole("heading", { name: "After-action report" }).waitFor();
+    assert.match(await page.locator("main").innerText(), /Filed by Lt\. Commander Ada Vance/);
+    assert.match(await page.locator("main").innerText(), /Brief the fallback sooner\./);
+    // Kit is told how they were recorded, and is not shown that Jo was marked absent.
+    await page.getByText("The operation commander recorded you as present.").waitFor();
+    assert.doesNotMatch(await page.locator("main").innerText(), /Absent|without notice/i);
+    assert.equal(await page.getByRole("button").filter({ hasText: /Attending|Stand in|Place/ }).count(), 0);
+    await shot("operation-done");
+  });
+
   await check("no page raised a script error", async () => {
     assert.deepEqual(pageErrors, []);
   });

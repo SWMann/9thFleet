@@ -49,7 +49,8 @@ export const menu: MenuGroup[] = [
     signedIn: [
       { href: "/profile", label: "Your record" },
       { href: "/order-of-battle", label: "Order of battle" },
+      { href: "/operations", label: "Operations" },
     ],
-    note: "Your record and the order of battle appear here once you have signed in.",
+    note: "Your record, the order of battle and operations appear here once you have signed in.",
   },
 ];
