@@ -48,7 +48,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/auth/callback` | Where Discord sends you back. It turns Discord's one-time code into a session |
 | `/profile` | Your record: status, service, rank, post, and your names |
 | `/order-of-battle` | Every unit and post, who holds each, what is vacant and what opens later. For the serving fleet |
-| `/operations` | Training and operation nights: the orders, the roll, stand-ins, the attendance return and the after-action report. For the serving fleet. Command drafts events, and instructors draft the types open to them. An event can be copied, and can repeat weekly |
+| `/operations` | Training and operation nights: the orders, the roll, stand-ins, the attendance return and the after-action report. For the serving fleet. Command drafts events, and instructors draft the types open to them. An event can be copied, and can repeat weekly. It says which units take part, who it is open to, how many places it has and what it needs to go ahead |
 | `/apply` | The application form, and the state of your application once it is sent |
 | `/staff/applications` | For staff: the applications, their answers, interview notes and the decision. An admin opens and closes recruitment here |
 | `/admin` | For the people who run the fleet: its figures. See Admin pages below |
@@ -188,6 +188,7 @@ to be tracked.
 | The sign-in page | `app/sign-in/page.tsx` |
 | The order of battle page | `app/order-of-battle/page.tsx`, and what it reads in `lib/order-of-battle.ts` |
 | The operations pages | `app/operations/`, and what they read in `lib/operations.ts` |
+| How go or no-go is worked out, for the event's page and the admin pages | `lib/manning.ts` |
 | The types of event | Nowhere in the code. An admin keeps them at `/admin/structure/event-types` |
 | The weapons states, Volume 2's names for the order's five sections, and the event cycle | `lib/operations-form.ts` |
 | The questions on the application form | `lib/application-form.ts` |

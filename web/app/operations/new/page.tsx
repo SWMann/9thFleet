@@ -72,9 +72,15 @@ async function NewEvent() {
             weaponsState: first.defaultWeaponsState ?? "",
             pveFallback: "",
             repeatsWeekly: false,
+            openToRecruits: true,
+            openToService: "",
+            requiresQualification: "",
+            places: "",
+            minimumAttending: "",
           }}
           types={result.mayCreate}
           people={result.people}
+          qualifications={result.qualifications}
         />
       </section>
     </>

@@ -1269,7 +1269,7 @@ try {
   const typeOptions = async () => (await page.getByLabel("Type").locator("option").allInnerTexts()).map((text) => text.trim());
   // The event form fills in a type's usual length when the type is chosen, which it can only do once the page's script runs.
   const eventFormReady = async () => {
-    await page.getByLabel("Title").waitFor();
+    await page.locator("#title:visible").waitFor();
     await page.waitForFunction(() => {
       const list = document.querySelector("select#kind");
       return list !== null && Object.keys(list).some((key) => key.startsWith("__reactProps"));
@@ -1487,6 +1487,262 @@ try {
     await page.goto(`${site}/admin/logs?show=refused`);
     await page.locator(".log:visible").first().waitFor();
     assert.match(await logText(), /Ada Vance was refused: tried to remove part of the fleet's structure\./);
+  });
+
+  console.log("Who takes part");
+  const gunnery = () => eventTitled("Gunnery 001");
+  const openGunnery = () => openEvent("Gunnery 001");
+  const lineIn = async (title, person) =>
+    one("select * from public.attendance where event_id = $1 and member_id = $2", [(await eventTitled(title)).id, (await memberOf(person)).id]);
+  const manningSays = async () => (await page.locator(".manning:visible").innerText()).replace(/\s+/g, " ").trim();
+  const extraPost = (title) => page.locator(".post:visible", { has: page.locator(".post-title", { hasText: new RegExp(`^${title}$`) }) });
+  // Choose someone from a list by their name, whatever rank is written before it.
+  const choosePerson = async (list, name) => {
+    const value = await list.locator("option", { hasText: name }).first().getAttribute("value");
+    await list.selectOption(value);
+  };
+  // Lee joins the Army as a full member with no role, so there is someone who runs nothing.
+  await supabase.sql("update public.members set status = 'member', service = 'army' where id = $1", [(await memberOf(lee)).id]);
+
+  await check("an event says who it is open to, how many places it has and how many it needs", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/operations/new`);
+    await eventFormReady();
+    await page.getByLabel("Type").selectOption({ label: "Training evolution" });
+    await page.getByLabel("Title").fill("Gunnery 001");
+    assert.equal(await page.getByLabel("Open to recruits").isChecked(), true, "an event is open to recruits unless it says otherwise");
+    await page.getByLabel(/^Places/).fill("1");
+    await page.getByLabel(/^Minimum/).fill("2");
+    await page.getByRole("button", { name: "Save as a draft" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "The minimum cannot be more than the number of places." }).waitFor();
+    await page.getByLabel(/^Places/).fill("2");
+    await page.getByRole("button", { name: "Save as a draft" }).click();
+    await headingIs("Gunnery 001");
+    const event = await gunnery();
+    assert.equal(event.places, 2);
+    assert.equal(event.minimum_attending, 2);
+    assert.equal(event.open_to_recruits, true);
+    const facts = await page.locator(".facts:visible").innerText();
+    assert.match(facts, /Places\s+2/i);
+    assert.match(facts, /Minimum\s+2 attending/i);
+  });
+  await check("whoever drafts an event names its units, the posts that must be filled and posts of its own", async () => {
+    await page.getByRole("link", { name: "Change the details and orders" }).click();
+    await page.getByRole("heading", { name: "Who takes part" }).waitFor();
+    const units = page.locator("form.picks:visible", { hasText: "Units taking part" });
+    await units.getByLabel("Task Force Jericho › Training Ship").check();
+    await units.getByRole("button", { name: "Save the units" }).click();
+    await told(units, "Saved.");
+
+    // The posts offered are the posts of the units taking part.
+    const key = page.locator("form.picks:visible", { hasText: "Posts that must be filled" });
+    await key.getByLabel("Helmsman").waitFor();
+    assert.equal(await key.getByRole("checkbox").count(), 6);
+    assert.equal(await key.getByLabel("Fleet Commander").count(), 0);
+    await key.getByLabel("Helmsman").check();
+    await key.getByRole("button", { name: "Save the posts" }).click();
+    await told(key, "Saved.");
+
+    const adding = page.locator("form:visible", { has: page.getByRole("button", { name: "Add the post" }) });
+    await adding.getByLabel("Post title").fill("Range Safety Officer");
+    await adding.getByLabel("Role").selectOption({ label: "Gunnery Chief" });
+    await adding.getByLabel("It must be filled for the event to go ahead").check();
+    await adding.getByRole("button", { name: "Add the post" }).click();
+    await told(adding, "Added.");
+    await adding.getByLabel("Post title").fill("Trainee");
+    await adding.getByLabel("Role").selectOption({ label: "Gunner" });
+    await adding.getByLabel("How many").fill("2");
+    await adding.getByLabel("An attending member with no post on the night may take it").check();
+    await adding.getByRole("button", { name: "Add the post" }).click();
+    await told(adding, "2 posts added.");
+    // The same title again is refused, and what was typed is kept.
+    await adding.getByLabel("Post title").fill("Range Safety Officer");
+    await adding.getByLabel("Role").selectOption({ label: "Gunner" });
+    await adding.getByRole("button", { name: "Add the post" }).click();
+    await told(adding, "The event already has a post with that title.");
+    assert.equal(await adding.getByLabel("Post title").inputValue(), "Range Safety Officer");
+    await shot("operation-taking-part");
+
+    const id = (await gunnery()).id;
+    assert.deepEqual(
+      await supabase.sql("select u.name from public.event_units e join public.units u on u.id = e.unit_id where e.event_id = $1", [id]),
+      [{ name: "Training Ship" }],
+    );
+    assert.deepEqual(
+      await supabase.sql("select p.title from public.event_key_posts e join public.positions p on p.id = e.position_id where e.event_id = $1", [id]),
+      [{ title: "Helmsman" }],
+    );
+    assert.deepEqual(
+      await supabase.sql("select title, must_fill, open_to_volunteers from public.event_posts where event_id = $1 order by sort_order", [id]),
+      [
+        { title: "Range Safety Officer", must_fill: true, open_to_volunteers: false },
+        { title: "Trainee 1", must_fill: false, open_to_volunteers: true },
+        { title: "Trainee 2", must_fill: false, open_to_volunteers: true },
+      ],
+    );
+  });
+  await check("the roll shows only the units taking part, with the event's own posts, and says what it still needs", async () => {
+    await openGunnery();
+    await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).click();
+    await page.getByRole("button", { name: "Yes, announce it" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
+    await page.locator(".manning:visible").waitFor();
+    assert.match(await manningSays(), /Not yet manned 2 more are needed to reach the minimum of 2\. Posts that must be filled are empty: Helmsman, Range Safety Officer\. Members can still reply\./);
+    // Six posts on the training ship and three of the event's own. The Fleet Commander's post is not part of it.
+    assert.match(await page.locator(".tally:visible").innerText(), /Posts\s+9/i);
+    assert.equal(await post("Fleet Commander").count(), 0);
+    assert.match(await page.locator(".facts:visible").innerText(), /Taking part\s+Training Ship/i);
+    assert.match(await extraPost("Range Safety Officer").innerText(), /Empty[\s\S]*Must be filled[\s\S]*Role: Gunnery Chief/i);
+    await shot("operation-manning");
+  });
+  await check("a member with no post in the event takes one that is open to volunteers", async () => {
+    await signInAs(kit);
+    await openGunnery();
+    await page.getByRole("button", { name: "Attending", exact: true }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "You are down as attending." }).waitFor();
+    assert.equal(await extraPost("Range Safety Officer").getByRole("button").count(), 0, "the commander fills that one");
+    await extraPost("Trainee 1").getByRole("button", { name: "Take this post" }).click();
+    await page.getByText("You are Trainee 1 for the night.").waitFor();
+    assert.equal(await page.getByRole("button", { name: "Take this post" }).count(), 0, "one post at a time");
+    const line = await lineIn("Gunnery 001", kit);
+    assert.equal(line.place, "in");
+    assert.equal(line.stand_in_set_by, (await memberOf(kit)).id);
+    assert.match(await extraPost("Trainee 1").innerText(), /Filled[\s\S]*Kit Marlow/i);
+  });
+  await check("a reply past the last place goes on the reserve list, and moves up when a place opens", async () => {
+    await signInAs(jo);
+    await openGunnery();
+    await page.getByRole("button", { name: "Attending", exact: true }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "You are down as attending." }).waitFor();
+
+    await signInAs(lee);
+    await openGunnery();
+    await page.getByRole("button", { name: "Attending", exact: true }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "Every place is taken, so you are on the reserve list." }).waitFor();
+    await page.getByText("number 1 on the reserve list").waitFor();
+    assert.equal((await lineIn("Gunnery 001", lee)).place, "reserve");
+    assert.match(await page.locator(".facts:visible").innerText(), /Places\s+2\s*2 taken, 1 on the reserve list/i);
+    // Someone on the reserve list has no post until a place opens.
+    assert.equal(await page.getByRole("button", { name: /Take this post|Stand in/ }).count(), 0);
+    await page.goto(`${site}/operations`);
+    assert.match(await page.locator(".event:visible", { hasText: "Gunnery 001" }).innerText(), /You are on the reserve list/i);
+    await shot("operation-reserve");
+
+    await signInAs(jo);
+    await openGunnery();
+    await page.getByRole("button", { name: "Not attending" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "You are down as not attending." }).waitFor();
+    assert.equal((await lineIn("Gunnery 001", lee)).place, "in", "the first on the reserve list takes the place");
+    assert.equal((await lineIn("Gunnery 001", jo)).place, null);
+  });
+  await check("whoever runs the event moves someone on or off the reserve list", async () => {
+    // Jo comes back, to the end of the list.
+    await page.getByRole("button", { name: "Attending", exact: true }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "Every place is taken" }).waitFor();
+    await signInAs(founder);
+    await openGunnery();
+    const reserve = page.locator(".unit-group:visible", { has: page.getByRole("heading", { name: "Reserve list" }) });
+    assert.match(await reserve.locator(".reserve-list").innerText(), /Jo Reyes/);
+    await choosePerson(reserve.getByLabel("Move to the reserve list"), "Lee Tanaka");
+    await reserve.getByRole("button", { name: "Move to the reserve list" }).click();
+    await reserve.locator(".reserve-list li", { hasText: "Lee Tanaka" }).waitFor();
+    assert.equal((await lineIn("Gunnery 001", lee)).place, "reserve");
+    assert.equal((await lineIn("Gunnery 001", jo)).place, "reserve", "nobody is moved up by that: the commander says who takes the place");
+    await reserve.locator(".reserve-list li", { hasText: "Jo Reyes" }).getByRole("button", { name: /Give a place/ }).click();
+    await reserve.locator(".reserve-list li", { hasText: "Jo Reyes" }).waitFor({ state: "detached" });
+    assert.equal((await lineIn("Gunnery 001", jo)).place, "in");
+  });
+  await check("an event below its minimum when the roll closes is a no-go, and command is told", async () => {
+    // The commander always has a place, however full the event is.
+    await page.getByRole("button", { name: "Attending", exact: true }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "You are down as attending." }).waitFor();
+    assert.equal((await lineIn("Gunnery 001", founder)).place, "in");
+    await supabase.sql(
+      "update public.events set starts_at = now() + interval '10 hours', announced_at = now() - interval '3 days' where title = 'Gunnery 001'",
+    );
+    await openGunnery();
+    assert.match(await manningSays(), /Below its minimum Posts that must be filled are empty: Helmsman, Range Safety Officer\. The roll has closed\. Whether it goes ahead is the operation commander's decision\./);
+    await page.goto(`${site}/operations`);
+    assert.match(await page.locator(".event:visible", { hasText: "Gunnery 001" }).innerText(), /Below its minimum/i);
+    await page.goto(`${site}/admin`);
+    await leadIs(/Stage 1/);
+    assert.match(await page.locator("main").innerText(), /Gunnery 001 is below its minimum manning\s+Posts that must be filled are empty: Helmsman, Range Safety Officer\./);
+    await shot("admin-attention-manning");
+  });
+  await check("the commander fills the posts that must be filled, and the event is a go", async () => {
+    await openGunnery();
+    // The commander's own post is not part of this event, so they are a spare hand like anyone else.
+    await extraPost("Range Safety Officer").getByLabel("Stand-in for Range Safety Officer").selectOption({ label: "Lt. Commander Ada Vance" });
+    await extraPost("Range Safety Officer").getByRole("button", { name: "Place" }).click();
+    await extraPost("Range Safety Officer").getByText("Lt. Commander Ada Vance").waitFor();
+    await post("Helmsman").getByLabel("Stand-in for Helmsman").selectOption({ label: "Starman Recruit Jo Reyes" });
+    await post("Helmsman").getByRole("button", { name: "Place" }).click();
+    await post("Helmsman").getByText("Stand-in: Starman Recruit Jo Reyes").waitFor();
+    assert.match(await manningSays(), /^Go 3 attending, against a minimum of 2, and every post that must be filled has someone in it\./);
+    assert.match(await post("Helmsman").innerText(), /Must be filled/i);
+    await shot("operation-go");
+    await page.goto(`${site}/admin`);
+    await leadIs(/Stage 1/);
+    assert.doesNotMatch(await page.locator("main").innerText(), /below its minimum manning/);
+  });
+  await check("an event for one service turns the others away, and takes their apologies", async () => {
+    await page.goto(`${site}/operations/new`);
+    await eventFormReady();
+    await page.getByLabel("Type").selectOption({ label: "Patrol" });
+    await page.getByLabel("Title").fill("Marine landing 001");
+    await page.getByLabel("Service").selectOption({ label: "Marines only" });
+    await page.getByLabel("Open to recruits").uncheck();
+    await page.getByLabel(/^Qualification needed/).selectOption({ label: "Radio user" });
+    await page.getByRole("button", { name: "Save as a draft" }).click();
+    await headingIs("Marine landing 001");
+    assert.match(await page.locator(".facts:visible").innerText(), /Open to\s+Marines members who hold the Radio user qualification, but not recruits/i);
+    await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).click();
+    await page.getByRole("button", { name: "Yes, announce it" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
+
+    await signInAs(lee);
+    await openEvent("Marine landing 001");
+    await page.getByText("This event is for the Marines.").waitFor();
+    assert.equal(await page.getByRole("button", { name: "Attending", exact: true }).count(), 0);
+    await page.getByRole("button", { name: "Not attending" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "You are down as not attending." }).waitFor();
+    assert.equal((await lineIn("Marine landing 001", lee)).reply, "not_attending");
+  });
+  await check("a copy carries who takes part, and nobody who was placed", async () => {
+    await signInAs(founder);
+    await openGunnery();
+    await page.getByRole("button", { name: "Draft another like this" }).click();
+    await headingIs("Gunnery 002");
+    await page.getByRole("heading", { name: "Who takes part" }).waitFor();
+    const copy = await eventTitled("Gunnery 002");
+    assert.equal(copy.places, 2);
+    assert.equal(copy.minimum_attending, 2);
+    assert.equal(await page.locator("form.picks:visible", { hasText: "Units taking part" }).getByLabel("Task Force Jericho › Training Ship").isChecked(), true);
+    assert.equal(await page.locator("form.picks:visible", { hasText: "Posts that must be filled" }).getByLabel("Helmsman").isChecked(), true);
+    assert.deepEqual(
+      (await supabase.sql("select title from public.event_posts where event_id = $1 order by sort_order", [copy.id])).map((row) => row.title),
+      ["Range Safety Officer", "Trainee 1", "Trainee 2"],
+    );
+    assert.deepEqual(await supabase.sql("select 1 from public.attendance where event_id = $1", [copy.id]), []);
+    // One of the event's own posts can be taken away again.
+    const posts = page.locator(".extra-posts:visible");
+    await posts.locator("li", { hasText: "Trainee 2" }).getByRole("button", { name: /Remove/ }).click();
+    await posts.locator("li", { hasText: "Trainee 2" }).waitFor({ state: "detached" });
+    assert.equal((await supabase.sql("select 1 from public.event_posts where event_id = $1", [copy.id])).length, 2);
+  });
+  await check("who takes part is in the logs", async () => {
+    await page.goto(`${site}/admin/logs?show=operations`);
+    await page.locator(".log:visible").first().waitFor();
+    const text = await logText();
+    assert.match(text, /Ada Vance named Training Ship as taking part in Gunnery 001\./);
+    assert.match(text, /Ada Vance said Helmsman, Training Ship must be filled for Gunnery 001\./);
+    assert.match(text, /Ada Vance added the post Range Safety Officer to Gunnery 001\.\s+Role: Gunnery Chief\. It must be filled\./);
+    assert.match(text, /Kit Marlow took the post Trainee 1 for Gunnery 001\./);
+    assert.match(text, /Lee Tanaka replied attending to Gunnery 001\.\s+Every place was taken, so they are on the reserve list\./);
+    assert.match(text, /Lee Tanaka was given a place at Gunnery 001, from the reserve list\./);
+    assert.match(text, /Ada Vance moved Lee Tanaka to the reserve list for Gunnery 001\./);
+    assert.match(text, /Ada Vance placed Ada Vance as Range Safety Officer for Gunnery 001\.|Ada Vance took the post Range Safety Officer for Gunnery 001\./);
+    assert.match(text, /Ada Vance removed the post Trainee 2 from Gunnery 002\./);
   });
 
   await check("no page raised a script error", async () => {

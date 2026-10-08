@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { refused, turnedDown, type Attempt } from "@/lib/activity";
 import { typed } from "@/lib/application-form";
-import { aWeekOn, nextTitle, paragraphs, returnedNames, weapons } from "@/lib/operations-form";
+import { aWeekOn, nextTitle, paragraphs, returnedNames, serviceNames, weapons } from "@/lib/operations-form";
 import { explainRefusal } from "@/lib/refusals";
 import { createClient } from "@/lib/supabase/server";
 
@@ -104,6 +104,22 @@ function readEvent(formData: FormData): { fields: Record<string, string | number
   const second = uuid(formData.get("second"));
   if (second && second === commander) return { problem: "The second-in-command is someone other than the commander." };
 
+  // A number that may be left empty: how many places, and how many must attend.
+  const count = (name: string): number | null | "bad" => {
+    const text = typed(formData.get(name));
+    if (text === "") return null;
+    const value = Number(text);
+    return Number.isInteger(value) && value >= 1 && value <= 500 ? value : "bad";
+  };
+  const places = count("places");
+  if (places === "bad") return { problem: "Give the number of places as a whole number from 1 to 500, or leave it empty." };
+  const minimum = count("minimum_attending");
+  if (minimum === "bad") return { problem: "Give the minimum as a whole number from 1 to 500, or leave it empty." };
+  if (places !== null && minimum !== null && minimum > places) {
+    return { problem: "The minimum cannot be more than the number of places." };
+  }
+  const service = formData.get("open_to_service");
+
   const weaponsState = formData.get("weapons_state");
   return {
     fields: {
@@ -118,6 +134,11 @@ function readEvent(formData: FormData): { fields: Record<string, string | number
       weapons_state: weapons.some((entry) => entry.key === weaponsState) ? String(weaponsState) : null,
       pve_fallback: fallback,
       repeats_weekly: formData.get("repeats_weekly") === "on",
+      open_to_recruits: formData.get("open_to_recruits") === "on",
+      open_to_service: typeof service === "string" && service in serviceNames ? service : null,
+      requires_qualification_id: uuid(formData.get("requires_qualification")),
+      places,
+      minimum_attending: minimum,
     },
   };
 }
@@ -148,7 +169,8 @@ export async function createEvent(_previous: OpsResult, formData: FormData): Pro
 /**
  * Draft another event like this one: the same type, details and orders, at the
  * same time of the week, the next one that has not gone by. The database copies
- * the orders, and only for someone who can read the event.
+ * the orders, the units, the extra posts and the posts that must be filled, and
+ * only for someone who can read the event.
  */
 export async function copyEvent(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
   const session = await signedIn();
@@ -159,7 +181,9 @@ export async function copyEvent(_previous: OpsResult, formData: FormData): Promi
   const [source, roster] = await Promise.all([
     session.supabase
       .from("events")
-      .select("kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback")
+      .select(
+        "kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, open_to_recruits, open_to_service, requires_qualification_id, places, minimum_attending",
+      )
       .eq("id", id)
       .maybeSingle(),
     session.supabase.from("roster").select("member_id, status"),
@@ -188,6 +212,11 @@ export async function copyEvent(_previous: OpsResult, formData: FormData): Promi
       observer_id: still(event.observer_id),
       weapons_state: event.weapons_state,
       pve_fallback: event.pve_fallback,
+      open_to_recruits: event.open_to_recruits,
+      open_to_service: event.open_to_service,
+      requires_qualification_id: event.requires_qualification_id,
+      places: event.places,
+      minimum_attending: event.minimum_attending,
       copied_from: id,
     })
     .select("id")
@@ -312,32 +341,41 @@ export async function replyToEvent(_previous: OpsResult, formData: FormData): Pr
 
   const existing = await lineOf(session, id, session.id);
   if (existing.error) return failed(session, "event.reply", existing.error, "Your reply could not be saved. Try again.");
-  const { error } = existing.data
-    ? await session.supabase.from("attendance").update({ reply }).eq("event_id", id).eq("member_id", session.id)
-    : await session.supabase.from("attendance").insert({ event_id: id, member_id: session.id, reply });
+  const { data, error } = existing.data
+    ? await session.supabase.from("attendance").update({ reply }).eq("event_id", id).eq("member_id", session.id).select("place")
+    : await session.supabase.from("attendance").insert({ event_id: id, member_id: session.id, reply }).select("place");
   if (error) return failed(session, "event.reply", error, explainRefusal(error, "Your reply could not be saved. Try again."));
   refresh();
-  return { ok: true, message: reply === "attending" ? "You are down as attending." : "You are down as not attending." };
+  if (reply === "not_attending") return { ok: true, message: "You are down as not attending." };
+  // The database gives the places out in the order replies arrive.
+  return data?.[0]?.place === "reserve"
+    ? { ok: true, message: "Every place is taken, so you are on the reserve list. You move up if a place opens." }
+    : { ok: true, message: "You are down as attending." };
 }
 
 /**
  * Put someone in a post for the night, or take them out of it. With no member
- * named it is the person asking, standing in for an empty entry post.
+ * named it is the person asking, taking an empty post that is open to them.
+ * The post is one of the order of battle's, or one of the event's own.
  */
 export async function setStandIn(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
   const session = await signedIn();
   if (!session) return NOT_CONNECTED;
   const id = uuid(formData.get("id"));
   const position = formData.get("position");
-  const post = position === "" ? null : uuid(position);
-  if (!id || (position !== "" && !post)) return notThisPage(session, "event.stand-in");
+  const extra = formData.get("extra");
+  const post = uuid(position);
+  const own = uuid(extra);
+  // A form names one kind of post, or names neither to take someone out of whichever they are in.
+  const emptied = (value: FormDataEntryValue | null) => value === null || value === "";
+  if (!id || (!emptied(position) && !post) || (!emptied(extra) && !own) || (post && own)) return notThisPage(session, "event.stand-in");
   const named = formData.get("member");
   const member = named === null ? session.id : uuid(named);
   if (!member) return { ok: false, message: "Choose who stands in." };
 
   const { data, error } = await session.supabase
     .from("attendance")
-    .update({ stand_in_position_id: post })
+    .update(post ? { stand_in_position_id: post } : own ? { event_post_id: own } : { stand_in_position_id: null, event_post_id: null })
     .eq("event_id", id)
     .eq("member_id", member)
     .select("member_id");
@@ -350,8 +388,136 @@ export async function setStandIn(_previous: OpsResult, formData: FormData): Prom
     return notYours(session, "event.stand-in", "Only someone who has replied that they are attending can stand in.");
   }
   refresh();
-  if (!post) return { ok: true, message: "Taken out of the post." };
-  return { ok: true, message: member === session.id ? "You are standing in for that post." : "Placed." };
+  if (!post && !own) return { ok: true, message: "Taken out of the post." };
+  return { ok: true, message: member === session.id ? (own ? "You have that post for the night." : "You are standing in for that post.") : "Placed." };
+}
+
+/** For whoever runs the event: move someone up from the reserve list, or onto it. */
+export async function setPlace(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  const member = uuid(formData.get("member"));
+  const place = formData.get("place");
+  if (!id || (place !== "in" && place !== "reserve")) return notThisPage(session, "event.place");
+  if (!member) return { ok: false, message: "Choose who to move." };
+
+  const { data, error } = await session.supabase
+    .from("attendance")
+    .update({ place })
+    .eq("event_id", id)
+    .eq("member_id", member)
+    .select("member_id");
+  if (error) return failed(session, "event.place", error, explainRefusal(error, "That could not be done. Try again."));
+  if (!data || data.length === 0) return notYours(session, "event.place", "Only whoever runs the event moves someone on or off the reserve list.");
+  refresh();
+  return { ok: true, message: place === "in" ? "Given a place." : "Moved to the reserve list." };
+}
+
+const NOT_YOURS_TO_SET = "Only whoever runs the event says who takes part.";
+
+/** Make a set of rows match what a form ticked: add what is new, and take away what was unticked. */
+async function matchRows(
+  session: Session,
+  table: "event_units" | "event_key_posts",
+  column: "unit_id" | "position_id",
+  id: string,
+  wanted: string[],
+): Promise<OpsResult> {
+  const current = await session.supabase.from(table).select(column).eq("event_id", id);
+  if (current.error) return failed(session, "event.taking", current.error, "That could not be read. Try again.");
+  const have = new Set(((current.data ?? []) as unknown as Record<string, string>[]).map((row) => row[column]));
+
+  let changed = 0;
+  for (const value of have) {
+    if (wanted.includes(value)) continue;
+    const { data, error } = await session.supabase.from(table).delete().eq("event_id", id).eq(column, value).select(column);
+    if (error) return failed(session, "event.taking", error, explainRefusal(error, "That could not be saved. Try again."));
+    if (!data || data.length === 0) return notYours(session, "event.taking", NOT_YOURS_TO_SET);
+    changed += 1;
+  }
+  for (const value of wanted) {
+    if (have.has(value)) continue;
+    const { error } = await session.supabase.from(table).insert({ event_id: id, [column]: value });
+    if (error) return failed(session, "event.taking", error, explainRefusal(error, NOT_YOURS_TO_SET));
+    changed += 1;
+  }
+  if (changed > 0) refresh();
+  return { ok: true, message: changed > 0 ? "Saved." : "Nothing was changed.", stamp: Date.now() };
+}
+
+const ticked = (formData: FormData, name: string) => [
+  ...new Set(formData.getAll(name).filter((value): value is string => typeof value === "string" && UUID.test(value))),
+];
+
+/** Say which units take part. With none ticked, every open unit does. */
+export async function saveUnits(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  if (!id) return notThisPage(session, "event.taking");
+  return matchRows(session, "event_units", "unit_id", id, ticked(formData, "unit"));
+}
+
+/** Say which posts must be filled for the event to go ahead. */
+export async function saveKeyPosts(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  if (!id) return notThisPage(session, "event.taking");
+  return matchRows(session, "event_key_posts", "position_id", id, ticked(formData, "post"));
+}
+
+/** Add posts that exist for this event only. Several of one kind are numbered: Trainee 1, Trainee 2. */
+export async function addExtraPosts(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  if (!id) return notThisPage(session, "event.taking");
+  const again = { values: typedInto(formData), stamp: Date.now() };
+
+  const title = typed(formData.get("title")).replace(/\s+/g, " ");
+  if (title.length < 2 || title.length > 76) return { ok: false, message: "Give the post a title of 2 to 76 characters.", ...again };
+  const role = uuid(formData.get("role"));
+  if (!role) return { ok: false, message: "Choose the role the post is.", ...again };
+  const many = Number(formData.get("count") ?? 1);
+  if (!Number.isInteger(many) || many < 1 || many > 12) return { ok: false, message: "Add from 1 to 12 posts at a time.", ...again };
+
+  const current = await session.supabase.from("event_posts").select("sort_order").eq("event_id", id);
+  if (current.error) return { ...(await failed(session, "event.taking", current.error, "The posts could not be read. Try again.")), ...again };
+  const last = Math.max(0, ...(current.data ?? []).map((row) => Number(row.sort_order)));
+
+  for (let number = 1; number <= many; number += 1) {
+    const { error } = await session.supabase.from("event_posts").insert({
+      event_id: id,
+      title: many > 1 ? `${title} ${number}` : title,
+      role_id: role,
+      must_fill: formData.get("must_fill") === "on",
+      open_to_volunteers: formData.get("open_to_volunteers") === "on",
+      sort_order: last + number,
+    });
+    if (error) {
+      const shown = error.code === "23505" ? "The event already has a post with that title." : explainRefusal(error, NOT_YOURS_TO_SET);
+      refresh();
+      return { ...(await failed(session, "event.taking", error, shown)), ...again };
+    }
+  }
+  refresh();
+  return { ok: true, message: many > 1 ? `${many} posts added.` : "Added.", stamp: again.stamp };
+}
+
+/** Take one of the event's own posts away. Whoever was in it is left with no post for the night. */
+export async function removeExtraPost(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  const post = uuid(formData.get("post"));
+  if (!id || !post) return notThisPage(session, "event.taking");
+  const { data, error } = await session.supabase.from("event_posts").delete().eq("id", post).eq("event_id", id).select("id");
+  if (error) return failed(session, "event.taking", error, explainRefusal(error, "The post could not be removed. Try again."));
+  if (!data || data.length === 0) return notYours(session, "event.taking", NOT_YOURS_TO_SET);
+  refresh();
+  return { ok: true, message: "Removed." };
 }
 
 /**

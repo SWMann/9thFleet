@@ -3,9 +3,21 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { PageHead } from "@/components/PageHead";
-import { getOperation, type Operation, type Person, type RollPost } from "@/lib/operations";
-import { formatWhen, returnedNames, stateNames, weapons, weaponsName } from "@/lib/operations-form";
-import { CopyButton, MoveForms, PlaceForm, RemoveStandIn, ReplyForm, ReportForm, ReturnForm, StandInButton } from "../OpsForms";
+import { shortfall } from "@/lib/manning";
+import { getOperation, type FleetEvent, type Operation, type Person, type RollPost } from "@/lib/operations";
+import { formatWhen, returnedNames, serviceNames, stateNames, weapons, weaponsName } from "@/lib/operations-form";
+import {
+  CopyButton,
+  GivePlace,
+  MoveForms,
+  PlaceForm,
+  RemoveStandIn,
+  ReplyForm,
+  ReportForm,
+  ReturnForm,
+  StandInButton,
+  ToReserve,
+} from "../OpsForms";
 
 export const metadata: Metadata = {
   title: "Event",
@@ -49,6 +61,21 @@ function length(minutes: number): string {
   return parts.filter(Boolean).join(" ");
 }
 
+/** Who an event is open to, in a few words. Null when it is open to every serving member. */
+function openTo(event: FleetEvent): string | null {
+  if (!event.openToService && !event.requires && event.openToRecruits) return null;
+  // "Navy members who hold the Navy crew qualification, but not recruits".
+  const who = event.openToService ? `${serviceNames[event.openToService]} members` : "Serving members";
+  const holding = event.requires ? ` who hold the ${event.requires.name} qualification` : "";
+  return `${who}${holding}${event.openToRecruits ? "" : ", but not recruits"}`;
+}
+
+const manningWords = {
+  go: "Go",
+  short: "Not yet manned",
+  "no-go": "Below its minimum",
+} as const;
+
 async function Event({ params }: { params: Props["params"] }) {
   const { id } = await params;
   const result = await getOperation(id);
@@ -59,7 +86,8 @@ async function Event({ params }: { params: Props["params"] }) {
   if (result.state === "outside") return <Head title="Event" lead="Operations are for the serving fleet." />;
   if (result.state === "not-found") notFound();
 
-  const { event, orders, sections, runs, edits, report } = result;
+  const { event, orders, sections, runs, edits, report, manning, roll } = result;
+  const open_to = openTo(event);
   // Someone who may draft this type of event may draft another like it.
   const mayCopy = result.mayCreate.some((type) => type.key === event.kind);
   const when = formatWhen(event.startsAt);
@@ -135,6 +163,38 @@ async function Event({ params }: { params: Props["params"] }) {
               <dd>{event.pveFallback}</dd>
             </div>
           ) : null}
+          {open_to ? (
+            <div>
+              <dt>Open to</dt>
+              <dd>{open_to}</dd>
+            </div>
+          ) : null}
+          {event.places !== null ? (
+            <div>
+              <dt>Places</dt>
+              <dd>
+                {event.places}
+                {event.state === "draft" ? null : (
+                  <span className="aside">
+                    {roll.withPlace.length} taken
+                    {roll.reserve.length > 0 ? `, ${roll.reserve.length} on the reserve list` : ""}
+                  </span>
+                )}
+              </dd>
+            </div>
+          ) : null}
+          {event.minimumAttending !== null ? (
+            <div>
+              <dt>Minimum</dt>
+              <dd>{event.minimumAttending} attending</dd>
+            </div>
+          ) : null}
+          {result.taking.names.length > 0 ? (
+            <div>
+              <dt>Taking part</dt>
+              <dd>{result.taking.names.join(", ")}</dd>
+            </div>
+          ) : null}
           {event.repeatsWeekly ? (
             <div>
               <dt>Repeats</dt>
@@ -157,6 +217,23 @@ async function Event({ params }: { params: Props["params"] }) {
         </dl>
         {mayCopy ? <CopyButton id={event.id} /> : null}
       </section>
+
+      {manning ? (
+        <section className="wrap band" aria-labelledby="manning">
+          <h2 id="manning">
+            Go or <strong>no-go</strong>
+          </h2>
+          <div className={`manning manning-${manning.state}`}>
+            <p className="manning-word">{manningWords[manning.state]}</p>
+            <p>
+              {manning.state === "go"
+                ? `${manning.attending} attending${manning.minimum !== null ? `, against a minimum of ${manning.minimum}` : ""}, and every post that must be filled has someone in it.`
+                : shortfall(manning)}{" "}
+              {manning.state === "short" ? "Members can still reply." : manning.state === "no-go" ? "The roll has closed. Whether it goes ahead is the operation commander's decision." : ""}
+            </p>
+          </div>
+        </section>
+      ) : null}
 
       {event.state === "announced" ? <YourReply result={result} /> : null}
 
@@ -278,13 +355,17 @@ async function Event({ params }: { params: Props["params"] }) {
 function YourReply({ result }: { result: Ready }) {
   const { event, mine, roll } = result;
   const closes = event.rollClosesAt ? formatWhen(event.rollClosesAt) : null;
-  const standingIn = roll.groups.flatMap((group) => group.posts).find((post) => post.id === mine.standInFor);
+  const standingIn =
+    roll.groups.flatMap((group) => group.posts).find((post) => post.id === mine.standInFor) ??
+    roll.extra.find((post) => post.id === mine.extraPost);
   const said =
     mine.reply === "attending"
       ? "You said you are attending."
       : mine.reply === "not_attending"
         ? "You said you are not attending."
         : "You did not reply.";
+  // Someone already attending keeps their reply if the event is narrowed afterwards.
+  const shut = mine.notOpen !== null && mine.reply !== "attending";
 
   return (
     <section className="wrap band" aria-labelledby="reply">
@@ -294,24 +375,33 @@ function YourReply({ result }: { result: Ready }) {
       {event.rollOpen ? (
         <>
           <p className="intro">
-            {mine.holdsAPost
-              ? "You confirm against your own post. If you cannot make it, a stand-in fills it for the night."
-              : "You hold no post yet, so you attend as a spare hand and may stand in for an empty entry post."}{" "}
+            {shut
+              ? `${mine.notOpen} If you hold a post, say you are not attending so that it can be filled.`
+              : mine.holdsAPost
+                ? "You confirm against your own post. If you cannot make it, a stand-in fills it for the night."
+                : "You hold no post in this event, so you attend as a spare hand and may take an empty post that is open to you."}{" "}
             You can change your reply until {closes?.day}, {closes?.utc}.
           </p>
-          <ReplyForm id={event.id} reply={mine.reply} />
+          <ReplyForm id={event.id} reply={mine.reply} onlyDecline={shut} />
         </>
       ) : (
         <p className="intro">The roll has closed. {said} Tell the operation commander if your plans change.</p>
       )}
+      {mine.place === "reserve" ? (
+        <div className="standing-in">
+          <p>
+            Every place is taken. You are <strong>number {mine.reserveNumber} on the reserve list</strong>, and move up
+            if a place opens.
+          </p>
+        </div>
+      ) : null}
       {standingIn ? (
         <div className="standing-in">
           <p>
-            You are standing in as <strong>{standingIn.title}</strong> for the night.
+            {mine.standInFor ? "You are standing in as " : "You are "}
+            <strong>{standingIn.title}</strong> for the night.
           </p>
-          <StandInButton id={event.id} position="">
-            Step back out
-          </StandInButton>
+          <StandInButton id={event.id}>Step back out</StandInButton>
         </div>
       ) : null}
     </section>
@@ -328,8 +418,8 @@ const stateWords: Record<RollPost["state"], { label: string; tone: string }> = {
 function TheRoll({ result }: { result: Ready }) {
   const { event, roll, mine, runs, member } = result;
   const live = event.state === "announced";
-  // A member with no post of their own, who is attending and not yet placed, may take an empty entry post.
-  const mayVolunteer = live && mine.reply === "attending" && !mine.holdsAPost && !mine.standInFor;
+  // A member with a place and no post of their own in this event, not yet placed, may take an empty post that is open to them.
+  const mayVolunteer = live && mine.place === "in" && !mine.holdsAPost && !mine.standInFor && !mine.extraPost;
   // The people whoever runs the event can put in a post: spare hands first, then anyone to move up.
   const candidates = roll.spare.length + roll.inPost.length;
 
@@ -363,6 +453,7 @@ function TheRoll({ result }: { result: Ready }) {
       <p className="roll-note">
         An empty entry post can be taken by an attending member who has no post of their own. Leadership and key posts
         are filled by the operation commander.
+        {result.taking.names.length > 0 ? ` Only ${result.taking.names.join(", ")} ${result.taking.names.length === 1 ? "takes" : "take"} part, so only those posts are listed.` : ""}
         {live && runs && candidates === 0 ? " Nobody who is attending is free to stand in yet." : ""}
       </p>
 
@@ -379,13 +470,16 @@ function TheRoll({ result }: { result: Ready }) {
                   <p className="post-state">
                     <span className={`chip${words.tone}`}>{words.label}</span>
                     {post.entry ? <span className="chip">Entry post</span> : null}
+                    {post.mustFill ? <span className="chip">Must be filled</span> : null}
                   </p>
                   <p className="post-details">
                     {post.holder
                       ? `${named(post.holder, "")}: ${
                           post.holderMoved
                             ? "moved to another post for the night"
-                            : post.holderReply === "attending"
+                            : post.holderOnReserve
+                              ? "on the reserve list"
+                              : post.holderReply === "attending"
                               ? "attending"
                               : post.holderReply === "not_attending"
                                 ? "not attending"
@@ -424,6 +518,79 @@ function TheRoll({ result }: { result: Ready }) {
           </ul>
         </div>
       ))}
+
+      {roll.extra.length > 0 ? (
+        <div className="unit-group">
+          <h3 className="unit-group-name">For this event</h3>
+          <ul className="posts">
+            {roll.extra.map((post) => (
+              <li className={post.holder ? "post" : "post post-gap"} key={post.id}>
+                <span className="post-title">{post.title}</span>
+                <p className="post-state">
+                  <span className={post.holder ? "chip chip-on" : "chip chip-amber"}>{post.holder ? "Filled" : "Empty"}</span>
+                  {post.mustFill ? <span className="chip">Must be filled</span> : null}
+                  {post.openToVolunteers ? <span className="chip">Open to volunteers</span> : null}
+                </p>
+                {post.role ? (
+                  <p className="post-details">
+                    Role: {post.role.href ? <Link href={post.role.href}>{post.role.name}</Link> : post.role.name}
+                  </p>
+                ) : null}
+                {post.holder ? (
+                  <div className="post-stand-in">
+                    <p>
+                      <strong>{named(post.holder, "")}</strong>
+                      {post.holder.id === member.id ? <span className="tag tag-you">You</span> : null}
+                    </p>
+                    {live && runs && post.holder.id !== member.id ? (
+                      <RemoveStandIn id={event.id} member={post.holder.id} name={post.holder.name} />
+                    ) : null}
+                  </div>
+                ) : live ? (
+                  runs ? (
+                    candidates > 0 ? (
+                      <PlaceForm id={event.id} extra={post.id} post={post.title} spare={roll.spare} inPost={roll.inPost} />
+                    ) : null
+                  ) : post.openToVolunteers ? (
+                    mayVolunteer ? (
+                      <StandInButton id={event.id} extra={post.id}>
+                        Take this post
+                      </StandInButton>
+                    ) : null
+                  ) : (
+                    <p className="post-details">The operation commander fills this post.</p>
+                  )
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {roll.reserve.length > 0 || (live && runs && event.places !== null && roll.withPlace.length > 0) ? (
+        <div className="unit-group">
+          <h3 className="unit-group-name">Reserve list</h3>
+          <p className="roll-note">
+            {roll.reserve.length > 0
+              ? "Attending, and waiting for a place. The first on the list moves up when someone with a place drops out."
+              : "Nobody is waiting for a place."}
+          </p>
+          {roll.reserve.length > 0 ? (
+            <ol className="reserve-list">
+              {roll.reserve.map((person) => (
+                <li key={person.id}>
+                  <span>
+                    {named(person, "")}
+                    {person.id === member.id ? <span className="tag tag-you">You</span> : null}
+                  </span>
+                  {live && runs ? <GivePlace id={event.id} member={person.id} name={person.name} /> : null}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+          {live && runs && roll.withPlace.length > 0 ? <ToReserve id={event.id} people={roll.withPlace} /> : null}
+        </div>
+      ) : null}
 
       {roll.spare.length > 0 ? (
         <div className="unit-group">

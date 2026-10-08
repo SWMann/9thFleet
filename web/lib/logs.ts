@@ -88,7 +88,10 @@ const PAGE = 100;
 const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
   personnel: ["members", "member_roles", "assignments", "qualification_awards"],
   recruiting: ["applications", "application_notes", "fleet_settings"],
-  operations: ["events", "event_orders", "attendance", "attendance_returns", "after_action_reports"],
+  operations: [
+    "events", "event_orders", "event_units", "event_key_posts", "event_posts", "attendance", "attendance_returns",
+    "after_action_reports",
+  ],
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
     "grades", "ranks", "fleet_settings", "event_types",
@@ -128,6 +131,8 @@ type Names = {
   event: (id: unknown) => string;
   /** What a type of event is called, from its key. */
   eventType: (key: unknown) => string;
+  /** One of an event's own posts. */
+  extraPost: (id: unknown) => string;
   /** Whether the second grade is above the first. Null when either is unknown. */
   higher: (from: unknown, to: unknown) => boolean | null;
   rank: (service: Service | null, grade: unknown) => string;
@@ -243,7 +248,7 @@ export async function readLog(filters: Filters): Promise<LogPage> {
 
 /** Everything a line needs to name the people and things it mentions. */
 async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>) {
-  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes] = await Promise.all([
+  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts] = await Promise.all([
     supabase.from("members").select("id, character_name, service"),
     supabase.from("member_accounts").select("member_id, discord_name"),
     supabase.from("positions").select("id, title, unit_id"),
@@ -255,8 +260,9 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     supabase.from("fleet_roles").select("id, name"),
     supabase.from("areas").select("id, name"),
     supabase.from("event_types").select("key, name"),
+    supabase.from("event_posts").select("id, title"),
   ]);
-  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes]) {
+  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts]) {
     if (result.error) throw new Error(`The names for the log could not be read: ${result.error.message}`);
   }
 
@@ -278,6 +284,7 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
   const roleName = new Map((roles.data ?? []).map((row) => [row.id as string, row.name as string]));
   const areaName = new Map((areas.data ?? []).map((row) => [row.id as string, row.name as string]));
   const typeName = new Map((eventTypes.data ?? []).map((row) => [row.key as string, row.name as string]));
+  const extraPostTitle = new Map((eventPosts.data ?? []).map((row) => [row.id as string, row.title as string]));
   const order = new Map((grades.data ?? []).map((row) => [row.code as string, row.sort_order as number]));
   const rankName = new Map((ranks.data ?? []).map((row) => [`${row.service}:${row.grade_code}`, row.name as string]));
 
@@ -289,6 +296,7 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     qualification: (id) => (typeof id === "string" ? (qualificationName.get(id) ?? "a qualification that is gone") : "a qualification"),
     event: (id) => (typeof id === "string" ? (eventTitle.get(id) ?? "an event that is gone") : "an event"),
     eventType: (key) => (typeof key === "string" ? (typeName.get(key) ?? key) : "no type"),
+    extraPost: (id) => (typeof id === "string" ? (extraPostTitle.get(id) ?? "a post that is gone") : "a post"),
     role: (id) => (typeof id === "string" ? (roleName.get(id) ?? "a role that is gone") : "no role"),
     area: (id) => (typeof id === "string" ? (areaName.get(id) ?? "an area that is gone") : "no area"),
     higher: (from, to) => {
@@ -339,7 +347,8 @@ function shown(key: string, value: unknown, names: Names, table: string): string
     if (PEOPLE.has(key)) return names.member(value);
     if (key === "position_id" || key === "stand_in_position_id") return names.post(value);
     if (key === "unit_id" || key === "parent_id") return names.unit(value);
-    if (key === "qualification_id") return names.qualification(value);
+    if (key === "qualification_id" || key === "requires_qualification_id") return names.qualification(value);
+    if (key === "event_post_id") return names.extraPost(value);
     if (key === "role_id" || key === "next_role_id") return names.role(value);
     if (key === "area_id") return names.area(value);
     if (key === "event_id" || key === "copied_from") return names.event(value);
@@ -563,6 +572,31 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
     case "event_orders":
       return line("operations", `${actor} changed the orders of ${names.event(any.event_id)}`, changes(row, names));
 
+    case "event_units": {
+      const event = names.event(any.event_id);
+      const unit = names.unit(any.unit_id);
+      if (row.action === "delete") return line("operations", `${actor} took ${unit} out of ${event}`);
+      return line("operations", `${actor} named ${unit} as taking part in ${event}`);
+    }
+
+    case "event_key_posts": {
+      const event = names.event(any.event_id);
+      const post = names.post(any.position_id);
+      if (row.action === "delete") return line("operations", `${actor} said ${post} need not be filled for ${event}`);
+      return line("operations", `${actor} said ${post} must be filled for ${event}`);
+    }
+
+    case "event_posts": {
+      const event = names.event(any.event_id);
+      const title = String(any.title ?? "a post");
+      if (row.action === "insert") {
+        const role = now.role_id ? `Role: ${names.role(now.role_id)}.` : null;
+        return line("operations", `${actor} added the post ${title} to ${event}`, [role, now.must_fill === true ? "It must be filled." : null].filter(Boolean).join(" ") || null);
+      }
+      if (row.action === "delete") return line("operations", `${actor} removed the post ${title} from ${event}`);
+      return line("operations", `${actor} changed the post ${title} of ${event}`, changes(row, names));
+    }
+
     case "attendance": {
       const event = names.event(any.event_id);
       const reply = replyNames[String(now.reply)] ?? "nothing";
@@ -574,8 +608,24 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
         }
         return line("operations", `${actor} took ${own ? "themselves" : subject} out of ${names.post(was.stand_in_position_id)} for ${event}`);
       }
+      if (changed("event_post_id")) {
+        if (now.event_post_id) {
+          const post = names.extraPost(now.event_post_id);
+          return line("operations", own ? `${actor} took the post ${post} for ${event}` : `${actor} placed ${subject} as ${post} for ${event}`);
+        }
+        // Dropping out gives the post up, which the reply's own line says.
+        if (!changed("reply")) {
+          return line("operations", `${actor} took ${own ? "themselves" : subject} out of ${names.extraPost(was.event_post_id)} for ${event}`);
+        }
+      }
       if (row.action === "insert" || changed("reply")) {
-        return line("operations", own ? `${actor} replied ${reply} to ${event}` : `${actor} put ${subject} down as ${reply} for ${event}`);
+        const where = now.place === "reserve" ? "Every place was taken, so they are on the reserve list." : null;
+        return line("operations", own ? `${actor} replied ${reply} to ${event}` : `${actor} put ${subject} down as ${reply} for ${event}`, where);
+      }
+      if (changed("place")) {
+        // A place that opens goes to the first on the list by itself, in the name of whoever gave it up.
+        if (now.place === "in") return line("operations", `${subject} was given a place at ${event}, from the reserve list`);
+        return line("operations", `${actor} moved ${subject} to the reserve list for ${event}`);
       }
       return line("operations", `${actor} changed ${whose} line on the roll of ${event}`, changes(row, names));
     }

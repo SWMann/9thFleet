@@ -3432,6 +3432,201 @@ a.contents-name:hover {
   font-size: 0.9375rem;
 }
 
+/* A group of an event's fields under one heading: who it is open to. */
+.field-set {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+  margin: 0;
+  padding: 22px 0 0;
+  border: 0;
+  border-top: 1px solid var(--seam);
+}
+
+.field-set > legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+  color: var(--white);
+  font-size: 1.1875rem;
+  font-weight: 600;
+}
+
+.field-set > legend + * {
+  clear: both;
+}
+
+/* A list to tick from: the units that take part, the posts that must be filled. */
+.picks {
+  display: grid;
+  gap: 16px;
+  max-width: 42rem;
+}
+
+.picks + .picks,
+.picks + .fields,
+.extra-posts + .fields {
+  margin-top: 34px;
+  padding-top: 26px;
+  border-top: 1px solid var(--seam);
+}
+
+.picks fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.picks legend,
+.extra-posts-title {
+  padding: 0;
+  color: var(--white);
+  font-size: 1.1875rem;
+  font-weight: 600;
+}
+
+.band .picks .hint,
+.band .extra-posts .hint {
+  max-width: none;
+  margin: 2px 0 10px;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
+.picks ul,
+.extra-posts ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.picks li {
+  border-top: 1px solid var(--seam);
+}
+
+.picks label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding-block: 10px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.picks input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0.2em 0 0;
+  accent-color: var(--gold);
+}
+
+.picks-group + .picks-group {
+  margin-top: 18px;
+}
+
+.picks-group h4 {
+  margin: 0 0 4px;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* The posts an event has of its own, listed above the form that adds one. */
+.extra-posts {
+  max-width: 42rem;
+  margin-top: 34px;
+  padding-top: 26px;
+  border-top: 1px solid var(--seam);
+}
+
+.extra-posts li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding-block: 10px;
+  border-top: 1px solid var(--seam);
+}
+
+.extra-posts li > span {
+  color: var(--white);
+  font-weight: 600;
+}
+
+.extra-posts li small {
+  display: block;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+  font-weight: 400;
+}
+
+.extra-posts .stand-in {
+  margin-top: 0;
+}
+
+/* The reserve list is in the order replies arrived, so it is numbered. */
+.reserve-list {
+  max-width: 34rem;
+  margin: 0 0 12px;
+  padding-left: 1.6em;
+  color: var(--text);
+}
+
+.reserve-list li {
+  padding-block: 6px;
+}
+
+.reserve-list li > span {
+  color: var(--white);
+  font-weight: 600;
+}
+
+.reserve-list .stand-in {
+  display: inline-flex;
+  margin: 0 0 0 12px;
+  vertical-align: middle;
+}
+
+/* Whether an event has the people it needs. */
+.manning {
+  max-width: 46rem;
+  padding: 16px 20px;
+  border: 1px solid var(--seam);
+  border-left: 4px solid var(--text-3);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.manning-go {
+  border-left-color: var(--green);
+}
+
+.manning-short {
+  border-left-color: var(--gold);
+}
+
+.manning-no-go {
+  border-left-color: #e0685c;
+}
+
+.band .manning p {
+  max-width: none;
+  margin: 0;
+  color: var(--text);
+}
+
+.band .manning .manning-word {
+  margin-bottom: 4px;
+  color: var(--white);
+  font-size: 1.1875rem;
+  font-weight: 700;
+}
+
 /* A line under a field that changes with what is chosen in it. */
 .field .type-about {
   max-width: none;

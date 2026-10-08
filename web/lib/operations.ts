@@ -1,7 +1,9 @@
 import "server-only";
-import { getSession, isServing, type Member } from "@/lib/member";
+import { inOwnPost, manningOf, unitsTakingPart, type Manning, type Place, type RollLine } from "@/lib/manning";
+import { getSession, isServing, type Member, type Service } from "@/lib/member";
 import {
   sectionsFrom,
+  serviceNames,
   type EventState,
   type EventType,
   type ParagraphKey,
@@ -40,17 +42,36 @@ type EventRow = {
   roll_closes_at: string | null;
   copied_from: string | null;
   repeats_weekly: boolean;
+  open_to_recruits: boolean;
+  open_to_service: Service | null;
+  requires_qualification_id: string | null;
+  places: number | null;
+  minimum_attending: number | null;
 };
 type AttendanceRow = {
   event_id: string;
   member_id: string;
   reply: Reply | null;
   stand_in_position_id: string | null;
+  event_post_id: string | null;
+  place: Place | null;
+  replied_at: string | null;
+};
+type ExtraPostRow = {
+  id: string;
+  event_id: string;
+  title: string;
+  role_id: string | null;
+  must_fill: boolean;
+  open_to_volunteers: boolean;
+  sort_order: number;
 };
 type RosterRow = { member_id: string; character_name: string | null; rank_name: string | null; status: string };
 
 const EVENT =
-  "id, kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, state, created_by, announced_at, roll_closes_at, copied_from, repeats_weekly";
+  "id, kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, state, created_by, announced_at, roll_closes_at, copied_from, repeats_weekly, open_to_recruits, open_to_service, requires_qualification_id, places, minimum_attending";
+const ATTENDANCE = "event_id, member_id, reply, stand_in_position_id, event_post_id, place, replied_at";
+const EXTRA_POST = "id, event_id, title, role_id, must_fill, open_to_volunteers, sort_order";
 const SERVING = ["recruit", "auxiliary", "member", "reserve"];
 
 export type FleetEvent = {
@@ -75,6 +96,13 @@ export type FleetEvent = {
   started: boolean;
   /** Closing it, or cancelling it once announced, drafts next week's. */
   repeatsWeekly: boolean;
+  /** Who it is open to. */
+  openToRecruits: boolean;
+  openToService: Service | null;
+  requires: { id: string; name: string } | null;
+  /** How many can attend, and how many must. Null for no limit and no minimum. */
+  places: number | null;
+  minimumAttending: number | null;
 };
 
 /** One primary post on the night: who holds it, whether they are coming, and who stands in if not. */
@@ -82,10 +110,14 @@ export type RollPost = {
   id: string;
   title: string;
   entry: boolean;
+  /** The event cannot go ahead with this post empty. */
+  mustFill: boolean;
   holder: Person | null;
   holderReply: Reply | null;
   /** Its holder is attending, but has been moved to another post for the night. */
   holderMoved: boolean;
+  /** Its holder is attending, but on the reserve list. */
+  holderOnReserve: boolean;
   standIn: Person | null;
   /**
    * confirmed: its holder is attending and in it. stand-in: someone fills it for the night.
@@ -95,20 +127,44 @@ export type RollPost = {
 };
 export type RollGroup = { unit: string; posts: RollPost[] };
 
+/** A post that exists for this event only. */
+export type ExtraPost = {
+  id: string;
+  title: string;
+  /** The role it is, with its page on the site if it has one. */
+  role: { name: string; href: string | null } | null;
+  mustFill: boolean;
+  openToVolunteers: boolean;
+  holder: Person | null;
+};
+
 export type Roll = {
   groups: RollGroup[];
+  /** The event's own posts, in the order they were given. */
+  extra: ExtraPost[];
+  /** Counted across the order of battle's posts and the event's own. */
   posts: number;
   confirmed: number;
   empty: number;
   waiting: number;
-  /** Attending with no post on the night: the people a stand-in usually comes from. */
+  /** Attending with a place and no post on the night: the people a stand-in usually comes from. */
   spare: Person[];
   /** Attending in their own post. Whoever runs the event can move one up for the night. */
   inPost: Person[];
+  /** Attending and waiting for a place, the first in line first. */
+  reserve: Person[];
+  /** Everyone attending with a place, for moving one of them to the reserve list. */
+  withPlace: Person[];
   notAttending: Person[];
 };
 
-export type Summary = FleetEvent & { myReply: Reply | null; posts: number; confirmed: number };
+export type Summary = FleetEvent & {
+  myReply: Reply | null;
+  myPlace: Place | null;
+  posts: number;
+  confirmed: number;
+  manning: Manning | null;
+};
 
 type Outside =
   | { state: "no-database" }
@@ -157,11 +213,29 @@ function nameOf(row: RosterRow | undefined, id: string | null): Person | null {
   return { id, name: row?.character_name ?? "A member with no name set", rankName: row?.rank_name ?? null };
 }
 
-/** The open primary posts, grouped by the unit they sit in, in the order of battle's own order. */
-function openPosts(fleet: Unit) {
+type FlatUnit = { id: string; parentId: string | null; name: string; open: boolean; path: string };
+
+/** Every unit of the order of battle, flat, each with the one above it. */
+function flatUnits(fleet: Unit): FlatUnit[] {
+  const list: FlatUnit[] = [];
+  const walk = (unit: Unit, parent: Unit | null, above: string[]) => {
+    // The fleet itself is left out of a unit's path: "Task Force Jericho › UEES Nexus".
+    const path = parent ? [...above, unit.name] : [];
+    list.push({ id: unit.id, parentId: parent?.id ?? null, name: unit.name, open: unit.open, path: path.join(" › ") || unit.name });
+    for (const child of unit.units) walk(child, unit, path);
+  };
+  walk(fleet, null, []);
+  return list;
+}
+
+/**
+ * The open primary posts, grouped by the unit they sit in, in the order of
+ * battle's own order. With units named, only the posts in those units and under them.
+ */
+function openPosts(fleet: Unit, taking: Set<string> | null) {
   const groups: { unit: string; posts: Unit["posts"] }[] = [];
   const walk = (unit: Unit, above: string | null) => {
-    const posts = unit.posts.filter((post) => post.kind === "primary" && post.open);
+    const posts = taking && !taking.has(unit.id) ? [] : unit.posts.filter((post) => post.kind === "primary" && post.open);
     // A department is named with its ship: "UEES Nexus, Gunnery".
     const name = unit.kind === "department" && above ? `${above}, ${unit.name}` : unit.name;
     if (posts.length > 0) groups.push({ unit: name, posts });
@@ -171,7 +245,13 @@ function openPosts(fleet: Unit) {
   return groups;
 }
 
-function toEvent(row: EventRow, people: Map<string, RosterRow>, types: EventType[], now: number): FleetEvent {
+function toEvent(
+  row: EventRow,
+  people: Map<string, RosterRow>,
+  types: EventType[],
+  qualifications: Map<string, string>,
+  now: number,
+): FleetEvent {
   const person = (id: string | null) => nameOf(id ? people.get(id) : undefined, id);
   return {
     id: row.id,
@@ -192,60 +272,156 @@ function toEvent(row: EventRow, people: Map<string, RosterRow>, types: EventType
     rollOpen: row.state === "announced" && row.roll_closes_at !== null && now < Date.parse(row.roll_closes_at),
     started: now >= Date.parse(row.starts_at),
     repeatsWeekly: row.repeats_weekly === true,
+    openToRecruits: row.open_to_recruits !== false,
+    openToService: row.open_to_service,
+    requires: row.requires_qualification_id
+      ? { id: row.requires_qualification_id, name: qualifications.get(row.requires_qualification_id) ?? "A qualification" }
+      : null,
+    places: row.places,
+    minimumAttending: row.minimum_attending,
   };
 }
+
+const toLine = (row: AttendanceRow): RollLine => ({
+  memberId: row.member_id,
+  reply: row.reply,
+  place: row.place,
+  standInFor: row.stand_in_position_id,
+  extraPost: row.event_post_id,
+  repliedAt: row.replied_at,
+});
+
+type RoleLink = { name: string; href: string | null };
 
 function buildRoll(
   event: FleetEvent,
   groups: ReturnType<typeof openPosts>,
-  lines: AttendanceRow[],
+  lines: RollLine[],
   people: Map<string, RosterRow>,
+  keyPosts: Set<string>,
+  extraPosts: ExtraPostRow[],
+  roles: Map<string, RoleLink>,
 ): Roll {
-  const byMember = new Map(lines.map((line) => [line.member_id, line]));
+  const byMember = new Map(lines.map((line) => [line.memberId, line]));
   const standIns = new Map<string, string>();
-  for (const line of lines) if (line.stand_in_position_id) standIns.set(line.stand_in_position_id, line.member_id);
+  const inExtra = new Map<string, string>();
+  for (const line of lines) {
+    if (line.standInFor) standIns.set(line.standInFor, line.memberId);
+    if (line.extraPost) inExtra.set(line.extraPost, line.memberId);
+  }
+  const person = (id: string | null) => nameOf(id ? people.get(id) : undefined, id);
 
-  const placed = new Set<string>();
-  const roll: Roll = { groups: [], posts: 0, confirmed: 0, empty: 0, waiting: 0, spare: [], inPost: [], notAttending: [] };
+  // Everyone with somewhere to be on the night: in their own post, or in someone else's.
+  const placed = new Set<string>([...standIns.values(), ...inExtra.values()]);
+  const roll: Roll = {
+    groups: [],
+    extra: [],
+    posts: 0,
+    confirmed: 0,
+    empty: 0,
+    waiting: 0,
+    spare: [],
+    inPost: [],
+    reserve: [],
+    withPlace: [],
+    notAttending: [],
+  };
   for (const group of groups) {
     const posts = group.posts.map((post): RollPost => {
       const held = post.holders[0];
       const holder = held ? { id: held.memberId, name: held.name ?? "A member with no name set", rankName: held.rankName } : null;
-      const holderReply = holder ? (byMember.get(holder.id)?.reply ?? null) : null;
-      const standInId = standIns.get(post.id) ?? null;
-      const standIn = nameOf(standInId ? people.get(standInId) : undefined, standInId);
+      const holderLine = holder ? byMember.get(holder.id) : undefined;
+      const holderReply = holderLine?.reply ?? null;
+      const standIn = person(standIns.get(post.id) ?? null);
       if (holder) placed.add(holder.id);
-      if (standIn) placed.add(standIn.id);
 
-      const holderMoved = holder !== null && holderReply === "attending" && byMember.get(holder.id)?.stand_in_position_id != null;
-      const state =
-        holderReply === "attending" && !holderMoved
-          ? "confirmed"
-          : standIn
-            ? "stand-in"
-            : holder && holderReply === null && event.rollOpen
-              ? "waiting"
-              : "empty";
+      const holderIn = inOwnPost(holderLine);
+      const holderMoved = holderLine?.place === "in" && !holderIn;
+      const holderOnReserve = holderLine?.place === "reserve";
+      const state = holderIn
+        ? "confirmed"
+        : standIn
+          ? "stand-in"
+          : holder && holderReply === null && event.rollOpen
+            ? "waiting"
+            : "empty";
       if (holder && state === "confirmed") roll.inPost.push(holder);
       roll.posts += 1;
       if (state === "confirmed" || state === "stand-in") roll.confirmed += 1;
       else roll[state] += 1;
-      return { id: post.id, title: post.title, entry: post.entry, holder, holderReply, holderMoved, standIn, state };
+      return {
+        id: post.id,
+        title: post.title,
+        entry: post.entry,
+        mustFill: keyPosts.has(post.id),
+        holder,
+        holderReply,
+        holderMoved,
+        holderOnReserve,
+        standIn,
+        state,
+      };
     });
     roll.groups.push({ unit: group.unit, posts });
   }
 
-  for (const line of lines) {
-    const person = nameOf(people.get(line.member_id), line.member_id);
-    if (!person) continue;
-    if (line.reply === "attending" && !placed.has(line.member_id)) roll.spare.push(person);
-    if (line.reply === "not_attending") roll.notAttending.push(person);
+  const inOrder = [...extraPosts].sort(
+    (a, b) => a.sort_order - b.sort_order || a.title.localeCompare(b.title, "en", { numeric: true }),
+  );
+  for (const post of inOrder) {
+    const holder = person(inExtra.get(post.id) ?? null);
+    roll.posts += 1;
+    if (holder) roll.confirmed += 1;
+    else roll.empty += 1;
+    roll.extra.push({
+      id: post.id,
+      title: post.title,
+      role: post.role_id ? (roles.get(post.role_id) ?? null) : null,
+      mustFill: post.must_fill,
+      openToVolunteers: post.open_to_volunteers,
+      holder,
+    });
   }
+
   const byName = (a: Person, b: Person) => a.name.localeCompare(b.name);
+  // The reserve list is read in the order replies arrived.
+  const waiting = lines
+    .filter((line) => line.place === "reserve")
+    .sort((a, b) => (a.repliedAt ?? "").localeCompare(b.repliedAt ?? "") || a.memberId.localeCompare(b.memberId));
+  for (const line of waiting) {
+    const who = person(line.memberId);
+    if (who) roll.reserve.push(who);
+  }
+  for (const line of lines) {
+    const who = person(line.memberId);
+    if (!who) continue;
+    if (line.place === "in") {
+      roll.withPlace.push(who);
+      if (!placed.has(line.memberId)) roll.spare.push(who);
+    }
+    if (line.reply === "not_attending") roll.notAttending.push(who);
+  }
   roll.spare.sort(byName);
   roll.inPost.sort(byName);
+  roll.withPlace.sort(byName);
   roll.notAttending.sort(byName);
   return roll;
+}
+
+/** Whether an event has what it needs, from its roll. */
+function manningFor(event: FleetEvent, roll: Roll, lines: RollLine[]): Manning | null {
+  // Only an announced event is manned or not. A draft has no roll, and a closed one is over.
+  if (event.state !== "announced") return null;
+  return manningOf({
+    minimum: event.minimumAttending,
+    keyPosts: roll.groups
+      .flatMap((group) => group.posts)
+      .filter((post) => post.mustFill)
+      .map((post) => ({ id: post.id, title: post.title, holderId: post.holder?.id ?? null })),
+    extraPosts: roll.extra,
+    lines,
+    rollOpen: event.rollOpen,
+  });
 }
 
 /** What the pages need before anything else: the member, and that they serve. */
@@ -257,6 +433,13 @@ async function serving(): Promise<Outside | { state: "ready"; member: Member }> 
   return { state: "ready", member: session.member };
 }
 
+/** The qualifications, by name. Anyone may read these. */
+async function readQualifications(supabase: Client): Promise<{ id: string; name: string }[]> {
+  const { data, error } = await supabase.from("qualifications").select("id, name");
+  if (error) throw new Error(`The qualifications could not be read: ${error.message}`);
+  return ((data ?? []) as { id: string; name: string }[]).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** Every event the member may see, sorted into drafts, what is coming and what has been. */
 export async function getOperations(): Promise<Operations> {
   const who = await serving();
@@ -264,41 +447,59 @@ export async function getOperations(): Promise<Operations> {
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
 
-  const [events, roster, battle, types] = await Promise.all([
+  const [events, roster, battle, types, qualifications] = await Promise.all([
     supabase.from("events").select(EVENT).order("starts_at", { ascending: true }),
     supabase.from("roster").select("member_id, character_name, rank_name, status"),
     getOrderOfBattle(),
     readEventTypes(supabase),
+    readQualifications(supabase),
   ]);
   for (const result of [events, roster]) {
     if (result.error) throw new Error(`The events could not be read: ${result.error.message}`);
   }
   const rows = (events.data ?? []) as EventRow[];
-  const lines =
-    rows.length > 0
-      ? await supabase
-          .from("attendance")
-          .select("event_id, member_id, reply, stand_in_position_id")
-          .in(
-            "event_id",
-            rows.map((row) => row.id),
-          )
-      : { data: [] as AttendanceRow[], error: null };
-  if (lines.error) throw new Error(`The roll could not be read: ${lines.error.message}`);
+  const ids = rows.map((row) => row.id);
+  const none = { data: [] as unknown[], error: null };
+  const [lines, units, keyPosts, extraPosts] =
+    ids.length > 0
+      ? await Promise.all([
+          supabase.from("attendance").select(ATTENDANCE).in("event_id", ids),
+          supabase.from("event_units").select("event_id, unit_id").in("event_id", ids),
+          supabase.from("event_key_posts").select("event_id, position_id").in("event_id", ids),
+          supabase.from("event_posts").select(EXTRA_POST).in("event_id", ids),
+        ])
+      : [none, none, none, none];
+  for (const result of [lines, units, keyPosts, extraPosts]) {
+    if (result.error) throw new Error(`The roll could not be read: ${result.error.message}`);
+  }
 
   const people = new Map(((roster.data ?? []) as RosterRow[]).map((row) => [row.member_id, row]));
-  const groups = battle.state === "ready" ? openPosts(battle.fleet) : [];
+  const qualificationName = new Map(qualifications.map((entry) => [entry.id, entry.name]));
+  const allUnits = battle.state === "ready" ? flatUnits(battle.fleet) : [];
   const now = Date.now();
 
   const summaries = rows.map((row): Summary => {
-    const event = toEvent(row, people, types, now);
-    const mine = ((lines.data ?? []) as AttendanceRow[]).filter((line) => line.event_id === row.id);
-    const roll = buildRoll(event, groups, mine, people);
+    const event = toEvent(row, people, types, qualificationName, now);
+    const mine = ((lines.data ?? []) as AttendanceRow[]).filter((line) => line.event_id === row.id).map(toLine);
+    const named = ((units.data ?? []) as { event_id: string; unit_id: string }[])
+      .filter((entry) => entry.event_id === row.id)
+      .map((entry) => entry.unit_id);
+    const groups = battle.state === "ready" ? openPosts(battle.fleet, unitsTakingPart(allUnits, named)) : [];
+    const key = new Set(
+      ((keyPosts.data ?? []) as { event_id: string; position_id: string }[])
+        .filter((entry) => entry.event_id === row.id)
+        .map((entry) => entry.position_id),
+    );
+    const extra = ((extraPosts.data ?? []) as ExtraPostRow[]).filter((entry) => entry.event_id === row.id);
+    const roll = buildRoll(event, groups, mine, people, key, extra, new Map());
+    const own = mine.find((line) => line.memberId === who.member.id);
     return {
       ...event,
-      myReply: mine.find((line) => line.member_id === who.member.id)?.reply ?? null,
+      myReply: own?.reply ?? null,
+      myPlace: own?.place ?? null,
       posts: roll.posts,
       confirmed: roll.confirmed,
+      manning: manningFor(event, roll, mine),
     };
   });
 
@@ -317,6 +518,16 @@ export type Orders = { warning_order: string } & Record<ParagraphKey, string>;
 
 export type ReturnLine = { person: Person; reply: Reply | null; returned: Returned | null };
 
+/** What someone who may change an event can choose from. */
+export type Choices = {
+  /** The open units, each with the ones above it in its name. */
+  units: { id: string; label: string }[];
+  /** The open primary posts of the units taking part, for saying which must be filled. */
+  posts: { unit: string; posts: { id: string; title: string }[] }[];
+  roles: { id: string; name: string }[];
+  qualifications: { id: string; name: string }[];
+};
+
 export type Operation =
   | Outside
   | { state: "not-found" }
@@ -329,9 +540,24 @@ export type Operation =
       sections: Section[];
       /** The event this one was copied from, if the member can still read it. */
       copiedFrom: { id: string; title: string } | null;
+      /** The units the event names, and the posts it says must be filled. With no unit named, every open unit takes part. */
+      taking: { units: string[]; names: string[]; keyPosts: string[] };
       roll: Roll;
+      /** Whether the event has what it needs. Null when it sets no minimum, or is not announced. */
+      manning: Manning | null;
       /** The member's own line on the roll. */
-      mine: { reply: Reply | null; standInFor: string | null; holdsAPost: boolean };
+      mine: {
+        reply: Reply | null;
+        place: Place | null;
+        /** Where they are on the reserve list, counting from one. */
+        reserveNumber: number | null;
+        standInFor: string | null;
+        extraPost: string | null;
+        /** Whether they hold a post that is part of this event. */
+        holdsAPost: boolean;
+        /** Why they cannot attend, if the event is not open to them. */
+        notOpen: string | null;
+      };
       /** Who runs it: its commander, its second-in-command, or command. */
       runs: boolean;
       /** Who may write its orders: whoever runs it, and its author while it is a draft. */
@@ -350,6 +576,8 @@ export type Operation =
       mayCreate: EventType[];
       /** Every type, so an event keeps its own on the list when someone else changes it. */
       types: EventType[];
+      /** What can be chosen when changing the event. Empty lists for someone who may not. */
+      choices: Choices;
     };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -363,26 +591,34 @@ export async function getOperation(id: string): Promise<Operation> {
   if (!supabase) return { state: "no-database" };
   const { member } = who;
 
-  const [found, orders, lines, marks, report, roster, battle, types] = await Promise.all([
-    supabase.from("events").select(EVENT).eq("id", id).maybeSingle(),
-    supabase
-      .from("event_orders")
-      .select("warning_order, situation, mission, execution, support, command_and_signal")
-      .eq("event_id", id)
-      .maybeSingle(),
-    supabase.from("attendance").select("event_id, member_id, reply, stand_in_position_id").eq("event_id", id),
-    // The database returns only the lines this member may see: their own, or all of them to whoever runs the event.
-    supabase.from("attendance_returns").select("member_id, returned").eq("event_id", id),
-    supabase
-      .from("after_action_reports")
-      .select("what_happened, to_keep, to_change, author_id, filed_at")
-      .eq("event_id", id)
-      .maybeSingle(),
-    supabase.from("roster").select("member_id, character_name, rank_name, status"),
-    getOrderOfBattle(),
-    readEventTypes(supabase),
-  ]);
-  for (const result of [found, orders, lines, marks, report, roster]) {
+  const [found, orders, lines, marks, report, roster, units, keyPosts, extraPosts, awards, roleRows, areaRows, battle, types, qualifications] =
+    await Promise.all([
+      supabase.from("events").select(EVENT).eq("id", id).maybeSingle(),
+      supabase
+        .from("event_orders")
+        .select("warning_order, situation, mission, execution, support, command_and_signal")
+        .eq("event_id", id)
+        .maybeSingle(),
+      supabase.from("attendance").select(ATTENDANCE).eq("event_id", id),
+      // The database returns only the lines this member may see: their own, or all of them to whoever runs the event.
+      supabase.from("attendance_returns").select("member_id, returned").eq("event_id", id),
+      supabase
+        .from("after_action_reports")
+        .select("what_happened, to_keep, to_change, author_id, filed_at")
+        .eq("event_id", id)
+        .maybeSingle(),
+      supabase.from("roster").select("member_id, character_name, rank_name, status"),
+      supabase.from("event_units").select("event_id, unit_id").eq("event_id", id),
+      supabase.from("event_key_posts").select("event_id, position_id").eq("event_id", id),
+      supabase.from("event_posts").select(EXTRA_POST).eq("event_id", id),
+      supabase.from("qualification_awards").select("qualification_id").eq("member_id", member.id),
+      supabase.from("fleet_roles").select("id, name, slug, area_id"),
+      supabase.from("areas").select("id, slug"),
+      getOrderOfBattle(),
+      readEventTypes(supabase),
+      readQualifications(supabase),
+    ]);
+  for (const result of [found, orders, lines, marks, report, roster, units, keyPosts, extraPosts, awards, roleRows, areaRows]) {
     if (result.error) throw new Error(`The event could not be read: ${result.error.message}`);
   }
   // A draft that is not this member's to see comes back as nothing at all.
@@ -394,15 +630,42 @@ export async function getOperation(id: string): Promise<Operation> {
     ? await supabase.from("events").select("id, title").eq("id", row.copied_from).maybeSingle()
     : { data: null, error: null };
   if (source.error) throw new Error(`The event could not be read: ${source.error.message}`);
+
   const rosterRows = (roster.data ?? []) as RosterRow[];
   const people = new Map(rosterRows.map((entry) => [entry.member_id, entry]));
-  const event = toEvent(row, people, types, Date.now());
-  const attendance = (lines.data ?? []) as AttendanceRow[];
-  const roll = buildRoll(event, battle.state === "ready" ? openPosts(battle.fleet) : [], attendance, people);
+  const qualificationName = new Map(qualifications.map((entry) => [entry.id, entry.name]));
+  const event = toEvent(row, people, types, qualificationName, Date.now());
+  const attendance = ((lines.data ?? []) as AttendanceRow[]).map(toLine);
+
+  const allUnits = battle.state === "ready" ? flatUnits(battle.fleet) : [];
+  const named = ((units.data ?? []) as { unit_id: string }[]).map((entry) => entry.unit_id);
+  const groups = battle.state === "ready" ? openPosts(battle.fleet, unitsTakingPart(allUnits, named)) : [];
+  const key = new Set(((keyPosts.data ?? []) as { position_id: string }[]).map((entry) => entry.position_id));
+  const areaSlug = new Map(((areaRows.data ?? []) as { id: string; slug: string }[]).map((area) => [area.id, area.slug]));
+  const roles = new Map(
+    ((roleRows.data ?? []) as { id: string; name: string; slug: string; area_id: string }[]).map((role) => [
+      role.id,
+      { name: role.name, href: areaSlug.has(role.area_id) ? `/roles/${areaSlug.get(role.area_id)}/${role.slug}` : null },
+    ]),
+  );
+  const roll = buildRoll(event, groups, attendance, people, key, (extraPosts.data ?? []) as ExtraPostRow[], roles);
 
   const runs = isCommand(member) || [row.commander_id, row.second_id].includes(member.id);
   const edits = runs || (row.state === "draft" && row.created_by === member.id);
-  const myLine = attendance.find((line) => line.member_id === member.id);
+  const myLine = attendance.find((line) => line.memberId === member.id);
+
+  // Whether the event is open to this member. Whoever is named to run it or to observe always is.
+  const isNamed = [row.commander_id, row.second_id, row.observer_id].includes(member.id);
+  const held = new Set(((awards.data ?? []) as { qualification_id: string }[]).map((award) => award.qualification_id));
+  const notOpen = isNamed
+    ? null
+    : !event.openToRecruits && member.status === "recruit"
+      ? "This event is not open to recruits."
+      : event.openToService && member.service !== event.openToService
+        ? `This event is for the ${serviceNames[event.openToService]}.`
+        : event.requires && !held.has(event.requires.id)
+          ? `This event needs the ${event.requires.name} qualification.`
+          : null;
 
   // The return covers everyone who replied, anyone holding an open post who did not, and anyone already marked.
   const returned = new Map(
@@ -411,7 +674,7 @@ export async function getOperation(id: string): Promise<Operation> {
   const toReturn = new Map<string, ReturnLine>();
   if (runs) {
     for (const line of attendance) {
-      const person = nameOf(people.get(line.member_id), line.member_id);
+      const person = nameOf(people.get(line.memberId), line.memberId);
       if (person) toReturn.set(person.id, { person, reply: line.reply, returned: returned.get(person.id) ?? null });
     }
     for (const group of roll.groups) {
@@ -427,6 +690,7 @@ export async function getOperation(id: string): Promise<Operation> {
     }
   }
 
+  const reserveAt = roll.reserve.findIndex((person) => person.id === member.id);
   return {
     state: "ready",
     member,
@@ -441,11 +705,21 @@ export async function getOperation(id: string): Promise<Operation> {
     },
     sections: types.find((type) => type.key === row.kind)?.sections ?? sectionsFrom(() => null),
     copiedFrom: source.data ? { id: source.data.id as string, title: source.data.title as string } : null,
+    taking: {
+      units: named,
+      names: allUnits.filter((unit) => named.includes(unit.id)).map((unit) => unit.name),
+      keyPosts: [...key],
+    },
     roll,
+    manning: manningFor(event, roll, attendance),
     mine: {
       reply: myLine?.reply ?? null,
-      standInFor: myLine?.stand_in_position_id ?? null,
-      holdsAPost: member.postTitle !== null,
+      place: myLine?.place ?? null,
+      reserveNumber: reserveAt >= 0 ? reserveAt + 1 : null,
+      standInFor: myLine?.standInFor ?? null,
+      extraPost: myLine?.extraPost ?? null,
+      holdsAPost: roll.groups.some((group) => group.posts.some((post) => post.holder?.id === member.id)),
+      notOpen,
     },
     runs,
     edits,
@@ -468,6 +742,15 @@ export async function getOperation(id: string): Promise<Operation> {
       : [],
     mayCreate: typesFor(member, types),
     types,
+    choices: edits
+      ? {
+          // The fleet itself is every unit, which is what naming none already means.
+          units: allUnits.filter((unit) => unit.open && unit.parentId !== null).map((unit) => ({ id: unit.id, label: unit.path })),
+          posts: groups.map((group) => ({ unit: group.unit, posts: group.posts.map((post) => ({ id: post.id, title: post.title })) })),
+          roles: [...roles.entries()].map(([roleId, role]) => ({ id: roleId, name: role.name })).sort((a, b) => a.name.localeCompare(b.name)),
+          qualifications,
+        }
+      : { units: [], posts: [], roles: [], qualifications: [] },
   };
 }
 
@@ -479,6 +762,7 @@ export async function getDraftingState(): Promise<
       member: Member;
       mayCreate: EventType[];
       people: Person[];
+      qualifications: { id: string; name: string }[];
       /** A start to offer: three days out at 19:00 UTC, far enough ahead for the warning order. */
       suggested: { date: string; time: string };
     }
@@ -487,15 +771,17 @@ export async function getDraftingState(): Promise<
   if (who.state !== "ready") return who;
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
-  const [roster, types] = await Promise.all([
+  const [roster, types, qualifications] = await Promise.all([
     supabase.from("roster").select("member_id, character_name, rank_name, status"),
     readEventTypes(supabase),
+    readQualifications(supabase),
   ]);
   if (roster.error) throw new Error(`The fleet could not be read: ${roster.error.message}`);
   return {
     state: "ready",
     member: who.member,
     mayCreate: typesFor(who.member, types),
+    qualifications,
     suggested: { date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), time: "19:00" },
     people: ((roster.data ?? []) as RosterRow[])
       .filter((entry) => SERVING.includes(entry.status))

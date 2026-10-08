@@ -18,6 +18,7 @@ or let someone promote themselves.
 | `migrations/…_logging.sql` | The activity log for sign-ins, sign-outs and anything refused or failed, and the page counts for public pages |
 | `migrations/…_fleet_roles.sql` | Areas and fleet roles as records an admin keeps, a role for every position, and the rules that let an admin rename ranks |
 | `migrations/…_event_types.sql` | The types of event as records an admin keeps, copying an event into a new draft, and the weekly repeat |
+| `migrations/…_event_manning.sql` | Who takes part in an event: the units, extra posts for the night, posts that must be filled, who it is open to, and places with a reserve list |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -88,6 +89,16 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   the five sections of its orders. A type that has events cannot be removed.
 - **An event can be copied** into a new draft, which starts with the same orders. Only someone who
   can read an event can copy it, and what an event was copied from cannot be changed.
+- **An event says who takes part.** Whoever runs it names the units, and then only their positions
+  are on its roll. It can have positions of its own for the night, each with a role, filled the way
+  any other is. It can mark positions that must be filled and set how many must attend. The
+  database keeps those numbers. Whether the event goes ahead is the operation commander's decision.
+- **An event can be closed to some.** It can be closed to recruits, kept to one service, or need a
+  qualification. Anyone it is not open to can still say they are not attending. Whoever is named to
+  run it or to observe is always welcome.
+- **Places are given in the order replies arrive.** Past the number of places, a reply goes on the
+  reserve list. When someone with a place drops out, the first on the list takes it. Whoever runs
+  the event can move anyone on or off the list, and is always given a place themselves.
 - **A weekly event drafts the next one.** When it is closed, or cancelled after it was announced,
   the database drafts next week's with the same details and orders, in the name of whoever closed
   it. A number at the end of the title goes up by one. The draft is never announced by itself.
