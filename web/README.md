@@ -50,6 +50,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/order-of-battle` | Every unit and post, who holds each, what is vacant and what opens later. For the serving fleet |
 | `/apply` | The application form, and the state of your application once it is sent |
 | `/staff/applications` | For staff: the applications, their answers, interview notes and the decision. An admin opens and closes recruitment here |
+| `/ranks` | Every grade and its rank name in each service, read from the database. Open to everyone |
 | `/credits` | Who took each picture on the site, and its licence |
 | `/menu` | The menu as a page, for a browser that is not running scripts |
 
@@ -83,6 +84,7 @@ Two things are set in the Supabase dashboard, under Authentication:
 | The fleet's name, flagship or the date recruitment opens | `lib/site.ts` |
 | The front page | `app/page.tsx` |
 | The standards page | `app/standards/page.tsx` |
+| The ranks page | `app/ranks/`, and what it reads in `lib/ranks.ts`. The rank names themselves are in the database |
 | The joining page | `app/joining/page.tsx` |
 | The sign-in page | `app/sign-in/page.tsx` |
 | The order of battle page | `app/order-of-battle/page.tsx`, and what it reads in `lib/order-of-battle.ts` |

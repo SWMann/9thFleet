@@ -8,6 +8,7 @@ export const menu: { title: string; picture: PictureName; links: { href: string;
     links: [
       { href: "/", label: "Front page" },
       { href: "/standards", label: "Standards" },
+      { href: "/ranks", label: "Ranks and structure" },
     ],
   },
   {

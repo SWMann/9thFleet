@@ -107,6 +107,30 @@ try {
     (await memberOf(founder)).id,
   ]);
 
+  console.log("Ranks");
+  await check("a visitor who is not signed in can read every rank", async () => {
+    await context.clearCookies();
+    await page.goto(`${site}/ranks`);
+    await page.getByRole("heading", { name: "Starman Recruit" }).waitFor();
+    assert.equal(await page.locator(".rank").count(), 18);
+    const tally = await page.locator(".tally").innerText();
+    assert.match(tally, /18/);
+    assert.match(tally, /Lt\. Commander/);
+    // The top of the ladder opens with the fleet's stage.
+    const commander = page.locator(".rank", { has: page.getByRole("heading", { name: "Commander", exact: true }) });
+    assert.match(await commander.innerText(), /Opens at stage 4/);
+    assert.doesNotMatch(await page.locator(".rank", { hasText: "Lt. Commander" }).innerText(), /Opens at stage/);
+    await shot("ranks");
+  });
+  await check("the ranks page shows each service's own names, and when a closed service opens", async () => {
+    await page.getByRole("button", { name: "Army" }).click();
+    await page.getByRole("heading", { name: "Private", exact: true }).waitFor();
+    assert.match(await page.locator(".ladder-note").innerText(), /Opens at stage 4/);
+    await page.getByRole("button", { name: "Marines" }).click();
+    await page.getByRole("heading", { name: "Trooper", exact: true }).waitFor();
+    assert.match(await page.locator(".ladder-note").innerText(), /Opens at stage 5/);
+  });
+
   console.log("Before recruitment opens");
   await check("an applicant is told when recruitment opens, and sees no form", async () => {
     await signInAs(kit);
