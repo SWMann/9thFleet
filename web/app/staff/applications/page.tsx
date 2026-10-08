@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { formatDate, serviceNames, stageNames } from "@/lib/application-form";
 import { listApplications, type ApplicationSummary } from "@/lib/applications";
 import { setRecruitment } from "./actions";
+import { PageHead } from "@/components/PageHead";
 
 export const metadata: Metadata = {
   title: "Applications",
@@ -21,10 +22,7 @@ export default function ApplicationsPage() {
 
 function Head({ lead }: { lead: string }) {
   return (
-    <div className="wrap page-head">
-      <h1>Applications</h1>
-      <p className="lead">{lead}</p>
-    </div>
+    <PageHead picture="staff" slim title={<strong>Applications</strong>} lead={lead} />
   );
 }
 

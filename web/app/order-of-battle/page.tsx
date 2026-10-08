@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getOrderOfBattle, postsWithin, type Holder, type Post, type Tally, type Unit } from "@/lib/order-of-battle";
+import { PageHead } from "@/components/PageHead";
 
 export const metadata: Metadata = {
   title: "Order of battle",
@@ -19,11 +20,17 @@ export default function OrderOfBattlePage() {
 
 function Head({ lead, children }: { lead: string; children?: React.ReactNode }) {
   return (
-    <div className="wrap page-head">
-      <h1>Order of battle</h1>
-      <p className="lead">{lead}</p>
+    <PageHead
+      picture="fleet"
+      title={
+        <>
+          Order of <strong>battle</strong>
+        </>
+      }
+      lead={lead}
+    >
       {children}
-    </div>
+    </PageHead>
   );
 }
 

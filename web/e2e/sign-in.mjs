@@ -40,13 +40,13 @@ try {
     await page.goto(`${site}/profile`);
     assert.equal(new URL(page.url()).pathname, "/sign-in");
     await headingIs("Sign in");
-    assert.match(await nav(), /Sign in/);
+    assert.match(await nav(), /Sign in/i);
     await shot("sign-in");
   });
   await check("the order of battle sends a signed-out visitor to sign-in", async () => {
     await page.goto(`${site}/order-of-battle`);
     assert.equal(new URL(page.url()).pathname, "/sign-in");
-    assert.doesNotMatch(await nav(), /Fleet/);
+    assert.doesNotMatch(await nav(), /Fleet/i);
   });
   await check("leaving Discord early is explained", async () => {
     await page.goto(`${site}/auth/callback?error=access_denied`);
@@ -340,7 +340,7 @@ try {
     const nexus = page.locator("section.band", { has: page.getByRole("heading", { name: "UEES Nexus", exact: true }) });
     const text = await nexus.innerText();
     assert.match(text, /0 of 15 posts filled/);
-    assert.match(text, /Flight Deck\s*Opens at stage 3/);
+    assert.match(text, /Flight Deck\s*Opens at stage 3/i);
     assert.equal(await nexus.locator(".post-title", { hasText: "Commanding Officer" }).isVisible(), false);
     await shot("order-of-battle-stage-2");
     await setMock({ stage: 1, crew: [], duties: [] });
@@ -375,7 +375,7 @@ try {
     await page.getByRole("button", { name: "Sign out" }).click();
     await page.waitForURL(`${site}/`);
     assert.ok(mock.state.signOuts > before, "the sign-in service was not told");
-    assert.match(await nav(), /Sign in/);
+    assert.match(await nav(), /Sign in/i);
     const left = (await context.cookies()).map((cookie) => cookie.name);
     assert.deepEqual(left.filter((name) => /auth-token|nf_signed_in/.test(name)), [], "cookies were left behind");
     await page.goto(`${site}/profile`);

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { site } from "@/lib/site";
+import { PageHead } from "@/components/PageHead";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -19,21 +20,25 @@ const problems: Record<string, string> = {
 export default function SignInPage({ searchParams }: PageProps<"/sign-in">) {
   return (
     <>
-      <div className="wrap page-head">
-        <h1>Sign in</h1>
-        <p className="lead">
-          The fleet uses your Discord account to know who you are. There is no separate password to remember.
-        </p>
+      <PageHead
+        picture="duty"
+        title={
+          <>
+            Sign <strong>in</strong>
+          </>
+        }
+        lead="The fleet uses your Discord account to know who you are. There is no separate password to remember."
+      >
         <Suspense fallback={null}>
           <Problem searchParams={searchParams} />
         </Suspense>
         {/* A plain form post, not a Server Action: see app/auth/discord/route.ts. */}
         <form method="post" action="/auth/discord">
-          <button className="button" type="submit">
+          <button className="button button-big" type="submit">
             Sign in with Discord
           </button>
         </form>
-      </div>
+      </PageHead>
 
       <section className="wrap band band-last" aria-labelledby="what-happens">
         <h2 id="what-happens">What happens</h2>

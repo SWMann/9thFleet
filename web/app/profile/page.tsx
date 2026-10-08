@@ -6,6 +6,7 @@ import { getSession, isStaff, type Member, type Role, type Service, type Status 
 import { site } from "@/lib/site";
 import { signOut } from "./actions";
 import { NamesForm } from "./NamesForm";
+import { PageHead } from "@/components/PageHead";
 
 export const metadata: Metadata = {
   title: "Your record",
@@ -20,12 +21,15 @@ export default function ProfilePage() {
   );
 }
 
+const yourRecord = (
+  <>
+    Your <strong>record</strong>
+  </>
+);
+
 function Waiting() {
   return (
-    <div className="wrap page-head">
-      <h1>Your record</h1>
-      <p className="lead">Reading your record.</p>
-    </div>
+    <PageHead picture="members" slim title={yourRecord} lead="Reading your record." />
   );
 }
 
@@ -57,23 +61,20 @@ async function Record() {
 
   if (session.state === "no-database") {
     return (
-      <div className="wrap page-head">
-        <h1>Your record</h1>
-        <p className="lead">This site is not connected to the fleet&apos;s database yet.</p>
-      </div>
+      <PageHead picture="members" slim title={yourRecord} lead="This site is not connected to the fleet's database yet." />
     );
   }
 
   if (session.state === "no-record") {
     return (
-      <div className="wrap page-head">
-        <h1>No record</h1>
-        <p className="lead">
-          You are signed in, but not with Discord, so the fleet has no record for this account. Sign out and sign in
-          with Discord.
-        </p>
+      <PageHead
+        picture="members"
+        slim
+        title={<strong>No record</strong>}
+        lead="You are signed in, but not with Discord, so the fleet has no record for this account. Sign out and sign in with Discord."
+      >
         <SignOut />
-      </div>
+      </PageHead>
     );
   }
 
@@ -82,14 +83,16 @@ async function Record() {
 
   return (
     <>
-      <div className="wrap page-head">
-        <h1>{heading(member)}</h1>
-        <p className="lead">{member.postTitle ? `${member.postTitle}, ${member.unitName}.` : status.meaning}</p>
-      </div>
+      <PageHead
+        picture="members"
+        slim
+        title={<strong>{heading(member)}</strong>}
+        lead={member.postTitle ? `${member.postTitle}, ${member.unitName}.` : status.meaning}
+      />
 
       <section className="wrap band" aria-labelledby="standing">
         <h2 id="standing">Where you stand</h2>
-        <dl className="ledger ledger-tight">
+        <dl className="facts">
           <Line label="Status" value={status.name} />
           <Line label="Service" value={member.service ? serviceNames[member.service] : "Not set"} />
           <Line

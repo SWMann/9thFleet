@@ -7,6 +7,7 @@ import { getApplyState, type MyApplication } from "@/lib/applications";
 import { site } from "@/lib/site";
 import { withdrawApplication } from "./actions";
 import { ApplicationForm } from "./ApplicationForm";
+import { PageHead } from "@/components/PageHead";
 
 export const metadata: Metadata = {
   title: "Apply",
@@ -23,11 +24,18 @@ export default function ApplyPage() {
 
 function Head({ lead, children }: { lead: string; children?: React.ReactNode }) {
   return (
-    <div className="wrap page-head">
-      <h1>Apply to join</h1>
-      <p className="lead">{lead}</p>
+    <PageHead
+      picture="members"
+      slim
+      title={
+        <>
+          Apply to <strong>join</strong>
+        </>
+      }
+      lead={lead}
+    >
       {children}
-    </div>
+    </PageHead>
   );
 }
 
@@ -135,7 +143,7 @@ function Waiting({ application }: { application: MyApplication }) {
       />
       <section className="wrap band" aria-labelledby="yours">
         <h2 id="yours">Your application</h2>
-        <dl className="ledger ledger-tight">
+        <dl className="facts">
           <div>
             <dt>Sent</dt>
             <dd>{formatDate(application.submittedAt)}</dd>

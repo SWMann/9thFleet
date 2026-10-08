@@ -89,6 +89,7 @@ export async function openBrowser() {
       .locator("h1:visible")
       .filter({ hasText: new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) })
       .waitFor();
+  // As the page shows it, so capitals set by the style sheet come back as capitals: match without regard to case.
   const nav = () => page.locator("nav[aria-label='Main']").innerText();
 
   return { browser, context, page, pageErrors, shot, headingIs, nav };
