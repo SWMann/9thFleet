@@ -142,3 +142,131 @@ export function nextTitle(title: string): string {
   const next = title.slice(0, found.index) + following;
   return next.length > 80 ? title : next;
 }
+
+/**
+ * The parts of an event's plan that are lists of records: objectives, the
+ * elements and their tasks, the timeline, the ships and the nets. One editor
+ * draws each from its list of fields, and one pair of actions saves them. To
+ * let another column be written, add a field here. The database's own rules
+ * still decide who may write.
+ */
+export type PlanField = {
+  key: string;
+  label: string;
+  /** A time is entered as the time of day in UTC, and kept as minutes before or after the start. */
+  kind: "text" | "long" | "time";
+  max: number;
+  required?: boolean;
+  hint?: string;
+};
+
+export type PlanPartKey = "objectives" | "elements" | "timings" | "ships" | "nets";
+
+export type PlanPart = {
+  key: PlanPartKey;
+  table: "event_objectives" | "event_elements" | "event_timings" | "event_ships" | "event_nets";
+  /** What one record is called, and the heading over them all. */
+  one: string;
+  many: string;
+  about: string;
+  /** The field a record is known by in its list. */
+  titled: string;
+  fields: PlanField[];
+  /** Whether records keep the order they were added in. The timeline is in order of time instead. */
+  ordered: boolean;
+};
+
+export const planParts: PlanPart[] = [
+  {
+    key: "objectives",
+    table: "event_objectives",
+    one: "objective",
+    many: "Objectives",
+    about: "What the event sets out to do, one to a line. The after-action report answers each in turn.",
+    titled: "title",
+    ordered: true,
+    fields: [{ key: "title", label: "Objective", kind: "text", max: 200, required: true, hint: "Such as: hold the lane between ArcCorp and microTech for one hour." }],
+  },
+  {
+    key: "elements",
+    table: "event_elements",
+    one: "element",
+    many: "Elements and tasks",
+    about: "Each ship, flight, section or team the plan gives a task to, with the callsign it answers to.",
+    titled: "name",
+    ordered: true,
+    fields: [
+      { key: "name", label: "Element", kind: "text", max: 80, required: true, hint: "A ship, a flight, a section or a team." },
+      { key: "callsign", label: "Callsign", kind: "text", max: 40 },
+      { key: "task", label: "Task", kind: "long", max: 1000, hint: "What it is to do, and in order to do what." },
+    ],
+  },
+  {
+    key: "timings",
+    table: "event_timings",
+    one: "timing",
+    many: "Timeline",
+    about: "What happens when. Each time is kept against the start, so the timeline moves with the event.",
+    titled: "label",
+    ordered: false,
+    fields: [
+      { key: "time", label: "Time, in UTC", kind: "time", max: 5, required: true, hint: "Up to twelve hours before or after the start." },
+      { key: "label", label: "What happens", kind: "text", max: 120, required: true, hint: "Such as Muster, Orders, Step off or Hot debrief." },
+    ],
+  },
+  {
+    key: "ships",
+    table: "event_ships",
+    one: "ship",
+    many: "Ships",
+    about: "The ships and vehicles the event uses.",
+    titled: "ship",
+    ordered: true,
+    fields: [
+      { key: "ship", label: "Ship", kind: "text", max: 80, required: true, hint: "Such as Hammerhead, or UEES Nexus (Polaris)." },
+      { key: "note", label: "Note", kind: "text", max: 200, hint: "What it is for, who brings it, or where it starts." },
+    ],
+  },
+  {
+    key: "nets",
+    table: "event_nets",
+    one: "net",
+    many: "Comms plan",
+    about: "The nets for the night: what each is for and who controls it. Callsigns are set with the elements above.",
+    titled: "name",
+    ordered: true,
+    fields: [
+      { key: "name", label: "Net", kind: "text", max: 60, required: true },
+      { key: "purpose", label: "What it is for", kind: "text", max: 200 },
+      { key: "controller", label: "Who controls it", kind: "text", max: 80, hint: "A callsign or a name." },
+    ],
+  },
+];
+
+export const planPartOf = (key: string) => planParts.find((part) => part.key === key) ?? null;
+
+/** A moment so many minutes before or after another. */
+export function offsetFrom(startIso: string, minutes: number): string {
+  return new Date(Date.parse(startIso) + minutes * 60_000).toISOString();
+}
+
+/**
+ * How many minutes before or after the start a time of day is, taking the
+ * occurrence of that time nearest the start. "18:45" against a 19:00 start is -15.
+ */
+export function minutesFromStart(startIso: string, time: string): number | null {
+  const found = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!found) return null;
+  const start = new Date(startIso);
+  const startOfDay = start.getUTCHours() * 60 + start.getUTCMinutes();
+  let offset = Number(found[1]) * 60 + Number(found[2]) - startOfDay;
+  if (Number(found[1]) > 23 || Number(found[2]) > 59) return null;
+  if (offset < -720) offset += 1440;
+  if (offset >= 720) offset -= 1440;
+  return offset;
+}
+
+/** A timing against the start, as orders write it: H-15, H, H+90. */
+export function hLabel(minutes: number): string {
+  return minutes === 0 ? "H" : minutes < 0 ? `H-${-minutes}` : `H+${minutes}`;
+}

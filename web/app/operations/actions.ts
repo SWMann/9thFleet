@@ -4,7 +4,16 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { refused, turnedDown, type Attempt } from "@/lib/activity";
 import { typed } from "@/lib/application-form";
-import { aWeekOn, nextTitle, paragraphs, returnedNames, serviceNames, weapons } from "@/lib/operations-form";
+import {
+  aWeekOn,
+  minutesFromStart,
+  nextTitle,
+  paragraphs,
+  planPartOf,
+  returnedNames,
+  serviceNames,
+  weapons,
+} from "@/lib/operations-form";
 import { explainRefusal } from "@/lib/refusals";
 import { createClient } from "@/lib/supabase/server";
 
@@ -85,6 +94,9 @@ function readEvent(formData: FormData): { fields: Record<string, string | number
   if (summary.length > 200) return { problem: "Keep the summary under 200 characters." };
   const fallback = typed(formData.get("pve_fallback")).replace(/\s+/g, " ");
   if (fallback.length > 200) return { problem: "Keep the fallback under 200 characters." };
+  const musterAt = typed(formData.get("muster_at")).replace(/\s+/g, " ");
+  const area = typed(formData.get("area")).replace(/\s+/g, " ");
+  if (musterAt.length > 120 || area.length > 120) return { problem: "Keep the muster point and the area under 120 characters each." };
 
   const date = formData.get("date");
   const time = formData.get("time");
@@ -139,6 +151,8 @@ function readEvent(formData: FormData): { fields: Record<string, string | number
       requires_qualification_id: uuid(formData.get("requires_qualification")),
       places,
       minimum_attending: minimum,
+      muster_at: musterAt,
+      area,
     },
   };
 }
@@ -169,8 +183,8 @@ export async function createEvent(_previous: OpsResult, formData: FormData): Pro
 /**
  * Draft another event like this one: the same type, details and orders, at the
  * same time of the week, the next one that has not gone by. The database copies
- * the orders, the units, the extra posts and the posts that must be filled, and
- * only for someone who can read the event.
+ * the orders, the plan, the units, the extra posts and the posts that must be
+ * filled, and only for someone who can read the event.
  */
 export async function copyEvent(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
   const session = await signedIn();
@@ -182,7 +196,7 @@ export async function copyEvent(_previous: OpsResult, formData: FormData): Promi
     session.supabase
       .from("events")
       .select(
-        "kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, open_to_recruits, open_to_service, requires_qualification_id, places, minimum_attending",
+        "kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, open_to_recruits, open_to_service, requires_qualification_id, places, minimum_attending, muster_at, area, reading",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -217,6 +231,9 @@ export async function copyEvent(_previous: OpsResult, formData: FormData): Promi
       requires_qualification_id: event.requires_qualification_id,
       places: event.places,
       minimum_attending: event.minimum_attending,
+      muster_at: event.muster_at,
+      area: event.area,
+      reading: event.reading,
       copied_from: id,
     })
     .select("id")
@@ -601,4 +618,153 @@ export async function fileReport(_previous: OpsResult, formData: FormData): Prom
   }
   refresh();
   return { ok: true, message: "The after-action report is filed." };
+}
+
+const NOT_YOURS_TO_PLAN = "Only whoever runs the event writes its plan.";
+
+/**
+ * Add a record to one of the plan's lists, or change one: an objective, an
+ * element and its task, a timing, a ship or a net. The list's fields come from
+ * `planParts`, so this never names a column of its own.
+ */
+export async function savePlanRow(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const part = planPartOf(String(formData.get("part") ?? ""));
+  const id = uuid(formData.get("id"));
+  const rowId = formData.get("row");
+  const row = uuid(rowId);
+  if (!part || !id || (rowId !== null && rowId !== "" && !row)) return notThisPage(session, "event.plan");
+  const again = { values: typedInto(formData), stamp: Date.now() };
+
+  const record: Record<string, string | number> = {};
+  for (const field of part.fields) {
+    const text = typed(formData.get(field.key));
+    const value = field.kind === "long" ? text : text.replace(/\s+/g, " ");
+    if (value === "" && field.required) return { ok: false, message: `Fill in "${field.label}".`, ...again };
+    if (value.length > field.max) return { ok: false, message: `Keep "${field.label}" under ${field.max.toLocaleString("en-GB")} characters.`, ...again };
+    if (field.kind !== "time") {
+      record[field.key] = value;
+      continue;
+    }
+    // A time of day is kept as minutes before or after the event's start.
+    const event = await session.supabase.from("events").select("starts_at").eq("id", id).maybeSingle();
+    if (event.error) return { ...(await failed(session, "event.plan", event.error, "The event could not be read. Try again.")), ...again };
+    const offset = event.data ? minutesFromStart(event.data.starts_at as string, value) : null;
+    if (offset === null) return { ok: false, message: "Give the time as hours and minutes, in UTC.", ...again };
+    record.offset_minutes = offset;
+  }
+
+  if (row) {
+    const { data, error } = await session.supabase.from(part.table).update(record).eq("id", row).eq("event_id", id).select("id");
+    if (error) return { ...(await failed(session, "event.plan", error, explainPlan(part.one, error))), ...again };
+    if (!data || data.length === 0) return { ...(await notYours(session, "event.plan", NOT_YOURS_TO_PLAN)), ...again };
+    refresh();
+    return { ok: true, message: "Saved.", stamp: again.stamp };
+  }
+
+  if (part.ordered) {
+    const current = await session.supabase.from(part.table).select("sort_order").eq("event_id", id);
+    if (current.error) return { ...(await failed(session, "event.plan", current.error, "The plan could not be read. Try again.")), ...again };
+    record.sort_order = Math.max(0, ...(current.data ?? []).map((entry) => Number(entry.sort_order))) + 1;
+  }
+  const { error } = await session.supabase.from(part.table).insert({ event_id: id, ...record });
+  if (error) return { ...(await failed(session, "event.plan", error, explainPlan(part.one, error))), ...again };
+  refresh();
+  return { ok: true, message: "Added.", stamp: again.stamp };
+}
+
+function explainPlan(one: string, error: { code?: string; message: string }): string {
+  if (error.code === "23505") return `The event already has ${/^[aeiou]/.test(one) ? "an" : "a"} ${one} with that name.`;
+  return explainRefusal(error, NOT_YOURS_TO_PLAN);
+}
+
+/** Take a record out of one of the plan's lists. */
+export async function removePlanRow(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const part = planPartOf(String(formData.get("part") ?? ""));
+  const id = uuid(formData.get("id"));
+  const row = uuid(formData.get("row"));
+  if (!part || !id || !row) return notThisPage(session, "event.plan");
+  const { data, error } = await session.supabase.from(part.table).delete().eq("id", row).eq("event_id", id).select("id");
+  if (error) return failed(session, "event.plan", error, explainRefusal(error, "That could not be removed. Try again."));
+  if (!data || data.length === 0) return notYours(session, "event.plan", NOT_YOURS_TO_PLAN);
+  refresh();
+  return { ok: true, message: "Removed." };
+}
+
+/** Say which sections of the manual to read before the night, one to a line as volume/section. */
+export async function saveReading(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  if (!id) return notThisPage(session, "event.plan");
+  const again = { values: typedInto(formData), stamp: Date.now() };
+
+  const lines = [
+    ...new Set(
+      typed(formData.get("reading"))
+        .split("\n")
+        // An address pasted from the site is tidied: /manual/command/orders is command/orders.
+        .map((line) => line.trim().replace(/^\/?(manual\/)?/, ""))
+        .filter(Boolean),
+    ),
+  ];
+  if (lines.length > 12) return { ok: false, message: "Keep the reading to 12 sections.", ...again };
+  const odd = lines.find((line) => !/^[a-z0-9-]+\/[a-z0-9-]+$/.test(line));
+  if (odd) return { ok: false, message: `"${odd}" is not a section of the manual. Write each as volume/section, such as command/orders.`, ...again };
+
+  const { data, error } = await session.supabase.from("events").update({ reading: lines }).eq("id", id).select("id");
+  if (error) return { ...(await failed(session, "event.plan", error, explainRefusal(error, "The reading could not be saved. Try again."))), ...again };
+  if (!data || data.length === 0) return { ...(await notYours(session, "event.plan", NOT_YOURS_TO_PLAN)), ...again };
+  refresh();
+  return { ok: true, message: "Saved.", stamp: again.stamp };
+}
+
+/**
+ * Issue an amendment: a change to the orders after the event was announced.
+ * The database numbers it, dates it and signs it, and everyone attending is
+ * asked to acknowledge it.
+ */
+export async function issueAmendment(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  if (!id) return notThisPage(session, "event.amend");
+  const again = { values: typedInto(formData), stamp: Date.now() };
+  const body = typed(formData.get("body"));
+  if (body === "") return { ok: false, message: "Say what has changed.", ...again };
+  if (body.length > 2000) return { ok: false, message: "Keep the amendment under 2,000 characters.", ...again };
+
+  const { data, error } = await session.supabase.from("event_amendments").insert({ event_id: id, body }).select("number").single();
+  if (error) {
+    const shown = explainRefusal(error, "The amendment could not be issued. Only whoever runs the event issues one.");
+    return { ...(await failed(session, "event.amend", error, shown)), ...again };
+  }
+  refresh();
+  return { ok: true, message: `Amendment ${data?.number ?? ""} is issued. Everyone attending is asked to acknowledge it.`.replace("  ", " "), stamp: again.stamp };
+}
+
+/** Acknowledge the latest amendment. The database records which one, and when. */
+export async function acknowledgeAmendment(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  const number = Number(formData.get("number"));
+  if (!id || !Number.isInteger(number) || number < 1) return notThisPage(session, "event.acknowledge");
+
+  const existing = await session.supabase
+    .from("event_acknowledgements")
+    .select("member_id")
+    .eq("event_id", id)
+    .eq("member_id", session.id)
+    .maybeSingle();
+  if (existing.error) return failed(session, "event.acknowledge", existing.error, "That could not be saved. Try again.");
+  const { error } = existing.data
+    ? await session.supabase.from("event_acknowledgements").update({ amendment_number: number }).eq("event_id", id).eq("member_id", session.id)
+    : await session.supabase.from("event_acknowledgements").insert({ event_id: id, member_id: session.id, amendment_number: number });
+  if (error) return failed(session, "event.acknowledge", error, explainRefusal(error, "That could not be saved. Try again."));
+  refresh();
+  return { ok: true, message: "Acknowledged." };
 }

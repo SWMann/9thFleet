@@ -3569,6 +3569,189 @@ a.contents-name:hover {
   margin-top: 0;
 }
 
+/* The plan behind an event's orders: lists and small tables inside the order's own panels. */
+.plan-list {
+  max-width: none;
+  margin: 0;
+  padding-left: 1.4em;
+  color: var(--text);
+}
+
+.plan-list li + li {
+  margin-top: 6px;
+}
+
+.plan-tasks {
+  margin: 0;
+}
+
+.plan-tasks > div + div {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--seam);
+}
+
+.plan-tasks dt {
+  margin-bottom: 2px;
+  color: var(--white);
+  font-weight: 600;
+}
+
+.plan-tasks dd {
+  margin: 0;
+}
+
+.plan-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--text);
+}
+
+.plan-table + .plan-table {
+  margin-top: 18px;
+}
+
+.plan-table th,
+.plan-table td {
+  padding: 9px 16px 9px 0;
+  border-top: 1px solid var(--seam);
+  text-align: left;
+  vertical-align: top;
+}
+
+.plan-table thead th {
+  border-top: 0;
+  padding-top: 0;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.plan-table tbody th {
+  color: var(--white);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* On a narrow screen a long name wraps, so the table never runs off the page. */
+@media (max-width: 560px) {
+  .plan-table tbody th {
+    white-space: normal;
+  }
+}
+
+.plan-table .aside {
+  margin-left: 0.75em;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+  font-weight: 400;
+}
+
+.plan-table small {
+  display: block;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+}
+
+.orders + .reading {
+  max-width: 50rem;
+  margin-top: 12px;
+}
+
+/* Changes to the orders since they went out, the latest first. */
+.amendments {
+  max-width: 50rem;
+  margin-bottom: 26px;
+}
+
+.amendments .standing-in {
+  margin: 0 0 14px;
+}
+
+.amendment-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.amendment-list li {
+  padding: 14px 20px 16px;
+  border: 1px solid var(--seam);
+  border-left: 3px solid var(--gold-bright);
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.amendment-list li + li {
+  margin-top: 10px;
+}
+
+.band .amendment-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 14px;
+  max-width: none;
+  margin: 0 0 6px;
+}
+
+.amendment-head strong {
+  color: var(--white);
+}
+
+.amendment-head span {
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
+/* Under the buttons of whoever runs the event: the form that issues an amendment. */
+.amend {
+  max-width: 42rem;
+  margin-top: 30px;
+  padding-top: 26px;
+  border-top: 1px solid var(--seam);
+}
+
+.amend .roll-note {
+  margin: 16px 0 0;
+}
+
+/* One list of the plan on the page that edits it, with its own heading. */
+.plan-part {
+  max-width: 54rem;
+}
+
+.plan-part + .plan-part {
+  margin-top: 38px;
+  padding-top: 30px;
+  border-top: 1px solid var(--seam);
+}
+
+.plan-part-title {
+  color: var(--white);
+  font-size: 1.1875rem;
+  font-weight: 600;
+}
+
+.band .plan-part > .hint {
+  max-width: 46rem;
+  margin: 2px 0 14px;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
+.plan-part .record-new {
+  margin-bottom: 0;
+}
+
+.plan-part .record-remove {
+  display: block;
+}
+
 /* The reserve list is in the order replies arrived, so it is numbered. */
 .reserve-list {
   max-width: 34rem;

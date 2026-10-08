@@ -19,6 +19,7 @@ or let someone promote themselves.
 | `migrations/…_fleet_roles.sql` | Areas and fleet roles as records an admin keeps, a role for every position, and the rules that let an admin rename ranks |
 | `migrations/…_event_types.sql` | The types of event as records an admin keeps, copying an event into a new draft, and the weekly repeat |
 | `migrations/…_event_manning.sql` | Who takes part in an event: the units, extra posts for the night, posts that must be filled, who it is open to, and places with a reserve list |
+| `migrations/…_event_plan.sql` | Fuller orders: objectives, elements and their tasks, the timeline, ships, nets, where to muster, what to read, and amendments with their acknowledgement |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -99,6 +100,13 @@ Roles add up: an admin holds every role. Things the database decides for itself:
 - **Places are given in the order replies arrive.** Past the number of places, a reply goes on the
   reserve list. When someone with a place drops out, the first on the list takes it. Whoever runs
   the event can move anyone on or off the list, and is always given a place themselves.
+- **The plan is kept as records.** Objectives, the elements with their tasks and callsigns, the
+  timeline, the ships and the nets each have a table. Whoever may write an event's orders writes
+  them, and they are fixed with the event when it closes. A timing is kept as minutes before or
+  after the start, so the timeline moves when the event does.
+- **An amendment is never rewritten.** Whoever runs an announced event issues one. The database
+  numbers it, dates it and signs it. A member who is attending acknowledges the latest, for
+  themselves. Who has acknowledged is for whoever runs the event, and each member for their own line.
 - **A weekly event drafts the next one.** When it is closed, or cancelled after it was announced,
   the database drafts next week's with the same details and orders, in the name of whoever closed
   it. A number at the end of the title goes up by one. The draft is never announced by itself.

@@ -51,3 +51,24 @@ export function Reading({ role = [], area }: { role?: string[]; area: string[] }
     </div>
   );
 }
+
+/** One list of sections to read, under its own heading. Nothing is drawn if none of the addresses is a section. */
+export function ReadingList({ title, addresses }: { title: string; addresses: string[] }) {
+  const found = links(addresses);
+  if (found.length === 0) return null;
+  return (
+    <div className="reading">
+      <div>
+        <h3>{title}</h3>
+        <ul>
+          {found.map((link) => (
+            <li key={link.href}>
+              <Link href={link.href}>{link.title}</Link>
+              <span>{link.volume}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
