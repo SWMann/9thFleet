@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { signedIn } from "@/lib/activity";
 import { originOf } from "@/lib/origin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
   if (code && supabase) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      await signedIn(supabase);
       return NextResponse.redirect(`${origin}/profile`);
     }
   }

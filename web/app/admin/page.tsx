@@ -26,7 +26,7 @@ export default function AdminPage() {
 }
 
 async function Overview() {
-  const access = await gate("staff");
+  const access = await gate("staff", "/admin");
   if (access.state === "signed-out") redirect("/sign-in");
   if (access.state === "no-record") redirect("/profile");
   if (access.state !== "ready") return <AdminShut access={access} current="overview" title={title} />;

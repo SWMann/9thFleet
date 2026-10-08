@@ -291,8 +291,10 @@ async function rest(request, url, body, asCaller) {
       params.push(asText(value));
       return `$${params.length}`;
     });
+    // Asked for nothing back, the real API reads nothing back. That matters: someone
+    // may add a row they are not allowed to read, such as a line in the activity log.
     const rows = await collect(
-      `insert into ${target} (${names.join(", ")}) values (${values.join(", ")}) returning ${columns(url)}`,
+      `insert into ${target} (${names.join(", ")}) values (${values.join(", ")}) returning ${wantsRows ? columns(url) : "1 as done"}`,
     );
     return wantsRows ? answer(rows, 201) : { status: 201 };
   }

@@ -71,7 +71,10 @@ export async function startSite({ port, env }) {
 export async function openBrowser() {
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
   const width = Number(process.env.VIEWPORT_WIDTH ?? 1280);
-  const context = await browser.newContext({ viewport: { width, height: 900 } });
+  // A browser run by a test says it is headless, and the site does not count robots' page views.
+  // This one says it is an ordinary browser, so the counting can be tested.
+  const userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+  const context = await browser.newContext({ viewport: { width, height: 900 }, userAgent });
   const page = await context.newPage();
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(String(error)));

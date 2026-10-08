@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
+import { refused, turnedDown, type Attempt } from "@/lib/activity";
 import { typed } from "@/lib/application-form";
 import { kinds, paragraphs, returnedNames, weapons } from "@/lib/operations-form";
 import { explainRefusal } from "@/lib/refusals";
@@ -11,7 +12,8 @@ import { createClient } from "@/lib/supabase/server";
  * What a member can do to an event. Nothing here decides who may do it. The
  * database does: who drafts and runs an event, when the roll closes, who may
  * stand in for which post, and when a return or a report can be made. Each
- * action sends the change and passes on the database's answer.
+ * action sends the change and passes on the database's answer. When the answer
+ * is no, it also writes a line to the activity log.
  */
 
 export type OpsResult = { ok: boolean; message: string };
@@ -30,7 +32,25 @@ async function signedIn() {
   return { supabase, id };
 }
 
+type Session = NonNullable<Awaited<ReturnType<typeof signedIn>>>;
+
 const uuid = (value: FormDataEntryValue | null) => (typeof value === "string" && UUID.test(value) ? value : null);
+
+/** A form sent something its page never offers. That is worth a line in the log. */
+const notThisPage = async (session: Session, action: Attempt): Promise<OpsResult> => ({
+  ok: false,
+  message: await refused(session.supabase, action, NOT_THIS_PAGE.message),
+});
+/** The database answered with an error: log it and say what the person is told. */
+const failed = async (session: Session, action: Attempt, error: { code?: string; message: string }, shown: string): Promise<OpsResult> => ({
+  ok: false,
+  message: await turnedDown(session.supabase, action, error, shown),
+});
+/** The change matched nothing, because the access rules hid the row. */
+const notYours = async (session: Session, action: Attempt, shown: string): Promise<OpsResult> => ({
+  ok: false,
+  message: await refused(session.supabase, action, shown),
+});
 
 /** The event's fields from the form, or a message saying what is wrong with them. */
 function readEvent(formData: FormData): { fields: Record<string, string | number | null> } | { problem: string } {
@@ -87,14 +107,15 @@ export async function createEvent(_previous: OpsResult, formData: FormData): Pro
   if ("problem" in read) return { ok: false, message: read.problem };
 
   const { data, error } = await session.supabase.from("events").insert(read.fields).select("id").single();
-  if (error || !data) {
-    return {
-      ok: false,
-      message: error
-        ? explainRefusal(error, "The event could not be drafted. Command drafts events, and instructors draft training.")
-        : "The event could not be drafted. Try again.",
-    };
+  if (error) {
+    return failed(
+      session,
+      "event.draft",
+      error,
+      explainRefusal(error, "The event could not be drafted. Command drafts events, and instructors draft training."),
+    );
   }
+  if (!data) return { ok: false, message: "The event could not be drafted. Try again." };
   redirect(`/operations/${data.id}`);
 }
 
@@ -103,13 +124,13 @@ export async function updateEvent(_previous: OpsResult, formData: FormData): Pro
   const session = await signedIn();
   if (!session) return NOT_CONNECTED;
   const id = uuid(formData.get("id"));
-  if (!id) return NOT_THIS_PAGE;
+  if (!id) return notThisPage(session, "event.change");
   const read = readEvent(formData);
   if ("problem" in read) return { ok: false, message: read.problem };
 
   const { data, error } = await session.supabase.from("events").update(read.fields).eq("id", id).select("id");
-  if (error) return { ok: false, message: explainRefusal(error, "The event could not be changed. Try again.") };
-  if (!data || data.length === 0) return { ok: false, message: "This event is not yours to change." };
+  if (error) return failed(session, "event.change", error, explainRefusal(error, "The event could not be changed. Try again."));
+  if (!data || data.length === 0) return notYours(session, "event.change", "This event is not yours to change.");
   refresh();
   return { ok: true, message: "Saved." };
 }
@@ -119,7 +140,7 @@ export async function saveOrders(_previous: OpsResult, formData: FormData): Prom
   const session = await signedIn();
   if (!session) return NOT_CONNECTED;
   const id = uuid(formData.get("id"));
-  if (!id) return NOT_THIS_PAGE;
+  if (!id) return notThisPage(session, "event.orders");
 
   const orders: Record<string, string> = { warning_order: typed(formData.get("warning_order")) };
   if (orders.warning_order.length > 4000) return { ok: false, message: "Keep the warning order under 4,000 characters." };
@@ -132,8 +153,8 @@ export async function saveOrders(_previous: OpsResult, formData: FormData): Prom
   }
 
   const { data, error } = await session.supabase.from("event_orders").update(orders).eq("event_id", id).select("event_id");
-  if (error) return { ok: false, message: explainRefusal(error, "The orders could not be saved. Try again.") };
-  if (!data || data.length === 0) return { ok: false, message: "These orders are not yours to write." };
+  if (error) return failed(session, "event.orders", error, explainRefusal(error, "The orders could not be saved. Try again."));
+  if (!data || data.length === 0) return notYours(session, "event.orders", "These orders are not yours to write.");
   refresh();
   return { ok: true, message: "Saved." };
 }
@@ -149,11 +170,11 @@ export async function moveEvent(_previous: OpsResult, formData: FormData): Promi
   if (!session) return NOT_CONNECTED;
   const id = uuid(formData.get("id"));
   const state = formData.get("state");
-  if (!id || typeof state !== "string" || !(state in MOVES)) return NOT_THIS_PAGE;
+  if (!id || typeof state !== "string" || !(state in MOVES)) return notThisPage(session, "event.move");
 
   const { data, error } = await session.supabase.from("events").update({ state }).eq("id", id).select("id");
-  if (error) return { ok: false, message: explainRefusal(error, "The event could not be changed. Try again.") };
-  if (!data || data.length === 0) return { ok: false, message: "This event is not yours to change." };
+  if (error) return failed(session, "event.move", error, explainRefusal(error, "The event could not be changed. Try again."));
+  if (!data || data.length === 0) return notYours(session, "event.move", "This event is not yours to change.");
   refresh();
   return { ok: true, message: MOVES[state] };
 }
@@ -163,13 +184,19 @@ export async function deleteDraft(formData: FormData) {
   const session = await signedIn();
   const id = uuid(formData.get("id"));
   if (!session || !id) return;
-  const { error } = await session.supabase.from("events").delete().eq("id", id);
-  if (error) throw new Error(`The draft could not be deleted: ${error.message}`);
+  const { data, error } = await session.supabase.from("events").delete().eq("id", id).select("id");
+  if (error) {
+    await turnedDown(session.supabase, "event.delete", error, "The draft could not be deleted.");
+    throw new Error(`The draft could not be deleted: ${error.message}`);
+  }
+  if (!data || data.length === 0) {
+    await refused(session.supabase, "event.delete", "Nothing was deleted. Only a draft can be, by its author or command.");
+  }
   redirect("/operations");
 }
 
 /** The member's own line on an event's roll, if they have one. */
-async function lineOf(session: NonNullable<Awaited<ReturnType<typeof signedIn>>>, eventId: string, memberId: string) {
+async function lineOf(session: Session, eventId: string, memberId: string) {
   return session.supabase
     .from("attendance")
     .select("member_id")
@@ -184,14 +211,14 @@ export async function replyToEvent(_previous: OpsResult, formData: FormData): Pr
   if (!session) return NOT_CONNECTED;
   const id = uuid(formData.get("id"));
   const reply = formData.get("reply");
-  if (!id || (reply !== "attending" && reply !== "not_attending")) return NOT_THIS_PAGE;
+  if (!id || (reply !== "attending" && reply !== "not_attending")) return notThisPage(session, "event.reply");
 
   const existing = await lineOf(session, id, session.id);
-  if (existing.error) return { ok: false, message: "Your reply could not be saved. Try again." };
+  if (existing.error) return failed(session, "event.reply", existing.error, "Your reply could not be saved. Try again.");
   const { error } = existing.data
     ? await session.supabase.from("attendance").update({ reply }).eq("event_id", id).eq("member_id", session.id)
     : await session.supabase.from("attendance").insert({ event_id: id, member_id: session.id, reply });
-  if (error) return { ok: false, message: explainRefusal(error, "Your reply could not be saved. Try again.") };
+  if (error) return failed(session, "event.reply", error, explainRefusal(error, "Your reply could not be saved. Try again."));
   refresh();
   return { ok: true, message: reply === "attending" ? "You are down as attending." : "You are down as not attending." };
 }
@@ -206,7 +233,7 @@ export async function setStandIn(_previous: OpsResult, formData: FormData): Prom
   const id = uuid(formData.get("id"));
   const position = formData.get("position");
   const post = position === "" ? null : uuid(position);
-  if (!id || (position !== "" && !post)) return NOT_THIS_PAGE;
+  if (!id || (position !== "" && !post)) return notThisPage(session, "event.stand-in");
   const named = formData.get("member");
   const member = named === null ? session.id : uuid(named);
   if (!member) return { ok: false, message: "Choose who stands in." };
@@ -218,13 +245,12 @@ export async function setStandIn(_previous: OpsResult, formData: FormData): Prom
     .eq("member_id", member)
     .select("member_id");
   if (error) {
-    return {
-      ok: false,
-      message: error.code === "23505" ? "Someone already stands in for that post." : explainRefusal(error, "That could not be done. Try again."),
-    };
+    const shown =
+      error.code === "23505" ? "Someone already stands in for that post." : explainRefusal(error, "That could not be done. Try again.");
+    return failed(session, "event.stand-in", error, shown);
   }
   if (!data || data.length === 0) {
-    return { ok: false, message: "Only someone who has replied that they are attending can stand in." };
+    return notYours(session, "event.stand-in", "Only someone who has replied that they are attending can stand in.");
   }
   refresh();
   if (!post) return { ok: true, message: "Taken out of the post." };
@@ -240,19 +266,19 @@ export async function fileReturn(_previous: OpsResult, formData: FormData): Prom
   const session = await signedIn();
   if (!session) return NOT_CONNECTED;
   const id = uuid(formData.get("id"));
-  if (!id) return NOT_THIS_PAGE;
+  if (!id) return notThisPage(session, "event.return");
 
   const marks: { member: string; returned: string }[] = [];
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("returned:")) continue;
     const member = uuid(key.slice("returned:".length));
-    if (!member || typeof value !== "string" || !(value in returnedNames)) return NOT_THIS_PAGE;
+    if (!member || typeof value !== "string" || !(value in returnedNames)) return notThisPage(session, "event.return");
     marks.push({ member, returned: value });
   }
   if (marks.length === 0) return { ok: false, message: "There is nobody on the roll to mark." };
 
   const existing = await session.supabase.from("attendance_returns").select("member_id").eq("event_id", id);
-  if (existing.error) return { ok: false, message: "The return could not be saved. Try again." };
+  if (existing.error) return failed(session, "event.return", existing.error, "The return could not be saved. Try again.");
   const have = new Set((existing.data ?? []).map((line) => line.member_id));
 
   for (const mark of marks) {
@@ -266,13 +292,17 @@ export async function fileReturn(_previous: OpsResult, formData: FormData): Prom
           .from("attendance_returns")
           .insert({ event_id: id, member_id: mark.member, returned: mark.returned });
     if (error) {
-      return { ok: false, message: explainRefusal(error, "The return could not be saved. Only whoever ran the event makes it.") };
+      const shown = explainRefusal(error, "The return could not be saved. Only whoever ran the event makes it.");
+      return failed(session, "event.return", error, shown);
     }
   }
 
   // Closing is refused once the event is already done, which is fine: the return was a correction.
   const closed = await session.supabase.from("events").update({ state: "done" }).eq("id", id).eq("state", "announced");
-  if (closed.error) return { ok: false, message: explainRefusal(closed.error, "The return was saved, but the event could not be closed.") };
+  if (closed.error) {
+    const shown = explainRefusal(closed.error, "The return was saved, but the event could not be closed.");
+    return failed(session, "event.return", closed.error, shown);
+  }
   refresh();
   return { ok: true, message: "The attendance return is made." };
 }
@@ -282,7 +312,7 @@ export async function fileReport(_previous: OpsResult, formData: FormData): Prom
   const session = await signedIn();
   if (!session) return NOT_CONNECTED;
   const id = uuid(formData.get("id"));
-  if (!id) return NOT_THIS_PAGE;
+  if (!id) return notThisPage(session, "event.report");
 
   const report = {
     what_happened: typed(formData.get("what_happened")),
@@ -296,12 +326,13 @@ export async function fileReport(_previous: OpsResult, formData: FormData): Prom
   }
 
   const existing = await session.supabase.from("after_action_reports").select("event_id").eq("event_id", id).maybeSingle();
-  if (existing.error) return { ok: false, message: "The report could not be saved. Try again." };
+  if (existing.error) return failed(session, "event.report", existing.error, "The report could not be saved. Try again.");
   const { error } = existing.data
     ? await session.supabase.from("after_action_reports").update(report).eq("event_id", id)
     : await session.supabase.from("after_action_reports").insert({ event_id: id, ...report });
   if (error) {
-    return { ok: false, message: explainRefusal(error, "The report could not be saved. Only whoever ran the event files it.") };
+    const shown = explainRefusal(error, "The report could not be saved. Only whoever ran the event files it.");
+    return failed(session, "event.report", error, shown);
   }
   refresh();
   return { ok: true, message: "The after-action report is filed." };

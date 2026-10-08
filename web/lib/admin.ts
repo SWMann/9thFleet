@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { refused } from "@/lib/activity";
 import { getSession, isServing, type Member, type Role, type Service, type Status } from "@/lib/member";
 import type { EventKind, EventState, Reply, Returned } from "@/lib/operations-form";
 import { createClient } from "@/lib/supabase/server";
@@ -38,12 +39,20 @@ export type Gate =
   | { state: "not-allowed"; tier: Tier | null; needed: Tier }
   | { state: "ready"; member: Member; tier: Tier };
 
-/** Who is asking, and whether the page is for them. */
-export async function gate(needed: Tier): Promise<Gate> {
+/**
+ * Who is asking, and whether the page is for them. Nobody is offered a link to
+ * an admin page their role does not open, so reaching one anyway is written to
+ * the activity log.
+ */
+export async function gate(needed: Tier, page: string): Promise<Gate> {
   const session = await getSession();
   if (session.state !== "member") return { state: session.state };
   const tier = tierOf(session.member);
-  if (!tier || !reaches(tier, needed)) return { state: "not-allowed", tier, needed };
+  if (!tier || !reaches(tier, needed)) {
+    const supabase = await createClient();
+    if (supabase) await refused(supabase, "page.admin", `${page} is for ${needed === "admin" ? "admins" : needed}.`);
+    return { state: "not-allowed", tier, needed };
+  }
   return { state: "ready", member: session.member, tier };
 }
 

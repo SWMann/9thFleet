@@ -39,7 +39,7 @@ export default function PeoplePage() {
 const roleNames: Record<Role, string> = { instructor: "Instructor", staff: "Staff", command: "Command", admin: "Admin" };
 
 async function People() {
-  const access = await gate("staff");
+  const access = await gate("staff", "/admin/people");
   if (access.state === "signed-out") redirect("/sign-in");
   if (access.state === "no-record") redirect("/profile");
   if (access.state !== "ready") return <AdminShut access={access} current="people" title={title} />;

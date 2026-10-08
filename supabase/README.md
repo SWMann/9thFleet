@@ -15,6 +15,7 @@ or let someone promote themselves.
 | `migrations/…_launch_order_of_battle.sql` | The units and positions that open in stages 1 to 3, from Volume 1 |
 | `migrations/…_public_structure.sql` | Lets anyone read the units, the positions and what each requires, for the site's roles pages |
 | `migrations/…_operations.sql` | Events, their orders, the roll with its stand-ins, the attendance return and after-action reports |
+| `migrations/…_logging.sql` | The activity log for sign-ins, sign-outs and anything refused or failed, and the page counts for public pages |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -39,7 +40,7 @@ Staff look after people, command makes appointments, and the admin owns the stru
 | Instructor | The same | Award a qualification to someone else, in their own name. Draft a training event |
 | Staff | Everyone, every application and the interview notes | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
 | Command | The same as staff | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event |
-| Admin | Everything, including the audit log | Keep the order of battle, grant roles, open recruitment, open a service, move the fleet to a new stage |
+| Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, grant roles, open recruitment, open a service, move the fleet to a new stage |
 
 Roles add up: an admin holds every role. Things the database decides for itself:
 
@@ -72,7 +73,16 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   deleted, once it has been announced.
 - **Names are unique inside the fleet.** Someone outside it cannot find out which are taken.
 - **Every change is logged** with who made it. Nobody can write to the log.
-- **Deleting an account** removes the member's records and blanks what the log held about them.
+- **What changes no record is logged too.** Sign-ins, sign-outs and anything refused or failed go in
+  the activity log. The site writes each line as the person it is about. The database says whose
+  line it is and when, so nobody can write one in another name or date it. Past thirty lines in a
+  minute from one person, the rest are dropped.
+- **Public pages are counted, not readers.** A view adds one to that page's total for the day. No
+  row is kept for the view itself, and a total holds nothing about who read the page. Member pages
+  and made-up addresses are not counted.
+- **Only admins read the logs and the counts.**
+- **Deleting an account** removes the member's records and their lines in the activity log, and
+  blanks what the audit log held about them.
 
 ## Run the tests
 
@@ -93,7 +103,8 @@ tables and Supabase's own default privileges. It is only for the tests.
 ## The live database
 
 The migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
-database was compared with the tested copy after the first three were applied, and matched.
+database is compared with the tested copy after each one is applied: its functions, rules, columns,
+grants, triggers, constraints and views. It matched after the latest, `logging`.
 
 Each file name starts with the version number Supabase recorded when it was applied, so this folder
 and the database's own migration history agree.

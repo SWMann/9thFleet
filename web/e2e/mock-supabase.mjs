@@ -35,6 +35,9 @@ export function startMockSupabase(port) {
     refreshes: 0,
     signOuts: 0,
     requests: [],
+    // What the site wrote to the logs: page views counted, and lines of activity.
+    views: [],
+    activity: [],
   };
   resetMember(state);
 
@@ -126,6 +129,17 @@ export function startMockSupabase(port) {
       state.signOuts += 1;
       response.writeHead(204);
       return response.end();
+    }
+
+    // --- The logs ----------------------------------------------------------
+    // A visitor may count a page view. Only someone signed in writes a line of activity.
+    if (url.pathname === "/rest/v1/page_view_ticks" && request.method === "POST") {
+      state.views.push(body);
+      return send(201);
+    }
+    if (url.pathname === "/rest/v1/activity_log" && request.method === "POST" && signedIn()) {
+      state.activity.push(body);
+      return send(201);
     }
 
     // --- The member's own rows ---------------------------------------------

@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
+import { refused, turnedDown } from "@/lib/activity";
 import { typed } from "@/lib/application-form";
 import { explainRefusal } from "@/lib/refusals";
 import { createClient } from "@/lib/supabase/server";
@@ -39,15 +40,17 @@ export async function moveApplication(_previous: StaffResult, formData: FormData
   const id = formData.get("id");
   const stage = formData.get("stage");
   if (typeof id !== "string" || !UUID.test(id) || typeof stage !== "string" || !(stage in MOVES)) {
-    return { ok: false, message: "That is not something this page can do." };
+    return { ok: false, message: await refused(session.supabase, "application.move", "That is not something this page can do.") };
   }
 
   const { data, error } = await session.supabase.from("applications").update({ stage }).eq("id", id).select("id");
   if (error) {
-    return { ok: false, message: explainRefusal(error, "The application could not be changed. Try again.") };
+    const shown = explainRefusal(error, "The application could not be changed. Try again.");
+    return { ok: false, message: await turnedDown(session.supabase, "application.move", error, shown) };
   }
   if (!data || data.length === 0) {
-    return { ok: false, message: "The application could not be found, or it is not yours to change." };
+    const shown = "The application could not be found, or it is not yours to change.";
+    return { ok: false, message: await refused(session.supabase, "application.move", shown) };
   }
 
   refresh();
@@ -69,7 +72,8 @@ export async function addNote(_previous: StaffResult, formData: FormData): Promi
     .from("application_notes")
     .insert({ application_id: id, author_id: session.id, body });
   if (error) {
-    return { ok: false, message: explainRefusal(error, "The note could not be saved. Only staff can write one, and not on their own application.") };
+    const shown = explainRefusal(error, "The note could not be saved. Only staff can write one, and not on their own application.");
+    return { ok: false, message: await turnedDown(session.supabase, "note.add", error, shown) };
   }
 
   refresh();
@@ -82,8 +86,14 @@ export async function deleteNote(formData: FormData) {
   const id = formData.get("id");
   if (!session || typeof id !== "string" || !UUID.test(id)) return;
 
-  const { error } = await session.supabase.from("application_notes").delete().eq("id", id);
-  if (error) throw new Error(`The note could not be removed: ${error.message}`);
+  const { data, error } = await session.supabase.from("application_notes").delete().eq("id", id).select("id");
+  if (error) {
+    await turnedDown(session.supabase, "note.remove", error, "The note could not be removed.");
+    throw new Error(`The note could not be removed: ${error.message}`);
+  }
+  if (!data || data.length === 0) {
+    await refused(session.supabase, "note.remove", "Nothing was removed. Only a note's author or an admin removes it.");
+  }
   refresh();
 }
 
@@ -93,7 +103,17 @@ export async function setRecruitment(formData: FormData) {
   if (!session) return;
 
   const open = formData.get("open") === "true";
-  const { error } = await session.supabase.from("fleet_settings").update({ recruitment_open: open }).eq("id", true);
-  if (error) throw new Error(`Recruitment could not be changed: ${error.message}`);
+  const { data, error } = await session.supabase
+    .from("fleet_settings")
+    .update({ recruitment_open: open })
+    .eq("id", true)
+    .select("id");
+  if (error) {
+    await turnedDown(session.supabase, "recruitment.set", error, "Recruitment could not be changed.");
+    throw new Error(`Recruitment could not be changed: ${error.message}`);
+  }
+  if (!data || data.length === 0) {
+    await refused(session.supabase, "recruitment.set", "Nothing was changed. Only an admin opens and closes recruitment.");
+  }
   refresh();
 }

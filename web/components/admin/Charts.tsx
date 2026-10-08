@@ -152,7 +152,7 @@ export function Columns({
   const most = Math.max(0, ...series.map((point) => point.value));
   if (most === 0) return <p className="chart-empty">{empty}</p>;
   return (
-    <ol className="colchart" aria-label={caption}>
+    <ol className={series.length > 8 ? "colchart colchart-dense" : "colchart"} aria-label={caption}>
       {series.map((point) => (
         <li key={point.long} title={`${point.long}: ${point.value}`}>
           <span className="colchart-plot" aria-hidden="true">
