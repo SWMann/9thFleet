@@ -15,6 +15,7 @@ import raoul48340609227 from "@/pictures/raoul-48340609227.jpg";
 import raoul48408781722 from "@/pictures/raoul-48408781722.jpg";
 import raoul48494606591 from "@/pictures/raoul-48494606591.jpg";
 import raoul48695092918 from "@/pictures/raoul-48695092918.jpg";
+import raoul47272219531 from "@/pictures/raoul-47272219531.jpg";
 import rellim41638209562 from "@/pictures/rellim-41638209562.jpg";
 import yajih41594388540 from "@/pictures/yajih-41594388540.jpg";
 
@@ -78,6 +79,7 @@ export const shots = {
   raoul42971102521: shot("42971102521", raoul42971102521, raoul, "Star Citizen", byNc),
   raoul30441782607: shot("30441782607", raoul30441782607, raoul, "Star Citizen", byNc),
   raoul48494606591: shot("48494606591", raoul48494606591, raoul, "Star Citizen", byNc),
+  raoul47272219531: shot("47272219531", raoul47272219531, raoul, "Star Citizen", byNc),
 } satisfies Record<string, Shot>;
 
 export type Picture = {
@@ -107,6 +109,7 @@ export const pictures = {
   members: at(shots.raoul44402204562, "60% 45%"),
   fleet: at(shots.raoul44799036785, "50% 42%"),
   staff: at(shots.raoul45014160084, "50% 40%"),
+  ranks: at(shots.raoul47272219531, "50% 38%"),
   lost: at(shots.raoul48325936481, "70% 50%"),
   menuFleet: at(shots.raoul42971102521, "38% 50%"),
   menuJoining: at(shots.raoul30441782607, "42% 50%"),
