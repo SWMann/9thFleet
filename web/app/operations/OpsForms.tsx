@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 import {
   returnedNames,
+  serviceNames,
   weapons,
   type EventType,
   type Reply,
@@ -12,13 +13,18 @@ import {
   type WeaponsState,
 } from "@/lib/operations-form";
 import {
+  addExtraPosts,
   copyEvent,
   createEvent,
   fileReport,
   fileReturn,
   moveEvent,
+  removeExtraPost,
   replyToEvent,
+  saveKeyPosts,
   saveOrders,
+  saveUnits,
+  setPlace,
   setStandIn,
   updateEvent,
   type OpsResult,
@@ -58,6 +64,12 @@ export type EventFields = {
   weaponsState: WeaponsState | "";
   pveFallback: string;
   repeatsWeekly: boolean;
+  openToRecruits: boolean;
+  openToService: string;
+  requiresQualification: string;
+  /** Empty for no limit, and for no minimum. */
+  places: string;
+  minimumAttending: string;
 };
 
 /** A type's own line: who usually runs one, and an example. */
@@ -74,11 +86,13 @@ export function EventForm({
   event,
   types,
   people,
+  qualifications,
 }: {
   event: EventFields;
   /** The types this member may choose: the ones they may draft, and the event's own. */
   types: EventType[];
   people: Named[];
+  qualifications: { id: string; name: string }[];
 }) {
   const [result, action, pending] = useActionState(event.id ? updateEvent : createEvent, untouched);
   // After a save is turned down the form shows what was typed. Otherwise it shows the event.
@@ -285,6 +299,81 @@ export function EventForm({
         />
       </div>
 
+      <fieldset className="field-set">
+        <legend>Who it is open to</legend>
+        <div className="field">
+          <label className="choice" htmlFor="open_to_recruits">
+            <input
+              id="open_to_recruits"
+              name="open_to_recruits"
+              type="checkbox"
+              defaultChecked={result.values ? result.values.open_to_recruits === "on" : event.openToRecruits}
+            />
+            <span>Open to recruits</span>
+          </label>
+        </div>
+        <div className="field">
+          <label htmlFor="open_to_service">Service</label>
+          <select id="open_to_service" name="open_to_service" defaultValue={held("open_to_service", event.openToService)}>
+            <option value="">Every service</option>
+            {Object.entries(serviceNames).map(([key, name]) => (
+              <option key={key} value={key}>
+                {name} only
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="requires_qualification">
+            Qualification needed <span className="optional">Optional</span>
+          </label>
+          <p className="hint" id="requires_qualification_hint">
+            Only members who hold it can reply that they are attending. Whoever is named to run the event or to observe
+            always can.
+          </p>
+          <select
+            id="requires_qualification"
+            name="requires_qualification"
+            defaultValue={held("requires_qualification", event.requiresQualification)}
+            aria-describedby="requires_qualification_hint"
+          >
+            <option value="">None</option>
+            {qualifications.map((qualification) => (
+              <option key={qualification.id} value={qualification.id}>
+                {qualification.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="places">
+              Places <span className="optional">Optional</span>
+            </label>
+            <input id="places" name="places" type="number" min={1} max={500} step={1} defaultValue={held("places", event.places)} aria-describedby="places_hint" />
+          </div>
+          <div className="field">
+            <label htmlFor="minimum_attending">
+              Minimum <span className="optional">Optional</span>
+            </label>
+            <input
+              id="minimum_attending"
+              name="minimum_attending"
+              type="number"
+              min={1}
+              max={500}
+              step={1}
+              defaultValue={held("minimum_attending", event.minimumAttending)}
+              aria-describedby="places_hint"
+            />
+          </div>
+        </div>
+        <p className="field-note" id="places_hint">
+          Replies past the number of places go on a reserve list, in the order they arrive. The minimum is how many must
+          attend for the event to go ahead. Leave either empty for none.
+        </p>
+      </fieldset>
+
       <div className="form-end">
         <button className="button" type="submit" disabled={pending}>
           {pending ? "Saving" : event.id ? "Save the details" : "Save as a draft"}
@@ -355,22 +444,27 @@ export function OrdersForm({ id, orders, sections }: { id: string; orders: Recor
   );
 }
 
-/** The two answers a member can give, with the one they have given marked. */
-export function ReplyForm({ id, reply }: { id: string; reply: Reply | null }) {
+/**
+ * The two answers a member can give, with the one they have given marked.
+ * Someone the event is not open to can only say they are not attending.
+ */
+export function ReplyForm({ id, reply, onlyDecline = false }: { id: string; reply: Reply | null; onlyDecline?: boolean }) {
   const [result, action, pending] = useActionState(replyToEvent, untouched);
   return (
     <form action={action} className="reply">
       <input type="hidden" name="id" value={id} />
-      <button
-        className={reply === "attending" ? "button" : "button button-quiet"}
-        type="submit"
-        name="reply"
-        value="attending"
-        aria-pressed={reply === "attending"}
-        disabled={pending}
-      >
-        Attending
-      </button>
+      {onlyDecline ? null : (
+        <button
+          className={reply === "attending" ? "button" : "button button-quiet"}
+          type="submit"
+          name="reply"
+          value="attending"
+          aria-pressed={reply === "attending"}
+          disabled={pending}
+        >
+          Attending
+        </button>
+      )}
       <button
         className={reply === "not_attending" ? "button" : "button button-quiet"}
         type="submit"
@@ -443,13 +537,17 @@ export function MoveForms({
   );
 }
 
-/** One button: stand in for a post, or step back out of it. */
-export function StandInButton({ id, position, children }: { id: string; position: string; children: string }) {
+/**
+ * One button: take a post for the night, or step back out of it. The post is
+ * one of the order of battle's (`position`) or one of the event's own (`extra`).
+ */
+export function StandInButton({ id, position = "", extra = "", children }: { id: string; position?: string; extra?: string; children: string }) {
   const [result, action, pending] = useActionState(setStandIn, untouched);
   return (
     <form action={action} className="stand-in">
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="position" value={position} />
+      <input type="hidden" name="extra" value={extra} />
       <button className="button button-small" type="submit" disabled={pending}>
         {children}
       </button>
@@ -461,24 +559,28 @@ export function StandInButton({ id, position, children }: { id: string; position
 /** For whoever runs the event: put an attending member into a post for the night. */
 export function PlaceForm({
   id,
-  position,
+  position = "",
+  extra = "",
   post,
   spare,
   inPost,
 }: {
   id: string;
-  position: string;
+  /** A post of the order of battle, or one of the event's own. */
+  position?: string;
+  extra?: string;
   post: string;
   spare: Named[];
   /** Members attending in their own post. Moving one up leaves that post to fill. */
   inPost: Named[];
 }) {
   const [result, action, pending] = useActionState(setStandIn, untouched);
-  const field = `member_${position}`;
+  const field = `member_${position || extra}`;
   return (
     <form action={action} className="stand-in">
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="position" value={position} />
+      <input type="hidden" name="extra" value={extra} />
       <label className="visually-hidden" htmlFor={field}>
         Stand-in for {post}
       </label>
@@ -523,6 +625,211 @@ export function RemoveStandIn({ id, member, name }: { id: string; member: string
       <input type="hidden" name="member" value={member} />
       <button className="link-button" type="submit" disabled={pending}>
         Remove<span className="visually-hidden"> {name} from this post</span>
+      </button>
+      {result.message ? <Result result={result} /> : null}
+    </form>
+  );
+}
+
+/** For whoever runs the event: one button that gives someone on the reserve list a place. */
+export function GivePlace({ id, member, name }: { id: string; member: string; name: string }) {
+  const [result, action, pending] = useActionState(setPlace, untouched);
+  return (
+    <form action={action} className="stand-in">
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="member" value={member} />
+      <input type="hidden" name="place" value="in" />
+      <button className="button button-small" type="submit" disabled={pending}>
+        Give a place<span className="visually-hidden"> to {name}</span>
+      </button>
+      {result.message ? <Result result={result} /> : null}
+    </form>
+  );
+}
+
+/** For whoever runs the event: move someone who has a place onto the reserve list. */
+export function ToReserve({ id, people }: { id: string; people: Named[] }) {
+  const [result, action, pending] = useActionState(setPlace, untouched);
+  return (
+    <form action={action} className="stand-in">
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="place" value="reserve" />
+      <label className="visually-hidden" htmlFor="to_reserve">
+        Move to the reserve list
+      </label>
+      <select id="to_reserve" name="member" defaultValue="" required>
+        <option value="" disabled>
+          Choose who gives up a place
+        </option>
+        {people.map((person) => (
+          <option key={person.id} value={person.id}>
+            {label(person)}
+          </option>
+        ))}
+      </select>
+      <button className="button button-small" type="submit" disabled={pending}>
+        Move to the reserve list
+      </button>
+      {result.message ? <Result result={result} /> : null}
+    </form>
+  );
+}
+
+/** Which units take part. With none ticked, every open unit does. */
+export function UnitsForm({ id, units, chosen }: { id: string; units: { id: string; label: string }[]; chosen: string[] }) {
+  const [result, action, pending] = useActionState(saveUnits, untouched);
+  return (
+    <form action={action} className="picks" key={result.stamp ?? 0}>
+      <input type="hidden" name="id" value={id} />
+      <fieldset>
+        <legend>Units taking part</legend>
+        <p className="hint">
+          Tick the ships and units this event is for, and the roll shows only their posts. A unit brings everything
+          under it. With none ticked, every open unit takes part.
+        </p>
+        <ul>
+          {units.map((unit) => (
+            <li key={unit.id}>
+              <label>
+                <input type="checkbox" name="unit" value={unit.id} defaultChecked={chosen.includes(unit.id)} />
+                <span>{unit.label}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      </fieldset>
+      <div className="form-end">
+        <button className="button button-quiet" type="submit" disabled={pending}>
+          {pending ? "Saving" : "Save the units"}
+        </button>
+        <Result result={result} />
+      </div>
+    </form>
+  );
+}
+
+/** Which posts must be filled for the event to go ahead. */
+export function KeyPostsForm({
+  id,
+  groups,
+  chosen,
+}: {
+  id: string;
+  groups: { unit: string; posts: { id: string; title: string }[] }[];
+  chosen: string[];
+}) {
+  const [result, action, pending] = useActionState(saveKeyPosts, untouched);
+  return (
+    <form action={action} className="picks" key={result.stamp ?? 0}>
+      <input type="hidden" name="id" value={id} />
+      <fieldset>
+        <legend>Posts that must be filled</legend>
+        <p className="hint">
+          The event is shown as below its minimum while any of these is empty. The list is the posts of the units taking
+          part, so save the units first.
+        </p>
+        {groups.length === 0 ? <p>No post is open in the units taking part.</p> : null}
+        {groups.map((group) => (
+          <div className="picks-group" key={group.unit}>
+            <h4>{group.unit}</h4>
+            <ul>
+              {group.posts.map((post) => (
+                <li key={post.id}>
+                  <label>
+                    <input type="checkbox" name="post" value={post.id} defaultChecked={chosen.includes(post.id)} />
+                    <span>{post.title}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </fieldset>
+      <div className="form-end">
+        <button className="button button-quiet" type="submit" disabled={pending}>
+          {pending ? "Saving" : "Save the posts"}
+        </button>
+        <Result result={result} />
+      </div>
+    </form>
+  );
+}
+
+/** Add posts that exist for this event only. */
+export function ExtraPostForm({ id, roles }: { id: string; roles: { id: string; name: string }[] }) {
+  const [result, action, pending] = useActionState(addExtraPosts, untouched);
+  const held = (key: string, otherwise: string) => result.values?.[key] ?? otherwise;
+  return (
+    <form action={action} className="fields fields-wide" key={result.stamp ?? 0}>
+      <input type="hidden" name="id" value={id} />
+      <div className="field">
+        <label htmlFor="extra_title">Post title</label>
+        <p className="hint" id="extra_title_hint">
+          Such as Range Safety Officer, Umpire or Trainee.
+        </p>
+        <input
+          id="extra_title"
+          name="title"
+          type="text"
+          defaultValue={held("title", "")}
+          required
+          minLength={2}
+          maxLength={76}
+          autoComplete="off"
+          aria-describedby="extra_title_hint"
+        />
+      </div>
+      <div className="field-row">
+        <div className="field">
+          <label htmlFor="extra_role">Role</label>
+          <select id="extra_role" name="role" defaultValue={held("role", "")} required>
+            <option value="" disabled>
+              Choose a role
+            </option>
+            {roles.map((role) => (
+              <option key={role.id} value={role.id}>
+                {role.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="extra_count">How many</label>
+          <input id="extra_count" name="count" type="number" min={1} max={12} step={1} defaultValue={held("count", "1")} required />
+        </div>
+      </div>
+      <p className="field-note">The role says what the post does and what to read. More than one are numbered: Trainee 1, Trainee 2.</p>
+      <div className="field">
+        <label className="choice" htmlFor="extra_must_fill">
+          <input id="extra_must_fill" name="must_fill" type="checkbox" defaultChecked={result.values?.must_fill === "on"} />
+          <span>It must be filled for the event to go ahead</span>
+        </label>
+      </div>
+      <div className="field">
+        <label className="choice" htmlFor="extra_volunteers">
+          <input id="extra_volunteers" name="open_to_volunteers" type="checkbox" defaultChecked={result.values?.open_to_volunteers === "on"} />
+          <span>An attending member with no post on the night may take it</span>
+        </label>
+      </div>
+      <div className="form-end">
+        <button className="button button-quiet" type="submit" disabled={pending}>
+          {pending ? "Adding" : "Add the post"}
+        </button>
+        <Result result={result} />
+      </div>
+    </form>
+  );
+}
+
+/** Take one of the event's own posts away. */
+export function RemoveExtraPost({ id, post, title }: { id: string; post: string; title: string }) {
+  const [result, action, pending] = useActionState(removeExtraPost, untouched);
+  return (
+    <form action={action} className="stand-in">
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="post" value={post} />
+      <button className="link-button" type="submit" disabled={pending}>
+        Remove<span className="visually-hidden"> the post {title}</span>
       </button>
       {result.message ? <Result result={result} /> : null}
     </form>

@@ -139,8 +139,12 @@ function Events({ events }: { events: Summary[] }) {
               {event.state !== "announced" ? <span className="chip chip-amber">{stateNames[event.state]}</span> : null}
               {event.weaponsState ? <span className="chip">{weaponsName(event.weaponsState)}</span> : null}
               {event.repeatsWeekly ? <span className="chip">Weekly</span> : null}
+              {event.manning?.state === "go" ? <span className="chip chip-on">Go</span> : null}
+              {event.manning?.state === "no-go" ? <span className="chip chip-amber">Below its minimum</span> : null}
               {event.state === "announced" ? (
-                event.myReply === "attending" ? (
+                event.myPlace === "reserve" ? (
+                  <span className="chip chip-gold">You are on the reserve list</span>
+                ) : event.myReply === "attending" ? (
                   <span className="chip chip-on">You are attending</span>
                 ) : event.myReply === "not_attending" ? (
                   <span className="chip">You are not attending</span>

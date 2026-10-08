@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { refused } from "@/lib/activity";
 import { getSession, isServing, type Member, type Role, type Service, type Status } from "@/lib/member";
+import { manningOf, shortfall, unitsTakingPart, type Manning, type Place } from "@/lib/manning";
 import type { EventState, Reply, Returned } from "@/lib/operations-form";
 import { createClient } from "@/lib/supabase/server";
 
@@ -151,8 +152,21 @@ export type Fleet = {
     state: EventState;
     commander_id: string | null;
     roll_closes_at: string | null;
+    minimum_attending: number | null;
   }[];
-  attendance: { event_id: string; member_id: string; reply: Reply | null; stand_in_position_id: string | null }[];
+  attendance: {
+    event_id: string;
+    member_id: string;
+    reply: Reply | null;
+    stand_in_position_id: string | null;
+    event_post_id: string | null;
+    place: Place | null;
+    replied_at: string | null;
+  }[];
+  /** Who takes part in each event: the units it names, the posts that must be filled, and its own posts. */
+  eventUnits: { event_id: string; unit_id: string }[];
+  eventKeyPosts: { event_id: string; position_id: string }[];
+  eventPosts: { id: string; event_id: string; title: string; must_fill: boolean }[];
   returns: { event_id: string; member_id: string; returned: Returned }[];
   reports: { event_id: string; filed_at: string }[];
 };
@@ -164,7 +178,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
 
-  const [settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes] =
+  const [settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts] =
     await Promise.all([
       supabase.from("fleet_settings").select("current_stage, recruitment_open").maybeSingle(),
       supabase
@@ -184,14 +198,17 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
         .order("submitted_at", { ascending: false }),
       supabase
         .from("events")
-        .select("id, kind, title, starts_at, state, commander_id, roll_closes_at")
+        .select("id, kind, title, starts_at, state, commander_id, roll_closes_at, minimum_attending")
         .order("starts_at", { ascending: true }),
-      supabase.from("attendance").select("event_id, member_id, reply, stand_in_position_id"),
+      supabase.from("attendance").select("event_id, member_id, reply, stand_in_position_id, event_post_id, place, replied_at"),
       supabase.from("attendance_returns").select("event_id, member_id, returned"),
       supabase.from("after_action_reports").select("event_id, filed_at"),
       supabase.from("event_types").select("key, name, sort_order").order("sort_order", { ascending: true }),
+      supabase.from("event_units").select("event_id, unit_id"),
+      supabase.from("event_key_posts").select("event_id, position_id"),
+      supabase.from("event_posts").select("id, event_id, title, must_fill"),
     ]);
-  const results = { settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes };
+  const results = { settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts };
   for (const [name, result] of Object.entries(results)) {
     if (result.error) throw new Error(`The ${name} could not be read: ${result.error.message}`);
   }
@@ -289,6 +306,9 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       applications: rows<Fleet["applications"][number]>(applications),
       eventTypes: rows<Row>(eventTypes).map((row) => ({ key: row.key as string, name: row.name as string })),
       events: fleetEvents,
+      eventUnits: rows<Fleet["eventUnits"][number]>(eventUnits),
+      eventKeyPosts: rows<Fleet["eventKeyPosts"][number]>(eventKeyPosts),
+      eventPosts: rows<Fleet["eventPosts"][number]>(eventPosts),
       attendance: fleetAttendance,
       returns: fleetReturns,
       reports: rows<Fleet["reports"][number]>(reports),
@@ -530,6 +550,8 @@ export type EventFigures = {
   absentWithoutNotice: number;
   /** Filed in time, late, overdue, or not due yet. Null for an event that never ran. */
   report: "on time" | "late" | "overdue" | "not due" | null;
+  /** Whether it has the people it needs. Null unless it is announced and sets a minimum or marks a post. */
+  manning: Manning | null;
 };
 
 export function operations(fleet: Fleet) {
@@ -537,6 +559,20 @@ export function operations(fleet: Fleet) {
   const name = new Map(fleet.people.map((person) => [person.id, person.name]));
   const filed = new Map(fleet.reports.map((report) => [report.event_id, Date.parse(report.filed_at)]));
   const typeName = new Map(fleet.eventTypes.map((type) => [type.key, type.name]));
+  const positionTitle = new Map(fleet.positions.map((position) => [position.id, position.title]));
+  // Who holds each primary post now.
+  const holderOf = new Map(
+    fleet.assignments.filter((entry) => entry.kind === "primary" && !entry.ended_on).map((entry) => [entry.position_id, entry.member_id]),
+  );
+  const allUnits = fleet.units.map((unit) => ({ id: unit.id, parentId: unit.parent_id }));
+  /** The posts that take part in an event: all of them, unless it names its units. */
+  const takingPart = (eventId: string) => {
+    const taking = unitsTakingPart(
+      allUnits,
+      fleet.eventUnits.filter((entry) => entry.event_id === eventId).map((entry) => entry.unit_id),
+    );
+    return new Set(fleet.positions.filter((position) => !taking || taking.has(position.unit_id)).map((position) => position.id));
+  };
 
   const figures = events.map((event): EventFigures => {
     const lines = fleet.attendance.filter((line) => line.event_id === event.id);
@@ -544,6 +580,30 @@ export function operations(fleet: Fleet) {
     const starts = Date.parse(event.starts_at);
     const reportAt = filed.get(event.id);
     const ran = event.state === "done" || (event.state === "announced" && starts <= now);
+    const part = takingPart(event.id);
+    const manning =
+      event.state === "announced" && starts > now
+        ? manningOf({
+            minimum: event.minimum_attending,
+            keyPosts: fleet.eventKeyPosts
+              .filter((entry) => entry.event_id === event.id && part.has(entry.position_id))
+              .map((entry) => ({
+                id: entry.position_id,
+                title: positionTitle.get(entry.position_id) ?? "A post",
+                holderId: holderOf.get(entry.position_id) ?? null,
+              })),
+            extraPosts: fleet.eventPosts.filter((post) => post.event_id === event.id).map((post) => ({ id: post.id, title: post.title, mustFill: post.must_fill })),
+            lines: lines.map((line) => ({
+              memberId: line.member_id,
+              reply: line.reply,
+              place: line.place,
+              standInFor: line.stand_in_position_id,
+              extraPost: line.event_post_id,
+              repliedAt: line.replied_at,
+            })),
+            rollOpen: event.roll_closes_at !== null && now < Date.parse(event.roll_closes_at),
+          })
+        : null;
     return {
       id: event.id,
       title: event.title,
@@ -553,7 +613,8 @@ export function operations(fleet: Fleet) {
       commander: event.commander_id ? (name.get(event.commander_id) ?? "A member") : "Not named",
       attending: lines.filter((line) => line.reply === "attending").length,
       notAttending: lines.filter((line) => line.reply === "not_attending").length,
-      standIns: lines.filter((line) => line.stand_in_position_id).length,
+      standIns: lines.filter((line) => line.stand_in_position_id || line.event_post_id).length,
+      manning,
       present: marks.filter((line) => line.returned === "present").length,
       absentWithNotice: marks.filter((line) => line.returned === "absent_with_notice").length,
       absentWithoutNotice: marks.filter((line) => line.returned === "absent_without_notice").length,
@@ -574,10 +635,11 @@ export function operations(fleet: Fleet) {
   const turnout = done.filter((event) => event.attending > 0).map((event) => event.present / event.attending);
   const upcoming = figures.filter((event) => event.state === "announced" && Date.parse(event.startsAt) > now);
 
-  // Who has not replied to an event whose roll is still open: holders of open posts.
-  const holders = new Set(fleet.assignments.filter((entry) => entry.kind === "primary" && !entry.ended_on).map((entry) => entry.member_id));
+  // Who has not replied to an event that is coming up: holders of the posts that take part in it.
   const outstanding = upcoming.map((event) => {
     const replied = new Set(fleet.attendance.filter((line) => line.event_id === event.id && line.reply).map((line) => line.member_id));
+    const part = takingPart(event.id);
+    const holders = new Set([...holderOf].filter(([position]) => part.has(position)).map(([, member]) => member));
     return {
       id: event.id,
       title: event.title,
@@ -655,6 +717,14 @@ export function attention(fleet: Fleet, tier: Tier): Attention[] {
         list.push({
           what: `${event.title} has started and is not closed`,
           detail: "Whoever ran it makes the attendance return, which closes it.",
+          href: `/operations/${event.id}`,
+        });
+      }
+      // The roll has closed and it does not have what it needs. Whether it goes ahead is the commander's decision.
+      if (event.manning?.state === "no-go") {
+        list.push({
+          what: `${event.title} is below its minimum manning`,
+          detail: shortfall(event.manning),
           href: `/operations/${event.id}`,
         });
       }

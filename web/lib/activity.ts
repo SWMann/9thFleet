@@ -34,6 +34,8 @@ export const attemptNames = {
   "event.delete": "delete a draft event",
   "event.reply": "reply to an event",
   "event.stand-in": "set a stand-in",
+  "event.taking": "say who takes part in an event",
+  "event.place": "move someone on or off the reserve list",
   "event.return": "make an attendance return",
   "event.report": "file an after-action report",
   "structure.save": "change the fleet's structure",

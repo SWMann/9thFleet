@@ -22,6 +22,8 @@ export const weapons: { key: WeaponsState; name: string; meaning: string }[] = [
 ];
 export const weaponsName = (state: WeaponsState) => weapons.find((entry) => entry.key === state)?.name ?? state;
 
+export const serviceNames = { navy: "Navy", army: "Army", marines: "Marines" } as const;
+
 export const returnedNames: Record<Returned, string> = {
   present: "Present",
   absent_with_notice: "Absent, with notice",
