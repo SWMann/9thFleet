@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { refused, turnedDown, type Attempt } from "@/lib/activity";
 import { typed } from "@/lib/application-form";
-import { kinds, paragraphs, returnedNames, weapons } from "@/lib/operations-form";
+import { aWeekOn, nextTitle, paragraphs, returnedNames, weapons } from "@/lib/operations-form";
 import { explainRefusal } from "@/lib/refusals";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,7 +16,16 @@ import { createClient } from "@/lib/supabase/server";
  * is no, it also writes a line to the activity log.
  */
 
-export type OpsResult = { ok: boolean; message: string };
+export type OpsResult = {
+  ok: boolean;
+  message: string;
+  /** Somewhere to go next, such as the draft that closing a weekly event left. */
+  link?: { href: string; label: string };
+  /** When a save is turned down, what was typed, so the form can show it again. */
+  values?: Record<string, string>;
+  /** When the answer was given. A form draws itself afresh for each answer. */
+  stamp?: number;
+};
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NOT_CONNECTED: OpsResult = { ok: false, message: "This site is not connected to the database yet." };
@@ -52,10 +61,23 @@ const notYours = async (session: Session, action: Attempt, shown: string): Promi
   message: await refused(session.supabase, action, shown),
 });
 
+const SERVING = ["recruit", "auxiliary", "member", "reserve"];
+const TYPE_KEY = /^[a-z0-9]+([_-][a-z0-9]+)*$/;
+
+/** What was typed into a form, to hand back when the save is turned down. */
+function typedInto(formData: FormData): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (typeof value === "string" && !key.startsWith("$")) values[key] = value;
+  }
+  return values;
+}
+
 /** The event's fields from the form, or a message saying what is wrong with them. */
-function readEvent(formData: FormData): { fields: Record<string, string | number | null> } | { problem: string } {
+function readEvent(formData: FormData): { fields: Record<string, string | number | boolean | null> } | { problem: string } {
+  // Which types exist, and who may draft each, is the database's to say.
   const kind = formData.get("kind");
-  if (typeof kind !== "string" || !kinds.some((entry) => entry.key === kind)) return { problem: "Choose the type of event." };
+  if (typeof kind !== "string" || kind.length > 40 || !TYPE_KEY.test(kind)) return { problem: "Choose the type of event." };
 
   const title = typed(formData.get("title")).replace(/\s+/g, " ");
   if (title.length < 3 || title.length > 80) return { problem: "Give the event a title of 3 to 80 characters." };
@@ -95,28 +117,100 @@ function readEvent(formData: FormData): { fields: Record<string, string | number
       observer_id: uuid(formData.get("observer")),
       weapons_state: weapons.some((entry) => entry.key === weaponsState) ? String(weaponsState) : null,
       pve_fallback: fallback,
+      repeats_weekly: formData.get("repeats_weekly") === "on",
     },
   };
+}
+
+/** What to say when the database turns down an event's details. */
+function explainEvent(error: { code?: string; message: string }, otherwise: string): string {
+  if (error.code === "23503" && /events_kind_fkey/.test(error.message)) return "That type of event is no longer there. Choose another.";
+  return explainRefusal(error, otherwise);
 }
 
 /** Draft an event. It is seen only by the people working on it until it is announced. */
 export async function createEvent(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
   const session = await signedIn();
   if (!session) return NOT_CONNECTED;
+  const again = { values: typedInto(formData), stamp: Date.now() };
   const read = readEvent(formData);
-  if ("problem" in read) return { ok: false, message: read.problem };
+  if ("problem" in read) return { ok: false, message: read.problem, ...again };
 
   const { data, error } = await session.supabase.from("events").insert(read.fields).select("id").single();
   if (error) {
-    return failed(
-      session,
-      "event.draft",
-      error,
-      explainRefusal(error, "The event could not be drafted. Command drafts events, and instructors draft training."),
-    );
+    const shown = explainEvent(error, "The event could not be drafted. Command drafts events, and instructors draft the types open to them.");
+    return { ...(await failed(session, "event.draft", error, shown)), ...again };
   }
-  if (!data) return { ok: false, message: "The event could not be drafted. Try again." };
+  if (!data) return { ok: false, message: "The event could not be drafted. Try again.", ...again };
   redirect(`/operations/${data.id}`);
+}
+
+/**
+ * Draft another event like this one: the same type, details and orders, at the
+ * same time of the week, the next one that has not gone by. The database copies
+ * the orders, and only for someone who can read the event.
+ */
+export async function copyEvent(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  if (!id) return notThisPage(session, "event.copy");
+
+  const [source, roster] = await Promise.all([
+    session.supabase
+      .from("events")
+      .select("kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback")
+      .eq("id", id)
+      .maybeSingle(),
+    session.supabase.from("roster").select("member_id, status"),
+  ]);
+  const unread = source.error ?? roster.error;
+  if (unread) return failed(session, "event.copy", unread, "The event could not be read. Try again.");
+  if (!source.data) return notYours(session, "event.copy", "That event is not there to copy.");
+
+  // Someone who has left since cannot be named again. The person copying commands it until they name someone.
+  const serving = new Set((roster.data ?? []).filter((row) => SERVING.includes(row.status as string)).map((row) => row.member_id as string));
+  const still = (member: unknown) => (typeof member === "string" && serving.has(member) ? member : null);
+  const event = source.data;
+  const commander = still(event.commander_id) ?? session.id;
+  const second = still(event.second_id);
+
+  const { data, error } = await session.supabase
+    .from("events")
+    .insert({
+      kind: event.kind,
+      title: nextTitle(event.title as string),
+      summary: event.summary,
+      starts_at: aWeekOn(event.starts_at as string, Date.now()),
+      duration_minutes: event.duration_minutes,
+      commander_id: commander,
+      second_id: second === commander ? null : second,
+      observer_id: still(event.observer_id),
+      weapons_state: event.weapons_state,
+      pve_fallback: event.pve_fallback,
+      copied_from: id,
+    })
+    .select("id")
+    .single();
+  if (error) {
+    const shown = explainEvent(error, "The event could not be copied. Command drafts events, and instructors draft the types open to them.");
+    return failed(session, "event.copy", error, shown);
+  }
+  if (!data) return { ok: false, message: "The event could not be copied. Try again." };
+  redirect(`/operations/${data.id}/edit`);
+}
+
+/** The draft that closing or cancelling a weekly event left for next week, if it left one. */
+async function nextWeeks(session: Session, id: string): Promise<OpsResult["link"]> {
+  const { data } = await session.supabase
+    .from("events")
+    .select("id, title")
+    .eq("copied_from", id)
+    .eq("state", "draft")
+    .is("repeats_weekly", true)
+    .limit(1);
+  const next = data?.[0];
+  return next ? { href: `/operations/${next.id}`, label: `Next week's is drafted: ${next.title}` } : undefined;
 }
 
 /** Change an event's details. */
@@ -125,14 +219,17 @@ export async function updateEvent(_previous: OpsResult, formData: FormData): Pro
   if (!session) return NOT_CONNECTED;
   const id = uuid(formData.get("id"));
   if (!id) return notThisPage(session, "event.change");
+  const again = { values: typedInto(formData), stamp: Date.now() };
   const read = readEvent(formData);
-  if ("problem" in read) return { ok: false, message: read.problem };
+  if ("problem" in read) return { ok: false, message: read.problem, ...again };
 
   const { data, error } = await session.supabase.from("events").update(read.fields).eq("id", id).select("id");
-  if (error) return failed(session, "event.change", error, explainRefusal(error, "The event could not be changed. Try again."));
-  if (!data || data.length === 0) return notYours(session, "event.change", "This event is not yours to change.");
+  if (error) {
+    return { ...(await failed(session, "event.change", error, explainEvent(error, "The event could not be changed. Try again."))), ...again };
+  }
+  if (!data || data.length === 0) return { ...(await notYours(session, "event.change", "This event is not yours to change.")), ...again };
   refresh();
-  return { ok: true, message: "Saved." };
+  return { ok: true, message: "Saved.", stamp: again.stamp };
 }
 
 /** Write the warning order and the operation order. */
@@ -147,7 +244,7 @@ export async function saveOrders(_previous: OpsResult, formData: FormData): Prom
   for (const paragraph of paragraphs) {
     const text = typed(formData.get(paragraph.key));
     if (text.length > paragraph.max) {
-      return { ok: false, message: `Keep "${paragraph.name}" under ${paragraph.max.toLocaleString("en-GB")} characters.` };
+      return { ok: false, message: `One section of the orders is too long. It holds up to ${paragraph.max.toLocaleString("en-GB")} characters.` };
     }
     orders[paragraph.key] = text;
   }
@@ -176,7 +273,7 @@ export async function moveEvent(_previous: OpsResult, formData: FormData): Promi
   if (error) return failed(session, "event.move", error, explainRefusal(error, "The event could not be changed. Try again."));
   if (!data || data.length === 0) return notYours(session, "event.move", "This event is not yours to change.");
   refresh();
-  return { ok: true, message: MOVES[state] };
+  return { ok: true, message: MOVES[state], link: state === "cancelled" ? await nextWeeks(session, id) : undefined };
 }
 
 /** Delete a draft that will not be used. */
@@ -298,13 +395,15 @@ export async function fileReturn(_previous: OpsResult, formData: FormData): Prom
   }
 
   // Closing is refused once the event is already done, which is fine: the return was a correction.
-  const closed = await session.supabase.from("events").update({ state: "done" }).eq("id", id).eq("state", "announced");
+  const closed = await session.supabase.from("events").update({ state: "done" }).eq("id", id).eq("state", "announced").select("id");
   if (closed.error) {
     const shown = explainRefusal(closed.error, "The return was saved, but the event could not be closed.");
     return failed(session, "event.return", closed.error, shown);
   }
   refresh();
-  return { ok: true, message: "The attendance return is made." };
+  // Only the return that closed the event can have left a draft for next week.
+  const justClosed = (closed.data ?? []).length > 0;
+  return { ok: true, message: "The attendance return is made.", link: justClosed ? await nextWeeks(session, id) : undefined };
 }
 
 /** File the after-action report, or correct it. */

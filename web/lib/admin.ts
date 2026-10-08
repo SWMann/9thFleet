@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { refused } from "@/lib/activity";
 import { getSession, isServing, type Member, type Role, type Service, type Status } from "@/lib/member";
-import type { EventKind, EventState, Reply, Returned } from "@/lib/operations-form";
+import type { EventState, Reply, Returned } from "@/lib/operations-form";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -141,9 +141,11 @@ export type Fleet = {
     submitted_at: string;
     decided_at: string | null;
   }[];
+  /** The types of event, in the Fleet Commander's order. */
+  eventTypes: { key: string; name: string }[];
   events: {
     id: string;
-    kind: EventKind;
+    kind: string;
     title: string;
     starts_at: string;
     state: EventState;
@@ -162,7 +164,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
 
-  const [settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports] =
+  const [settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes] =
     await Promise.all([
       supabase.from("fleet_settings").select("current_stage, recruitment_open").maybeSingle(),
       supabase
@@ -187,8 +189,9 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       supabase.from("attendance").select("event_id, member_id, reply, stand_in_position_id"),
       supabase.from("attendance_returns").select("event_id, member_id, returned"),
       supabase.from("after_action_reports").select("event_id, filed_at"),
+      supabase.from("event_types").select("key, name, sort_order").order("sort_order", { ascending: true }),
     ]);
-  const results = { settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports };
+  const results = { settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes };
   for (const [name, result] of Object.entries(results)) {
     if (result.error) throw new Error(`The ${name} could not be read: ${result.error.message}`);
   }
@@ -284,6 +287,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       qualifications: fleetQualifications,
       awards: fleetAwards,
       applications: rows<Fleet["applications"][number]>(applications),
+      eventTypes: rows<Row>(eventTypes).map((row) => ({ key: row.key as string, name: row.name as string })),
       events: fleetEvents,
       attendance: fleetAttendance,
       returns: fleetReturns,
@@ -513,7 +517,8 @@ export function recruiting(fleet: Fleet) {
 export type EventFigures = {
   id: string;
   title: string;
-  kind: EventKind;
+  /** What its type is called. */
+  kindName: string;
   state: EventState;
   startsAt: string;
   commander: string;
@@ -531,6 +536,7 @@ export function operations(fleet: Fleet) {
   const { events, now } = fleet;
   const name = new Map(fleet.people.map((person) => [person.id, person.name]));
   const filed = new Map(fleet.reports.map((report) => [report.event_id, Date.parse(report.filed_at)]));
+  const typeName = new Map(fleet.eventTypes.map((type) => [type.key, type.name]));
 
   const figures = events.map((event): EventFigures => {
     const lines = fleet.attendance.filter((line) => line.event_id === event.id);
@@ -541,7 +547,7 @@ export function operations(fleet: Fleet) {
     return {
       id: event.id,
       title: event.title,
-      kind: event.kind,
+      kindName: typeName.get(event.kind) ?? event.kind,
       state: event.state,
       startsAt: event.starts_at,
       commander: event.commander_id ? (name.get(event.commander_id) ?? "A member") : "Not named",
@@ -592,9 +598,10 @@ export function operations(fleet: Fleet) {
     reportsOnTime: done.filter((event) => event.report === "on time").length,
     reportsLate: done.filter((event) => event.report === "late").length,
     reportsOverdue: figures.filter((event) => event.report === "overdue").length,
-    byKind: (["training", "patrol", "response", "strike", "tasked_pve"] as EventKind[]).map((kind) => ({
-      kind,
-      value: figures.filter((event) => event.kind === kind && event.state !== "draft" && event.state !== "cancelled").length,
+    // Every type the fleet has, so one with no events yet still has its row.
+    byKind: fleet.eventTypes.map((type) => ({
+      name: type.name,
+      value: events.filter((event) => event.kind === type.key && event.state !== "draft" && event.state !== "cancelled").length,
     })),
     perWeek: perWeek(
       done.map((event) => Date.parse(event.startsAt)),

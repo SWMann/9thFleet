@@ -27,6 +27,7 @@ export const attemptNames = {
   "note.remove": "remove an interview note",
   "recruitment.set": "open or close recruitment",
   "event.draft": "draft an event",
+  "event.copy": "copy an event",
   "event.change": "change an event",
   "event.orders": "write an event's orders",
   "event.move": "announce or cancel an event",

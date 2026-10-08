@@ -19,7 +19,7 @@ type SheetInfo = { key: string; one: string; needsAbout: string | null };
 /**
  * One sheet of the fleet's structure: a way to add a record, then every record
  * with its own form. The fields come from the sheet's list in `lib/structure.ts`,
- * so this draws areas, roles, units, posts and qualifications alike.
+ * so this draws areas, roles, units, posts, qualifications and event types alike.
  */
 export function Editor({
   sheet,
@@ -71,6 +71,8 @@ function RecordForm({ sheet, fields, record }: { sheet: SheetInfo; fields: Field
   const id = record?.id ?? "new";
   // After a save is turned down the form shows what was typed. Otherwise it shows the record.
   const held = (key: string) => result.values?.[key] ?? record?.values[key] ?? "";
+  /** What a field of a new record starts with, where its sheet gives it one. */
+  const starts = (field: Field) => held(field.key) || (record ? "" : (field.initial ?? ""));
   const shown = fields.filter((field) => !(field.onlyWhenNew && record));
 
   // The form is drawn afresh after each answer. A list keeps the choice it was
@@ -137,7 +139,7 @@ function RecordForm({ sheet, fields, record }: { sheet: SheetInfo; fields: Field
                 min={field.min}
                 max={field.max}
                 step={1}
-                defaultValue={held(field.key) || (field.key === "sort_order" && !record ? "0" : "")}
+                defaultValue={starts(field)}
                 required={field.required}
                 aria-describedby={described}
               />
@@ -146,7 +148,7 @@ function RecordForm({ sheet, fields, record }: { sheet: SheetInfo; fields: Field
                 id={name}
                 name={field.key}
                 type="text"
-                maxLength={field.kind === "text" ? field.max : 60}
+                maxLength={field.kind === "text" ? field.max : field.kind === "slug" ? (field.max ?? 60) : 60}
                 defaultValue={held(field.key)}
                 required={field.required}
                 autoComplete="off"

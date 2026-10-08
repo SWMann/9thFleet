@@ -10,7 +10,8 @@ import { createClient } from "@/lib/supabase/server";
 /**
  * What an admin can do to the fleet's structure. Nothing here decides who may
  * do it. The database does: only an admin's changes get through, a role keeps
- * to its kind, a post that has been held stays, and every change is logged.
+ * to its kind, a post that has been held stays, a type of event that has events
+ * stays, and every change is logged.
  * Each action sends the change and passes on the database's answer.
  */
 
@@ -54,7 +55,7 @@ const failed = async (session: Session, action: Attempt, error: DatabaseError, s
 
 /** What to tell the admin when the database says no. */
 function explain(sheet: Sheet, error: DatabaseError): string {
-  if (error.code === "23505") return `Another ${sheet.one} already has that name or address.`;
+  if (error.code === "23505") return sheet.taken ?? `Another ${sheet.one} already has that name or address.`;
   // Something still points at the record. PostgreSQL 18 gives a refusal to remove its own code.
   if (error.code === "23503" || error.code === "23001") return sheet.inUse;
   if (error.code === "42501" && /row-level security|permission denied/.test(error.message)) return ADMINS_ONLY;
@@ -76,7 +77,8 @@ function read(field: FieldSpec, formData: FormData): { value: Value } | { proble
     }
     case "slug": {
       if (text === "") return missing;
-      if (text.length > 60 || !SLUG.test(text)) {
+      if (text.length > (field.max ?? 60)) return { problem: `Keep "${field.label}" under ${field.max ?? 60} characters.` };
+      if (!SLUG.test(text)) {
         return { problem: `"${field.label}" is lower-case letters and numbers, with hyphens between words: fire-control.` };
       }
       return { value: text };

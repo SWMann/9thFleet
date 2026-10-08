@@ -4,8 +4,8 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { PageHead } from "@/components/PageHead";
 import { getOperation, type Operation, type Person, type RollPost } from "@/lib/operations";
-import { formatWhen, kindName, paragraphs, returnedNames, stateNames, weapons, weaponsName } from "@/lib/operations-form";
-import { MoveForms, PlaceForm, RemoveStandIn, ReplyForm, ReportForm, ReturnForm, StandInButton } from "../OpsForms";
+import { formatWhen, returnedNames, stateNames, weapons, weaponsName } from "@/lib/operations-form";
+import { CopyButton, MoveForms, PlaceForm, RemoveStandIn, ReplyForm, ReportForm, ReturnForm, StandInButton } from "../OpsForms";
 
 export const metadata: Metadata = {
   title: "Event",
@@ -59,7 +59,9 @@ async function Event({ params }: { params: Props["params"] }) {
   if (result.state === "outside") return <Head title="Event" lead="Operations are for the serving fleet." />;
   if (result.state === "not-found") notFound();
 
-  const { event, orders, runs, edits, report } = result;
+  const { event, orders, sections, runs, edits, report } = result;
+  // Someone who may draft this type of event may draft another like it.
+  const mayCopy = result.mayCreate.some((type) => type.key === event.kind);
   const when = formatWhen(event.startsAt);
   const closes = event.rollClosesAt ? formatWhen(event.rollClosesAt) : null;
   const open = event.state === "draft" || event.state === "announced";
@@ -67,11 +69,12 @@ async function Event({ params }: { params: Props["params"] }) {
 
   return (
     <>
-      <Head title={event.title} lead={event.summary || kindName(event.kind)}>
+      <Head title={event.title} lead={event.summary || event.kindName}>
         <p className="chips">
-          <span className="chip chip-gold">{kindName(event.kind)}</span>
+          <span className="chip chip-gold">{event.kindName}</span>
           {event.state !== "announced" ? <span className="chip chip-amber">{stateNames[event.state]}</span> : null}
           {event.weaponsState ? <span className="chip">{weaponsName(event.weaponsState)}</span> : null}
+          {event.repeatsWeekly ? <span className="chip">Weekly</span> : null}
         </p>
       </Head>
 
@@ -132,7 +135,27 @@ async function Event({ params }: { params: Props["params"] }) {
               <dd>{event.pveFallback}</dd>
             </div>
           ) : null}
+          {event.repeatsWeekly ? (
+            <div>
+              <dt>Repeats</dt>
+              <dd>
+                Weekly
+                <span className="aside">
+                  {open ? "Closing it drafts next week's" : "Closing it drafted next week's"}
+                </span>
+              </dd>
+            </div>
+          ) : null}
+          {result.copiedFrom ? (
+            <div>
+              <dt>Copied from</dt>
+              <dd>
+                <Link href={`/operations/${result.copiedFrom.id}`}>{result.copiedFrom.title}</Link>
+              </dd>
+            </div>
+          ) : null}
         </dl>
+        {mayCopy ? <CopyButton id={event.id} /> : null}
       </section>
 
       {event.state === "announced" ? <YourReply result={result} /> : null}
@@ -166,13 +189,13 @@ async function Event({ params }: { params: Props["params"] }) {
             <h3>Warning order</h3>
             {orders.warning_order ? <p className="order-text">{orders.warning_order}</p> : <p className="order-none">Not written yet.</p>}
           </div>
-          {paragraphs.map((paragraph) => (
-            <div className="order" key={paragraph.key}>
-              <h3>{paragraph.name}</h3>
-              {orders[paragraph.key] ? (
-                <p className="order-text">{orders[paragraph.key]}</p>
+          {sections.map((section) => (
+            <div className="order" key={section.key}>
+              <h3>{section.name}</h3>
+              {orders[section.key] ? (
+                <p className="order-text">{orders[section.key]}</p>
               ) : (
-                <p className="order-none">Not written yet. {paragraph.holds}</p>
+                <p className="order-none">Not written yet. {section.holds}</p>
               )}
             </div>
           ))}

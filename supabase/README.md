@@ -17,6 +17,7 @@ or let someone promote themselves.
 | `migrations/…_operations.sql` | Events, their orders, the roll with its stand-ins, the attendance return and after-action reports |
 | `migrations/…_logging.sql` | The activity log for sign-ins, sign-outs and anything refused or failed, and the page counts for public pages |
 | `migrations/…_fleet_roles.sql` | Areas and fleet roles as records an admin keeps, a role for every position, and the rules that let an admin rename ranks |
+| `migrations/…_event_types.sql` | The types of event as records an admin keeps, copying an event into a new draft, and the weekly repeat |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -43,7 +44,7 @@ Staff look after people, command makes appointments, and the admin owns the stru
 | Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: areas, roles, units, positions and the qualifications each requires. Never who holds one | Nothing |
 | Applicant | The same, and their own record and their own application | Set a character name and an RSI handle, apply while recruitment is open, withdraw |
 | Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position and qualification, and every announced event with its orders, roll and report | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. A full member can apply for the cadet course |
-| Instructor | The same | Award a qualification to someone else, in their own name. Draft a training event |
+| Instructor | The same | Award a qualification to someone else, in their own name. Draft an event of a type that is open to instructors, which at the start is training |
 | Staff | Everyone, every application and the interview notes | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
 | Command | The same as staff | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event |
 | Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, the areas and roles, the qualifications and the rank names. Grant roles on the site, open recruitment, open a service, move the fleet to a new stage |
@@ -82,6 +83,14 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   has started. A member sees their own line, and staff and whoever ran the event see them all.
 - **A finished event is fixed.** Its details and orders cannot change, and it is cancelled, never
   deleted, once it has been announced.
+- **The types of event are records.** An admin adds, renames and removes them. Each says whether
+  instructors may draft it, how long it usually runs, its usual weapons state, and what it calls
+  the five sections of its orders. A type that has events cannot be removed.
+- **An event can be copied** into a new draft, which starts with the same orders. Only someone who
+  can read an event can copy it, and what an event was copied from cannot be changed.
+- **A weekly event drafts the next one.** When it is closed, or cancelled after it was announced,
+  the database drafts next week's with the same details and orders, in the name of whoever closed
+  it. A number at the end of the title goes up by one. The draft is never announced by itself.
 - **The grades are fixed.** Their codes, bands and order cannot be changed through the website. An
   admin can change what each service calls a grade and what a member at that grade usually does.
 - **Names are unique inside the fleet.** Someone outside it cannot find out which are taken.

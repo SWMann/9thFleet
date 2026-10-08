@@ -6,7 +6,7 @@ import { AdminHead, AdminShut } from "@/components/admin/AdminHead";
 import { Bars, Columns, Panel, Scroll, Stats, percent } from "@/components/admin/Charts";
 import { gate, loadFleet, operations, type EventFigures } from "@/lib/admin";
 import { formatDate } from "@/lib/application-form";
-import { formatWhen, kindName, stateNames } from "@/lib/operations-form";
+import { formatWhen, stateNames } from "@/lib/operations-form";
 
 export const metadata: Metadata = {
   title: "Operations figures",
@@ -92,7 +92,7 @@ async function Figures() {
             <Bars
               caption="Events by type"
               head={["Type", "Events"]}
-              rows={figures.byKind.map((entry) => ({ label: kindName(entry.kind), value: entry.value }))}
+              rows={figures.byKind.map((entry) => ({ label: entry.name, value: entry.value }))}
               empty="No event has been announced yet."
             />
           </Panel>
@@ -157,7 +157,7 @@ async function Figures() {
                     <th scope="row">
                       <Link href={`/operations/${event.id}`}>{event.title}</Link>
                       <small>
-                        {kindName(event.kind)} · {event.commander}
+                        {event.kindName} · {event.commander}
                       </small>
                     </th>
                     <td>

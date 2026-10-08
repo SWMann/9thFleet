@@ -48,7 +48,7 @@ async function EditEvent({ params }: { params: Props["params"] }) {
   if (result.state === "outside") return <Head title="Event" lead="Operations are for the serving fleet." />;
   if (result.state === "not-found") notFound();
 
-  const { event, orders, edits, people, mayCreate } = result;
+  const { event, orders, sections, edits, people, mayCreate, types } = result;
   if (!edits) return <Head id={event.id} title={event.title} lead="This event is run by its commander and by command." />;
   if (event.state === "done" || event.state === "cancelled") {
     return <Head id={event.id} title={event.title} lead="This event is closed, so its details and orders are fixed." />;
@@ -77,8 +77,10 @@ async function EditEvent({ params }: { params: Props["params"] }) {
             observer: event.observer?.id ?? "",
             weaponsState: event.weaponsState ?? "",
             pveFallback: event.pveFallback,
+            repeatsWeekly: event.repeatsWeekly,
           }}
-          mayCreate={mayCreate}
+          // Someone changing an event they could not have drafted keeps its type on the list.
+          types={types.filter((type) => type.key === event.kind || mayCreate.some((own) => own.key === type.key))}
           people={people}
         />
       </section>
@@ -87,7 +89,7 @@ async function EditEvent({ params }: { params: Props["params"] }) {
         <h2 id="orders">
           The <strong>orders</strong>
         </h2>
-        <OrdersForm id={event.id} orders={orders} />
+        <OrdersForm id={event.id} orders={orders} sections={sections} />
       </section>
 
       {event.state === "draft" ? (

@@ -1,6 +1,7 @@
 import "server-only";
 import { areaPictures, domains } from "@/lib/areas";
 import { gate } from "@/lib/admin";
+import { paragraphs, weapons } from "@/lib/operations-form";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -9,7 +10,8 @@ import { createClient } from "@/lib/supabase/server";
  * Each kind of record an admin can edit is a sheet. A sheet names its table
  * and lists its fields, and one editor draws every sheet from that list. To
  * make another field editable, add it to its sheet here. To make another kind
- * of record editable, add a sheet.
+ * of record editable, add a sheet. Event types are kept here too, because they
+ * are edited the same way.
  *
  * Nothing here decides who may edit. The database does: only an admin's
  * changes get through, and every change is logged.
@@ -20,11 +22,19 @@ export type Option = { value: string; label: string };
 /** Where a field's choices come from when they are other records. */
 type Source = "areas" | "roles" | "units";
 
-type Common = { key: string; label: string; hint?: string; required?: boolean; onlyWhenNew?: boolean };
+type Common = {
+  key: string;
+  label: string;
+  hint?: string;
+  required?: boolean;
+  onlyWhenNew?: boolean;
+  /** What a new record starts with. */
+  initial?: string;
+};
 export type FieldSpec =
   | (Common & { kind: "text"; max: number })
-  /** An address: lower-case words joined by hyphens. */
-  | (Common & { kind: "slug" })
+  /** An address: lower-case words joined by hyphens. Up to 60 characters unless it says otherwise. */
+  | (Common & { kind: "slug"; max?: number })
   | (Common & { kind: "long"; max: number; rows: number })
   /** A list, one entry to a line. */
   | (Common & { kind: "lines"; most: number })
@@ -36,11 +46,11 @@ export type FieldSpec =
 /** A field as the form is given it, with its choices filled in. */
 export type Field = Exclude<FieldSpec, { kind: "record" }> | (Common & { kind: "record"; source: Source; options: Option[] });
 
-export type SheetKey = "areas" | "roles" | "units" | "posts" | "qualifications";
+export type SheetKey = "areas" | "roles" | "units" | "posts" | "qualifications" | "event-types";
 
 export type Sheet = {
   key: SheetKey;
-  table: "areas" | "fleet_roles" | "units" | "positions" | "qualifications";
+  table: "areas" | "fleet_roles" | "units" | "positions" | "qualifications" | "event_types";
   /** What one record is called, and several. */
   one: string;
   many: string;
@@ -50,10 +60,25 @@ export type Sheet = {
   needs?: { table: "fleet_role_qualifications" | "position_qualifications"; column: "role_id" | "position_id"; about: string };
   /** What to say when a record cannot be removed because something hangs from it. */
   inUse: string;
+  /** What to say when another record already has its name. Left out, it speaks of a name or an address. */
+  taken?: string;
 };
 
 const stage = (key: string, label: string, hint?: string): FieldSpec => ({ key, label, kind: "number", min: 1, max: 9, required: true, hint });
-const order: FieldSpec = { key: "sort_order", label: "Place in the list", kind: "number", min: 0, max: 9999, required: true, hint: "Lower comes first." };
+const order: FieldSpec = { key: "sort_order", label: "Place in the list", kind: "number", min: 0, max: 9999, required: true, initial: "0", hint: "Lower comes first." };
+
+/** The two fields that let a type of event give one section of its orders its own name and guidance. */
+const section = (key: string, number: number, name: string, holds: string): FieldSpec[] => [
+  { key: `${key}_name`, label: `Section ${number} is called`, kind: "text", max: 60, hint: `Leave it empty to keep Volume 2's: ${name}.` },
+  {
+    key: `${key}_holds`,
+    label: `What section ${number} holds`,
+    kind: "long",
+    max: 300,
+    rows: 2,
+    hint: `Shown under the heading to whoever writes it. Leave it empty to keep Volume 2's: ${holds}`,
+  },
+];
 const reading = (hint: string): FieldSpec => ({ key: "reading", label: "What to read", kind: "lines", most: 20, hint });
 
 const pictureNames: Record<string, string> = {
@@ -204,6 +229,41 @@ export const sheets: Sheet[] = [
       { key: "description", label: "What it means", kind: "long", max: 400, rows: 2, hint: "One sentence on what its holder has shown they can do." },
     ],
   },
+  {
+    key: "event-types",
+    table: "event_types",
+    one: "event type",
+    many: "Event types",
+    about: "The kinds of night the fleet runs: who may draft each, how long it usually is, and what its orders are called.",
+    inUse: "Events of this type exist, so it cannot be removed. It can be renamed.",
+    taken: "Another event type already has that name or code.",
+    fields: [
+      { key: "name", label: "Name", kind: "text", max: 60, required: true },
+      { key: "key", label: "Code", kind: "slug", max: 40, required: true, onlyWhenNew: true, hint: "A short name for it that never changes: boarding-drill." },
+      { key: "run_by", label: "Usually run by", kind: "text", max: 80, hint: "Shown to whoever drafts one: Training team." },
+      { key: "example", label: "Such as", kind: "text", max: 200, hint: "An example, shown to whoever drafts one." },
+      { key: "instructors_may_draft", label: "Instructors may draft it, as well as command", kind: "yes-no" },
+      {
+        key: "default_duration_minutes",
+        label: "Usual length, in minutes",
+        kind: "number",
+        min: 15,
+        max: 480,
+        required: true,
+        initial: "120",
+        hint: "What a new event of this type starts with. Whoever drafts it can change it.",
+      },
+      {
+        key: "default_weapons_state",
+        label: "Usual weapons state",
+        kind: "choice",
+        options: weapons.map((state) => ({ value: state.key, label: `${state.name}: ${state.meaning.toLowerCase()}` })),
+        hint: "What a new event of this type starts with. Leave it empty for none.",
+      },
+      ...paragraphs.flatMap((paragraph, index) => section(paragraph.key, index + 1, paragraph.name, paragraph.holds)),
+      order,
+    ],
+  },
 ];
 
 export const sheetOf = (key: string) => sheets.find((sheet) => sheet.key === key) ?? null;
@@ -302,6 +362,12 @@ export async function loadSheet(sheet: Sheet): Promise<Loaded> {
             note: `${roleName.get(row.role_id as string) ?? "No role"}${row.kind === "duty" ? ", a duty" : `, ${row.min_grade} to ${row.max_grade}`}`,
             group: unitPath(row.unit_id),
           };
+        case "event-types":
+          return {
+            title: row.name as string,
+            note: row.instructors_may_draft === true ? "Drafted by command and instructors" : "Drafted by command",
+            group: "",
+          };
         default:
           return { title: row.name as string, note: String(row.code ?? ""), group: "" };
       }
@@ -346,15 +412,16 @@ export async function countStructure(): Promise<{ state: "no-database" } | { sta
     if (error) throw new Error(`The ${table} could not be counted: ${error.message}`);
     return (data ?? []).length;
   };
-  const [areas, roles, units, posts, qualifications, grades] = await Promise.all([
+  const [areas, roles, units, posts, qualifications, grades, eventTypes] = await Promise.all([
     read("areas", "id"),
     read("fleet_roles", "id"),
     read("units", "id"),
     read("positions", "id"),
     read("qualifications", "id"),
     read("grades", "code"),
+    read("event_types", "id"),
   ]);
-  return { state: "ready", counts: { areas, roles, units, posts, qualifications, grades } };
+  return { state: "ready", counts: { areas, roles, units, posts, qualifications, grades, "event-types": eventTypes } };
 }
 
 export type RankTable =

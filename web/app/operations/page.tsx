@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { PageHead } from "@/components/PageHead";
 import { getOperations, type Summary } from "@/lib/operations";
-import { cycle, formatWhen, kindName, stateNames, weaponsName } from "@/lib/operations-form";
+import { cycle, formatWhen, stateNames, weaponsName } from "@/lib/operations-form";
 
 export const metadata: Metadata = {
   title: "Operations",
@@ -108,7 +108,7 @@ function Events({ events }: { events: Summary[] }) {
         const when = formatWhen(event.startsAt);
         return (
           <li className={`event event-${event.state}`} key={event.id}>
-            <p className="event-kind">{kindName(event.kind)}</p>
+            <p className="event-kind">{event.kindName}</p>
             <h3>
               <Link href={`/operations/${event.id}`}>{event.title}</Link>
             </h3>
@@ -138,6 +138,7 @@ function Events({ events }: { events: Summary[] }) {
             <p className="event-chips">
               {event.state !== "announced" ? <span className="chip chip-amber">{stateNames[event.state]}</span> : null}
               {event.weaponsState ? <span className="chip">{weaponsName(event.weaponsState)}</span> : null}
+              {event.repeatsWeekly ? <span className="chip">Weekly</span> : null}
               {event.state === "announced" ? (
                 event.myReply === "attending" ? (
                   <span className="chip chip-on">You are attending</span>

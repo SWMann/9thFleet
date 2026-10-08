@@ -3432,6 +3432,18 @@ a.contents-name:hover {
   font-size: 0.9375rem;
 }
 
+/* A line under a field that changes with what is chosen in it. */
+.field .type-about {
+  max-width: none;
+  margin: 8px 0 0;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
+.field .type-about:empty {
+  display: none;
+}
+
 .events {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
@@ -3639,6 +3651,19 @@ a.contents-name:hover {
   flex-basis: 100%;
   margin: 0;
   font-size: 0.9375rem;
+}
+
+/* The button under an event's facts that drafts another like it. */
+.copy-event {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 20px;
+}
+
+.copy-event .form-result {
+  margin: 0;
 }
 
 .names {
