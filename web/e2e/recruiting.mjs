@@ -829,6 +829,136 @@ try {
     assert.deepEqual((await cells(record("Jo Reyes"))).slice(4, 8), ["0", "0", "0", "1"]);
   });
 
+  console.log("Logs");
+  const logText = async () => (await page.locator(".log:visible").allInnerTexts()).join("\n");
+  // The filters are a plain form: choosing and pressing Show loads the page again at a new address.
+  const showLog = async (choices, address) => {
+    const filters = page.locator(".filters:visible");
+    for (const [label, option] of Object.entries(choices)) await filters.getByLabel(label).selectOption({ label: option });
+    await filters.getByRole("button", { name: "Show" }).click();
+    await page.waitForURL(address);
+    await page.locator(".filters:visible").waitFor();
+  };
+  await check("the logs are for admins, and nobody else is shown a line", async () => {
+    // Staff, then command. Both are left signed in by the checks above.
+    for (const person of [kit, jo]) {
+      await signInAs(person);
+      await page.goto(`${site}/admin/logs`);
+      await leadIs(/This page is for admins\./);
+      assert.equal(await page.locator(".log:visible, .filters:visible").count(), 0);
+      assert.ok(!(await adminTabs()).includes("Logs"));
+    }
+    await page.goto(`${site}/profile`);
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await page.waitForURL(`${site}/`);
+  });
+  await check("an admin reads who signed in and out", async () => {
+    // Lines from two days ago, so there is more than one page and something outside the last 24 hours.
+    await supabase.sql(
+      `insert into public.activity_log (actor, kind, at)
+       select $1, 'sign_out', now() - interval '2 days' - n * interval '1 minute' from generate_series(1, 120) as n`,
+      [(await memberOf(lee)).id],
+    );
+    await signInAs(founder);
+    await page.goto(`${site}/admin`);
+    await leadIs(/Stage 1: Cadre/);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Logs"]);
+    await adminTab("Logs").click();
+    await headingIs("Logs");
+    await page.locator(".log:visible").first().waitFor();
+
+    await showLog({ Show: "Sign-ins and sign-outs", When: "The last 24 hours" }, /show=sign-ins/);
+    const text = await logText();
+    assert.match(text, /Ada Vance signed in\./);
+    assert.match(text, /Jo Reyes signed out\./);
+    assert.doesNotMatch(text, /Lee Tanaka signed out/, "a line from two days ago is in the last 24 hours");
+    assert.doesNotMatch(text, /applied|status|Patrol/);
+    assert.match(await page.locator(".log-line:visible").first().innerText(), /^\d\d:\d\d:\d\d UTC\s+Sign-in\s+Ada Vance signed in\.$/);
+  });
+  await check("personnel actions read as sentences, and can be narrowed to one member", async () => {
+    await showLog({ Show: "Personnel actions", Who: "Kit Marlow", When: "All time" }, /show=personnel/);
+    const text = await logText();
+    assert.match(text, /Ada Vance changed Kit Marlow's status from Applicant to Recruit, in the Navy\./);
+    assert.match(text, /The database gave Kit Marlow the Staff role\./);
+    assert.doesNotMatch(text, /Jo Reyes|Sam Okoro|signed in|applied/);
+    await shot("admin-logs-personnel");
+  });
+  await check("what was refused is kept, with what the person was told", async () => {
+    await showLog({ Show: "Refused and failed", Who: "Anyone" }, /show=refused/);
+    const refused = page.locator(".log-refused:visible", { hasText: "Ada Vance was refused: tried to move an application on." });
+    assert.match(await refused.first().innerText(), /Told: "A serving member already has this character name or RSI handle\. /);
+    // Reaching a page that no link offered is a refusal too: staff tried the logs, and a recruit tried the staff pages.
+    const text = await logText();
+    assert.match(text, /Kit Marlow was refused: tried to open an admin page\.\s+Told: "\/admin\/logs is for admins\."/);
+    assert.match(text, /Jo Reyes was refused: tried to open an admin page\./);
+    assert.match(text, /Kit Marlow was refused: tried to open a staff page\.\s+Told: "The applications are for the fleet's staff\."/);
+    const stored = await supabase.sql("select kind, action, shown from public.activity_log where kind in ('refused', 'failed') order by id");
+    assert.ok(stored.length >= 1);
+    assert.ok(stored.every((line) => line.action && line.shown), "a refusal says what was tried and what was said");
+  });
+  await check("every kind of line is in one list, a page at a time", async () => {
+    await showLog({ Show: "Everything" }, /show=all/);
+    const latest = await logText();
+    assert.match(latest, /Ada Vance signed in\./);
+    assert.match(latest, /The database gave Jo Reyes the Command role\./);
+    assert.match(latest, /Lee Tanaka applied to join the Navy\./);
+    assert.match(latest, /Ada Vance filed the after-action report for Patrol 001\./);
+    assert.match(latest, /Ada Vance recorded Jo Reyes as absent, without notice at Patrol 001\./);
+    assert.match(latest, /Ada Vance closed Patrol 001\./);
+    assert.equal(await page.locator(".log-line:visible").count(), 100);
+    await shot("admin-logs");
+
+    // The page before stays on screen until the next has been read, so wait for its first line to change.
+    const firstLine = () => page.locator(".log-line:visible").first().innerText();
+    const goOlder = async () => {
+      const was = await firstLine();
+      await page.getByRole("link", { name: "Older lines" }).click();
+      for (let tries = 0; tries < 100; tries += 1) {
+        if ((await page.locator(".log-line:visible").count()) > 0 && (await firstLine()) !== was) return;
+        await page.waitForTimeout(100);
+      }
+      throw new Error("The older lines never came.");
+    };
+    await goOlder();
+    await page.getByRole("heading", { name: "Older lines" }).waitFor();
+    const seen = [latest, await logText()];
+    assert.doesNotMatch(seen[1], /Ada Vance filed the after-action report/, "a line is on two pages");
+    // Keep going back to the end of the log.
+    for (let pages = 0; pages < 8 && (await page.getByRole("link", { name: "Older lines" }).count()) > 0; pages += 1) {
+      await goOlder();
+      seen.push(await logText());
+    }
+    // Every line is on exactly one page, back to the first thing that ever happened.
+    const everything = seen.join("\n");
+    assert.equal(everything.match(/Ada Vance signed in for the first time, and a record was made\./g)?.length, 1);
+    assert.equal(everything.match(/Lee Tanaka signed out\./g)?.length, 120);
+    assert.equal(everything.match(/Ada Vance closed Patrol 001\./g)?.length, 1);
+    await page.getByRole("link", { name: "Back to the latest" }).click();
+    await page.getByRole("heading", { name: "The latest lines" }).waitFor();
+  });
+  await check("the visitors view counts public pages by the day, and nothing about who read them", async () => {
+    await showLog({ Show: "Visitors" }, /show=visitors/);
+    await page.getByRole("heading", { name: "Visitors", exact: true }).waitFor();
+    const pages = await chart("Pages read in the last 30 days").innerText();
+    assert.match(pages, /\/ranks/);
+    assert.match(pages, /\/roles/);
+    assert.match(pages, /\/manual/);
+    const read = await chart("Pages read in the last 30 days").locator("tbody th").allInnerTexts();
+    assert.deepEqual(
+      read.filter((path) => /^\/(profile|admin|operations|staff|apply|order-of-battle|visit|auth)(\/|$)/.test(path.trim())),
+      [],
+      "a member's page was counted",
+    );
+    assert.match(await stat("Page views today"), /^\d+ \d+ visits$/);
+    assert.match(await chart("Page views, day by day").locator("li .visually-hidden").last().innerText(), /: \d+ page views?$/);
+    await shot("admin-visitors");
+
+    const totals = await supabase.sql("select path, views, landings from public.page_views");
+    assert.ok(totals.find((row) => row.path === "/ranks").views >= 1);
+    assert.ok(totals.every((row) => row.landings <= row.views));
+    assert.deepEqual(await supabase.sql("select * from public.page_view_ticks"), [], "a row was kept for a page view");
+  });
+
   await check("no page raised a script error", async () => {
     assert.deepEqual(pageErrors, []);
   });

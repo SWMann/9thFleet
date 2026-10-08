@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { refused, signedOut, turnedDown } from "@/lib/activity";
 import { SIGNED_IN_COOKIE, TIER_COOKIE } from "@/lib/supabase/cookies";
 import { createClient } from "@/lib/supabase/server";
 
@@ -57,8 +58,10 @@ export async function saveNames(_previous: NamesResult, formData: FormData): Pro
   }
 
   const { data, error } = await supabase.from("members").update(changes).eq("id", id).select("id");
-  if (error) return { ok: false, message: explain(error) };
-  if (!data || data.length === 0) return { ok: false, message: "Your record could not be found." };
+  if (error) return { ok: false, message: await turnedDown(supabase, "names.save", error, explain(error)) };
+  if (!data || data.length === 0) {
+    return { ok: false, message: await refused(supabase, "names.save", "Your record could not be found.") };
+  }
 
   refresh();
   return { ok: true, message: "Saved." };
@@ -79,7 +82,11 @@ function explain(error: { code?: string; message: string }): string {
 
 export async function signOut() {
   const supabase = await createClient();
-  if (supabase) await supabase.auth.signOut();
+  if (supabase) {
+    // The line is written first, while there is still a session to write it as.
+    await signedOut(supabase);
+    await supabase.auth.signOut();
+  }
   const jar = await cookies();
   jar.delete(SIGNED_IN_COOKIE);
   jar.delete(TIER_COOKIE);

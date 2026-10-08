@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import "@fontsource/titillium-web/latin-300.css";
 import "@fontsource/titillium-web/latin-400.css";
 import "@fontsource/titillium-web/latin-600.css";
@@ -7,6 +7,7 @@ import "@fontsource/titillium-web/latin-700.css";
 import "./globals.css";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { VisitBeacon } from "@/components/VisitBeacon";
 import { indexable, site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -25,6 +26,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <SiteHeader />
         <main id="content">{children}</main>
         <SiteFooter />
+        <Suspense fallback={null}>
+          <VisitBeacon />
+        </Suspense>
       </body>
     </html>
   );

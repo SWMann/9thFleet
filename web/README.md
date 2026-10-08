@@ -32,8 +32,8 @@ The browser tests do not touch Discord or the live database. They need a browser
 
 | Test | Stand-in | What it is for |
 | --- | --- | --- |
-| `e2e/sign-in.mjs` | `e2e/mock-supabase.mjs`, which answers from memory | Sign-in, cookies, redirects, the member's record and the order of battle |
-| `e2e/recruiting.mjs` | `e2e/supabase-with-database.mjs`, which runs the real migrations in an in-memory PostgreSQL | The ranks, roles and manual pages, applying, the staff pages, operations and the admin pages, against the database's real rules |
+| `e2e/sign-in.mjs` | `e2e/mock-supabase.mjs`, which answers from memory | Sign-in, cookies, redirects, the member's record, the order of battle and what is sent to be counted |
+| `e2e/recruiting.mjs` | `e2e/supabase-with-database.mjs`, which runs the real migrations in an in-memory PostgreSQL | The ranks, roles and manual pages, applying, the staff pages, operations, the admin pages and the logs, against the database's real rules |
 
 Write new tests the second way. A refusal in that test is the database's own refusal, so the test
 fails if the site and the rules ever disagree. The stand-in understands only the kinds of query the
@@ -56,6 +56,8 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/roles` | The areas of work, the posts in each and a card for each kind of post, read from the database. Open to everyone. It never shows who holds a post |
 | `/manual` | The fleet manual: the doctrine volumes that have been reviewed, section by section. Open to everyone |
 | `/credits` | Who took each picture on the site, and its licence |
+| `/privacy` | What the site records about visitors and members, who can read it and how to have it removed. Change it whenever the logging or the sign-in changes |
+| `/visit` | Not a page. A public page posts its address here once it has been read, to be counted |
 | `/menu` | The menu as a page, for a browser that is not running scripts |
 
 How it is kept safe:
@@ -95,6 +97,7 @@ The figures of the fleet, for the people who run it. A role decides which pages 
 | `/admin/people` | Staff, command and admins | Everyone on the books, by status, service and grade, with qualifications. Command also sees attendance |
 | `/admin/recruiting` | Staff, command and admins | How far applications get, how long decisions take, and which are still open |
 | `/admin/operations` | Command and admins | Every event, turnout, late reports, and attendance member by member |
+| `/admin/logs` | Admins | Everything that has happened: changes to records, sign-ins and sign-outs, anything refused or failed, and how often each public page is read |
 
 An admin holds every role, so sees all of them. A role only counts while its holder is serving.
 
@@ -107,6 +110,34 @@ An admin holds every role, so sees all of them. A role only counts while its hol
   reads the same without its bars. Every bar of a chart is one blue, because gold is for things to
   press and green, amber and red are for states. The colours were checked for contrast and for
   colour-blind readers against the site's dark panels. Check any new colour the same way.
+
+## Logging
+
+Everything that goes into the site is written down, and admins read it on one page, `/admin/logs`.
+It is drawn from three places in the database:
+
+| What | Where it is kept | Who writes it |
+| --- | --- | --- |
+| Every change to a record, with the row before and after | `audit_log` | The database, from a trigger on each table |
+| Sign-ins, sign-outs, and anything refused or failed | `activity_log` | The site, as the person it is about. See `lib/activity.ts` |
+| How many times each public page was read each day | `page_views` | The database, each time a page posts to `/visit` |
+
+When you add something:
+
+- **A new table** gets the `app.audit()` trigger in its migration, and its words in `describeChange`
+  in `lib/logs.ts`. Until it has words it still shows, plainly.
+- **A new action** needs nothing for the changes it makes. For the times it is turned down, give it a
+  name in `attemptNames` in `lib/activity.ts`, then use `turnedDown` when the database answers with
+  an error and `refused` when a change matched no row. A form that only needs correcting, such as a
+  missing answer, is not logged.
+- **A new page for a role** that no link offers to anyone else logs whoever reaches it anyway. The
+  admin pages do this in `gate` in `lib/admin.ts`.
+- **A new public page** is counted once its first part is in the list in `lib/visits.ts` and in
+  `app.count_page_view` in the database. Keep the two in step. Member pages are never counted.
+
+What is deliberately not kept: a visitor's address or browser, any cookie for counting, and which
+pages a member reads. Page counts leave out robots that say what they are and browsers that ask not
+to be tracked.
 
 ## Change the words
 
@@ -130,6 +161,8 @@ An admin holds every role, so sees all of them. A role only counts while its hol
 | The member's record | `app/profile/page.tsx` |
 | The admin pages | `app/admin/`, and the figures in `lib/admin.ts` |
 | Which role opens which admin page | `lib/admin.ts` and the list of tabs in `components/admin/AdminHead.tsx` |
+| How a line in the logs reads | `lib/logs.ts`, and the names of things people try in `lib/activity.ts` |
+| What the site says it records | `app/privacy/page.tsx` |
 | The menu | `lib/menu.ts` |
 | The pictures | `lib/pictures.ts`. See Pictures below |
 | Colours and type | `app/globals.css` |

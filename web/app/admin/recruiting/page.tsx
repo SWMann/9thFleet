@@ -30,7 +30,7 @@ const days = (value: number | null) => {
 };
 
 async function Recruiting() {
-  const access = await gate("staff");
+  const access = await gate("staff", "/admin/recruiting");
   if (access.state === "signed-out") redirect("/sign-in");
   if (access.state === "no-record") redirect("/profile");
   if (access.state !== "ready") return <AdminShut access={access} current="recruiting" title={title} />;

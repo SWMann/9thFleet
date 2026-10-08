@@ -51,6 +51,9 @@ export function SiteFooter() {
             <li>
               <Link href="/credits">Picture credits</Link>
             </li>
+            <li>
+              <Link href="/privacy">What this site records</Link>
+            </li>
           </ul>
           <p>
             {site.formation}, Stanton. Flagship {site.flagship}.

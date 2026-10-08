@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
+import { refused, turnedDown } from "@/lib/activity";
 import { confirmations, questions, typed } from "@/lib/application-form";
 import { explainRefusal } from "@/lib/refusals";
 import { createClient } from "@/lib/supabase/server";
@@ -54,7 +55,7 @@ export async function submitApplication(_previous: ApplyResult, formData: FormDa
   const { error } = await supabase
     .from("applications")
     .insert({ member_id: id, route: "recruit", preferred_service: service, answers: { answers, confirmed } });
-  if (error) return { ok: false, message: explain(error) };
+  if (error) return { ok: false, message: await turnedDown(supabase, "application.send", error, explain(error)) };
 
   refresh();
   return { ok: true, message: "Sent." };
@@ -78,11 +79,18 @@ export async function withdrawApplication(formData: FormData) {
   const id = claims?.claims?.sub;
   if (!id) redirect("/sign-in");
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("applications")
     .update({ stage: "withdrawn" })
     .eq("id", applicationId)
-    .eq("member_id", id);
-  if (error) throw new Error(`The application could not be withdrawn: ${error.message}`);
+    .eq("member_id", id)
+    .select("id");
+  if (error) {
+    await turnedDown(supabase, "application.withdraw", error, "The application could not be withdrawn.");
+    throw new Error(`The application could not be withdrawn: ${error.message}`);
+  }
+  if (!data || data.length === 0) {
+    await refused(supabase, "application.withdraw", "There was no open application of theirs to withdraw.");
+  }
   redirect("/apply");
 }

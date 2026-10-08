@@ -31,7 +31,7 @@ const reportNames: Record<NonNullable<EventFigures["report"]>, string> = {
 };
 
 async function Figures() {
-  const access = await gate("command");
+  const access = await gate("command", "/admin/operations");
   if (access.state === "signed-out") redirect("/sign-in");
   if (access.state === "no-record") redirect("/profile");
   if (access.state !== "ready") return <AdminShut access={access} current="operations" title={title} />;

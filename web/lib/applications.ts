@@ -1,4 +1,5 @@
 import "server-only";
+import { refused } from "@/lib/activity";
 import { readStoredAnswers, type StoredAnswers } from "@/lib/application-form";
 import { getSession, isStaff, type Member, type Service, type Status } from "@/lib/member";
 import { createClient } from "@/lib/supabase/server";
@@ -124,7 +125,12 @@ async function staffSession(): Promise<
 > {
   const session = await getSession();
   if (session.state !== "member") return { state: session.state };
-  if (!isStaff(session.member)) return { state: "not-staff" };
+  if (!isStaff(session.member)) {
+    // Nobody is offered a link to the staff pages without a role, so reaching one anyway is written down.
+    const supabase = await createClient();
+    if (supabase) await refused(supabase, "page.staff", "The applications are for the fleet's staff.");
+    return { state: "not-staff" };
+  }
   return { state: "staff", member: session.member, recruitmentOpen: session.recruitmentOpen };
 }
 

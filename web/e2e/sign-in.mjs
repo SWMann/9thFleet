@@ -86,6 +86,17 @@ try {
     });
     assert.equal(shown, "contain none none");
   });
+  await check("a visitor is told what the site records, and is given no cookie", async () => {
+    await page.getByRole("contentinfo").getByRole("link", { name: "What this site records" }).click();
+    await headingIs("What this site records");
+    const text = await page.locator("main").innerText();
+    assert.match(text, /The site sets no cookies for a visitor/);
+    assert.match(text, /Which pages a member reads is not recorded\./);
+    // Long enough for the page count to have been sent, which must set nothing either.
+    await page.waitForTimeout(500);
+    assert.deepEqual(await context.cookies(), [], "a visitor was given a cookie");
+    assert.deepEqual(await page.evaluate(() => [localStorage.length, sessionStorage.length]), [0, 0], "something was stored in the browser");
+  });
   await check("leaving Discord early is explained", async () => {
     await page.goto(`${site}/auth/callback?error=access_denied`);
     assert.equal(new URL(page.url()).pathname, "/sign-in");
@@ -179,6 +190,9 @@ try {
     await page.reload();
     await headingIs("Your record");
   });
+  await check("the sign-in is written to the activity log", async () => {
+    assert.deepEqual(mock.state.activity.at(-1), { kind: "sign_in", action: null, shown: null, cause: null });
+  });
   await check("the menu offers the record instead of sign-in", async () => {
     await page.goto(`${site}/`);
     await page.getByRole("link", { name: "Your record" }).click();
@@ -213,6 +227,14 @@ try {
     await page.locator("form.fields").evaluate((form) => form.setAttribute("novalidate", ""));
     await save("Taken Name", "AdaVance");
     await result().filter({ hasText: "Another member already has that character name." }).waitFor();
+  });
+  await check("a refusal is written to the activity log, and a form that only needs correcting is not", async () => {
+    const refusals = mock.state.activity.filter((line) => line.kind === "refused");
+    assert.equal(refusals.length, 1, "the handle with a space never reached the database, so it is not a refusal");
+    assert.equal(refusals[0].action, "names.save");
+    assert.equal(refusals[0].shown, "Another member already has that character name.");
+    assert.match(refusals[0].cause, /^23505: /);
+    assert.ok(!("actor" in refusals[0]) && !("at" in refusals[0]), "the site does not say whose line it is or when: the database does");
   });
   await check("good names are saved and the page shows them", async () => {
     await save("  Ada   Vance ", "AdaVance");
@@ -421,11 +443,78 @@ try {
     await page.getByRole("button", { name: "Sign out" }).click();
     await page.waitForURL(`${site}/`);
     assert.ok(mock.state.signOuts > before, "the sign-in service was not told");
+    assert.equal(mock.state.activity.at(-1).kind, "sign_out", "the sign-out was not written to the activity log");
     assert.match(await nav(), /Sign in/i);
     const left = (await context.cookies()).map((cookie) => cookie.name);
     assert.deepEqual(left.filter((name) => /auth-token|nf_signed_in|nf_tier/.test(name)), [], "cookies were left behind");
     await page.goto(`${site}/profile`);
     assert.equal(new URL(page.url()).pathname, "/sign-in");
+  });
+
+  console.log("Page views");
+  const viewsOf = (path) => mock.state.views.filter((view) => view.path === path);
+  // A count is sent after the page is shown, so wait for it.
+  const counted = async (path, atLeast) => {
+    for (let tries = 0; tries < 40 && viewsOf(path).length < atLeast; tries += 1) await page.waitForTimeout(100);
+    return viewsOf(path);
+  };
+  await check("public pages are counted, and a member's pages never are", async () => {
+    assert.ok((await counted("/", 1)).length >= 1, "the front page was not counted");
+    const paths = [...new Set(mock.state.views.map((view) => view.path))];
+    assert.deepEqual(
+      paths.filter((path) => /^\/(profile|order-of-battle|operations|apply|staff|admin|visit|auth)/.test(path)),
+      [],
+      "a member page was counted",
+    );
+    for (const view of mock.state.views) {
+      assert.deepEqual(Object.keys(view).sort(), ["landing", "path"], "a count carries a page and whether a visit began there, and nothing else");
+    }
+  });
+  await check("a visit is a page opened fresh, and moving on by a link is a view", async () => {
+    const before = mock.state.views.length;
+    await page.goto(`${site}/joining`);
+    await counted("/joining", 1);
+    await page.getByRole("link", { name: "Standards" }).first().click();
+    await page.waitForURL(`${site}/standards`);
+    await counted("/standards", 1);
+    const mine = mock.state.views.slice(before).filter((view) => ["/joining", "/standards"].includes(view.path));
+    assert.deepEqual(mine, [
+      { path: "/joining", landing: true },
+      { path: "/standards", landing: false },
+    ]);
+  });
+  await check("a sign-in that did not finish is counted by its reason", async () => {
+    await page.goto(`${site}/auth/callback?error=access_denied`);
+    await page.waitForURL(`${site}/sign-in?problem=cancelled`);
+    assert.equal((await counted("/sign-in/cancelled", 1)).length >= 1, true);
+  });
+  await check("robots and browsers that ask not to be tracked are not counted", async () => {
+    const send = (userAgent) =>
+      fetch(`${site}/visit`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "user-agent": userAgent },
+        body: JSON.stringify({ path: "/credits", landing: true }),
+      });
+    assert.equal((await send("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")).status, 204);
+    assert.equal((await send("Mozilla/5.0 HeadlessChrome/130.0.0.0")).status, 204);
+    assert.deepEqual(viewsOf("/credits"), [], "a robot was counted");
+    // A member page is refused by the site before it reaches the database.
+    await fetch(`${site}/visit`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "user-agent": "Mozilla/5.0 Chrome/130.0.0.0" },
+      body: JSON.stringify({ path: "/profile", landing: true }),
+    });
+    assert.deepEqual(viewsOf("/profile"), []);
+
+    // It gives an ordinary name, so only its request not to be tracked can be what stops the count.
+    const quiet = await browser.newContext({ userAgent: await page.evaluate(() => navigator.userAgent) });
+    await quiet.addInitScript(() => Object.defineProperty(Navigator.prototype, "doNotTrack", { get: () => "1" }));
+    const quietPage = await quiet.newPage();
+    await quietPage.goto(`${site}/credits`);
+    await quietPage.getByRole("heading", { level: 1 }).waitFor();
+    await quietPage.waitForTimeout(800);
+    assert.deepEqual(viewsOf("/credits"), [], "a browser that asked not to be tracked was counted");
+    await quiet.close();
   });
 
   await check("no page raised a script error", async () => {
