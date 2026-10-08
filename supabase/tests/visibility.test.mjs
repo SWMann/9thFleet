@@ -51,11 +51,33 @@ test("a visitor reads the settings, grades and ranks", async () => {
   assert.equal(await count(visitor, "ranks"), 54);
 });
 
-test("a visitor is refused everything else", async () => {
+// The public site lists the fleet's roles, so the structure is open to read.
+// It names no one: who holds a post is in the tables the next test covers.
+test("a visitor reads the structure: units, positions and what each requires", async () => {
+  const visitor = fleet.visitor();
+  assert.equal(await count(visitor, "units"), 14);
+  assert.equal(await count(visitor, "positions"), 52);
+  assert.equal(await count(visitor, "qualifications"), 6);
+  assert.ok((await count(visitor, "position_qualifications")) > 0);
+});
+
+test("a visitor cannot change the structure", async () => {
+  const visitor = fleet.visitor();
+  for (const change of [
+    "update public.units set opens_at_stage = 1",
+    "update public.positions set opens_at_stage = 1",
+    "delete from public.position_qualifications",
+    "update public.qualifications set name = 'Anything'",
+    "insert into public.units (name, kind) values ('Shadow Fleet', 'ship')",
+  ]) {
+    await assert.rejects(visitor.query(change), /permission denied/, change);
+  }
+});
+
+test("a visitor is refused everything about people", async () => {
   const visitor = fleet.visitor();
   const closed = [
-    "members", "member_accounts", "member_roles", "units", "positions", "qualifications",
-    "position_qualifications", "qualification_awards", "assignments", "applications",
+    "members", "member_accounts", "member_roles", "qualification_awards", "assignments", "applications",
     "application_notes", "audit_log", "roster",
   ];
   for (const table of closed) {
@@ -71,9 +93,12 @@ test("an applicant sees themselves and their own application, and no more", asyn
   assert.equal(await count(applicant, "roster"), 1);
   assert.equal(await count(applicant, "member_accounts"), 1);
   assert.equal(await count(applicant, "applications"), 1);
-  for (const table of ["units", "positions", "qualifications", "position_qualifications", "assignments", "qualification_awards", "member_roles", "application_notes", "audit_log"]) {
+  for (const table of ["assignments", "qualification_awards", "member_roles", "application_notes", "audit_log"]) {
     assert.equal(await count(applicant, table), 0, table);
   }
+  // The structure is public, so an applicant reads it like anyone else. It shows no holders.
+  assert.equal(await count(applicant, "units"), 14);
+  assert.equal(await count(applicant, "positions"), 52);
 });
 
 test("a member sees the serving fleet and its order of battle", async () => {
@@ -114,7 +139,8 @@ test("a recruit and a reservist see the fleet too", async () => {
 test("a discharged member sees only themselves and their own record", async () => {
   const discharged = fleet.as(who.discharged);
   assert.deepEqual(await discharged.rows("select id from public.members"), [{ id: who.discharged }]);
-  assert.equal(await count(discharged, "units"), 0);
+  assert.equal(await count(discharged, "units"), 14, "the structure is public");
+  assert.equal(await count(discharged, "roster"), 1);
   assert.equal(await count(discharged, "member_roles"), 0);
   assert.equal(await count(discharged, "assignments"), 1);
   assert.equal(await count(discharged, "qualification_awards"), 2);

@@ -13,6 +13,7 @@ or let someone promote themselves.
 | `migrations/…_core_schema.sql` | Members, the order of battle, qualifications, recruiting, the audit log and every access rule |
 | `migrations/…_reference_data.sql` | The 18 grades, the rank names for each service and the first six qualifications |
 | `migrations/…_launch_order_of_battle.sql` | The units and positions that open in stages 1 to 3, from Volume 1 |
+| `migrations/…_public_structure.sql` | Lets anyone read the units, the positions and what each requires, for the site's roles pages |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 Events, attendance and the link to the voice app are not here yet.
@@ -31,8 +32,8 @@ Staff look after people, command makes appointments, and the admin owns the stru
 
 | Who | Can see | Can do |
 | --- | --- | --- |
-| Visitor, not signed in | Whether recruitment is open, the grades and the rank names | Nothing |
-| Applicant | Their own record and their own application | Set a character name and an RSI handle, apply while recruitment is open, withdraw |
+| Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: units, positions and the qualifications each requires. Never who holds one | Nothing |
+| Applicant | The same, and their own record and their own application | Set a character name and an RSI handle, apply while recruitment is open, withdraw |
 | Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, and who holds which position and qualification | Change their RSI handle. A full member can apply for the cadet course |
 | Instructor | The same | Award a qualification to someone else, in their own name |
 | Staff | Everyone, every application and the interview notes | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
@@ -78,8 +79,8 @@ tables and Supabase's own default privileges. It is only for the tests.
 
 ## The live database
 
-The three migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
-database was compared with the tested copy after they were applied, and matched.
+The migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
+database was compared with the tested copy after the first three were applied, and matched.
 
 Each file name starts with the version number Supabase recorded when it was applied, so this folder
 and the database's own migration history agree.

@@ -33,7 +33,7 @@ The browser tests do not touch Discord or the live database. They need a browser
 | Test | Stand-in | What it is for |
 | --- | --- | --- |
 | `e2e/sign-in.mjs` | `e2e/mock-supabase.mjs`, which answers from memory | Sign-in, cookies, redirects, the member's record and the order of battle |
-| `e2e/recruiting.mjs` | `e2e/supabase-with-database.mjs`, which runs the real migrations in an in-memory PostgreSQL | Applying and the staff pages, against the database's real rules |
+| `e2e/recruiting.mjs` | `e2e/supabase-with-database.mjs`, which runs the real migrations in an in-memory PostgreSQL | The ranks, roles and manual pages, applying and the staff pages, against the database's real rules |
 
 Write new tests the second way. A refusal in that test is the database's own refusal, so the test
 fails if the site and the rules ever disagree. The stand-in understands only the kinds of query the
@@ -51,6 +51,8 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/apply` | The application form, and the state of your application once it is sent |
 | `/staff/applications` | For staff: the applications, their answers, interview notes and the decision. An admin opens and closes recruitment here |
 | `/ranks` | Every grade and its rank name in each service, read from the database. Open to everyone |
+| `/roles` | The areas of work, the posts in each and a card for each kind of post, read from the database. Open to everyone. It never shows who holds a post |
+| `/manual` | The fleet manual: the doctrine volumes that have been reviewed, section by section. Open to everyone |
 | `/credits` | Who took each picture on the site, and its licence |
 | `/menu` | The menu as a page, for a browser that is not running scripts |
 
@@ -85,6 +87,10 @@ Two things are set in the Supabase dashboard, under Authentication:
 | The front page | `app/page.tsx` |
 | The standards page | `app/standards/page.tsx` |
 | The ranks page | `app/ranks/`, and what it reads in `lib/ranks.ts`. The rank names themselves are in the database |
+| The roles pages | `app/roles/`, and what they read in `lib/roles.ts`. The posts themselves are in the database |
+| Which area a post belongs to, and the areas' names, pictures and descriptions | `lib/areas.ts` |
+| The fleet manual's words | The Markdown files in `content/manual/`. See Fleet manual below |
+| The list of volumes, their state and the latest changes | `lib/manual.ts` |
 | The joining page | `app/joining/page.tsx` |
 | The sign-in page | `app/sign-in/page.tsx` |
 | The order of battle page | `app/order-of-battle/page.tsx`, and what it reads in `lib/order-of-battle.ts` |
@@ -94,6 +100,27 @@ Two things are set in the Supabase dashboard, under Authentication:
 | The menu | `lib/menu.ts` |
 | The pictures | `lib/pictures.ts`. See Pictures below |
 | Colours and type | `app/globals.css` |
+
+## Fleet manual
+
+The manual is the doctrine, published volume by volume. Each published volume is one Markdown file
+in `content/manual/`: a `#` title, an opening paragraph, then a `##` heading for each section and
+`###` headings inside a section. Each section becomes a page, and its first sentence is shown as its
+summary.
+
+To publish a volume once the Fleet Commander has reviewed it:
+
+1. Put its Markdown in `content/manual/`. Leave out the review notes, the byline and anything
+   addressed to the reviewer: the manual speaks to every member.
+2. In `lib/manual.ts`, set the volume's `state` to `reviewed`, set `dated`, and name the file.
+3. Add a line to `changes` in the same file.
+
+A volume marked `draft` gets a page that names it and shows none of its text. A `planned` volume has
+no page. Links into the manual from elsewhere go through `sectionLink`, which stops the build if a
+section has been renamed.
+
+The roles pages group posts into areas with `lib/areas.ts`. A post that no rule there places lands
+in "Other posts", so nothing is left off the site.
 
 ## Search engines
 

@@ -1,5 +1,5 @@
 import "server-only";
-import { getSession, type Service } from "@/lib/member";
+import { getSession, isServing, type Service } from "@/lib/member";
 import { createClient } from "@/lib/supabase/server";
 
 /** Someone holding a post or a duty. */
@@ -46,7 +46,7 @@ export type OrderOfBattle =
   | { state: "no-database" }
   | { state: "signed-out" }
   | { state: "no-record" }
-  /** Signed in, but not serving. The database shows the order of battle to the serving fleet only. */
+  /** Signed in, but not serving. Who holds each post is shown to the serving fleet only. */
   | { state: "outside" }
   | { state: "ready"; fleet: Unit; tally: Tally };
 
@@ -86,6 +86,10 @@ type RosterRow = {
 export async function getOrderOfBattle(): Promise<OrderOfBattle> {
   const session = await getSession();
   if (session.state !== "member") return { state: session.state };
+  // Anyone may read the structure, so the database no longer hides the units
+  // from someone outside the fleet. Who holds each post is for the serving
+  // fleet, and this page shows holders, so it is refused here.
+  if (!isServing(session.member)) return { state: "outside" };
 
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };

@@ -33,6 +33,16 @@ export const menu: MenuGroup[] = [
     ],
   },
   {
+    title: "Fleet manual",
+    picture: "menuManual",
+    links: [
+      { href: "/manual", label: "By volume" },
+      { href: "/roles", label: "By role" },
+      { href: "/manual/organisation", label: "Volume 1: Organisation" },
+      { href: "/manual/command", label: "Volume 2: Command" },
+    ],
+  },
+  {
     title: "Members",
     picture: "menuMembers",
     links: [{ href: "/sign-in", label: "Sign in" }],

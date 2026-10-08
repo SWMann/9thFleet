@@ -34,6 +34,12 @@ export function SiteFooter() {
               <Link href="/joining">Joining</Link>
             </li>
             <li>
+              <Link href="/manual">Fleet manual</Link>
+            </li>
+            <li>
+              <Link href="/roles">Roles</Link>
+            </li>
+            <li>
               <Link href="/credits">Picture credits</Link>
             </li>
           </ul>
