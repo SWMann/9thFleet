@@ -2,7 +2,7 @@ import "server-only";
 import { attemptNames, type Attempt } from "@/lib/activity";
 import { gate } from "@/lib/admin";
 import type { Role, Service, Status } from "@/lib/member";
-import { returnedNames, type Returned } from "@/lib/operations-form";
+import { hLabel, returnedNames, type Returned } from "@/lib/operations-form";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -89,8 +89,9 @@ const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
   personnel: ["members", "member_roles", "assignments", "qualification_awards"],
   recruiting: ["applications", "application_notes", "fleet_settings"],
   operations: [
-    "events", "event_orders", "event_units", "event_key_posts", "event_posts", "attendance", "attendance_returns",
-    "after_action_reports",
+    "events", "event_orders", "event_units", "event_key_posts", "event_posts", "event_objectives", "event_elements",
+    "event_timings", "event_ships", "event_nets", "event_amendments", "event_acknowledgements", "attendance",
+    "attendance_returns", "after_action_reports",
   ],
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
@@ -571,6 +572,44 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
 
     case "event_orders":
       return line("operations", `${actor} changed the orders of ${names.event(any.event_id)}`, changes(row, names));
+
+    case "event_objectives":
+    case "event_elements":
+    case "event_ships":
+    case "event_nets": {
+      const event = names.event(any.event_id);
+      const [thing, called] = {
+        event_objectives: ["objective", any.title],
+        event_elements: ["element", any.name],
+        event_ships: ["ship", any.ship],
+        event_nets: ["net", any.name],
+      }[row.table_name] as [string, unknown];
+      const name = `${thing} ${String(called ?? "")}`.trim();
+      if (row.action === "insert") return line("operations", `${actor} added the ${name} to the plan of ${event}`);
+      if (row.action === "delete") return line("operations", `${actor} removed the ${name} from the plan of ${event}`);
+      return line("operations", `${actor} changed the ${name} in the plan of ${event}`, changes(row, names));
+    }
+
+    case "event_timings": {
+      const event = names.event(any.event_id);
+      const timing = `${hLabel(Number(any.offset_minutes ?? 0))} ${String(any.label ?? "")}`.trim();
+      if (row.action === "insert") return line("operations", `${actor} added ${timing} to the timeline of ${event}`);
+      if (row.action === "delete") return line("operations", `${actor} removed ${timing} from the timeline of ${event}`);
+      return line("operations", `${actor} changed ${timing} in the timeline of ${event}`, changes(row, names));
+    }
+
+    case "event_amendments": {
+      const event = names.event(any.event_id);
+      if (row.action === "delete") return line("operations", `${actor} deleted amendment ${any.number} to the orders of ${event}`);
+      const body = String(now.body ?? "");
+      return line("operations", `${actor} issued amendment ${any.number} to the orders of ${event}`, body.length > 240 ? `${body.slice(0, 240)}…` : body);
+    }
+
+    case "event_acknowledgements": {
+      const event = names.event(any.event_id);
+      if (row.action === "delete") return line("operations", `${actor} removed ${whose} acknowledgement for ${event}`);
+      return line("operations", `${subject} acknowledged amendment ${now.amendment_number} to the orders of ${event}`);
+    }
 
     case "event_units": {
       const event = names.event(any.event_id);

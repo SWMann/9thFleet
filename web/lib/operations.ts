@@ -2,6 +2,7 @@ import "server-only";
 import { inOwnPost, manningOf, unitsTakingPart, type Manning, type Place, type RollLine } from "@/lib/manning";
 import { getSession, isServing, type Member, type Service } from "@/lib/member";
 import {
+  offsetFrom,
   sectionsFrom,
   serviceNames,
   type EventState,
@@ -47,6 +48,9 @@ type EventRow = {
   requires_qualification_id: string | null;
   places: number | null;
   minimum_attending: number | null;
+  muster_at: string;
+  area: string;
+  reading: string[] | null;
 };
 type AttendanceRow = {
   event_id: string;
@@ -69,7 +73,7 @@ type ExtraPostRow = {
 type RosterRow = { member_id: string; character_name: string | null; rank_name: string | null; status: string };
 
 const EVENT =
-  "id, kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, state, created_by, announced_at, roll_closes_at, copied_from, repeats_weekly, open_to_recruits, open_to_service, requires_qualification_id, places, minimum_attending";
+  "id, kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, state, created_by, announced_at, roll_closes_at, copied_from, repeats_weekly, open_to_recruits, open_to_service, requires_qualification_id, places, minimum_attending, muster_at, area, reading";
 const ATTENDANCE = "event_id, member_id, reply, stand_in_position_id, event_post_id, place, replied_at";
 const EXTRA_POST = "id, event_id, title, role_id, must_fill, open_to_volunteers, sort_order";
 const SERVING = ["recruit", "auxiliary", "member", "reserve"];
@@ -103,6 +107,11 @@ export type FleetEvent = {
   /** How many can attend, and how many must. Null for no limit and no minimum. */
   places: number | null;
   minimumAttending: number | null;
+  /** Where to muster, and the area the event works in. Empty when not given. */
+  musterAt: string;
+  area: string;
+  /** Sections of the manual to read first, each as volume/section. */
+  reading: string[];
 };
 
 /** One primary post on the night: who holds it, whether they are coming, and who stands in if not. */
@@ -279,6 +288,9 @@ function toEvent(
       : null,
     places: row.places,
     minimumAttending: row.minimum_attending,
+    musterAt: row.muster_at ?? "",
+    area: row.area ?? "",
+    reading: row.reading ?? [],
   };
 }
 
@@ -528,6 +540,18 @@ export type Choices = {
   qualifications: { id: string; name: string }[];
 };
 
+/** The parts of the plan that are lists: each as the editor and the event's page need it. */
+export type Plan = {
+  objectives: { id: string; title: string }[];
+  elements: { id: string; name: string; callsign: string; task: string }[];
+  /** In order of time. `at` is the moment itself, worked out from the event's start. */
+  timings: { id: string; offsetMinutes: number; label: string; at: string }[];
+  ships: { id: string; ship: string; note: string }[];
+  nets: { id: string; name: string; purpose: string; controller: string }[];
+};
+
+export type Amendment = { number: number; body: string; issuedBy: Person | null; issuedAt: string };
+
 export type Operation =
   | Outside
   | { state: "not-found" }
@@ -578,6 +602,16 @@ export type Operation =
       types: EventType[];
       /** What can be chosen when changing the event. Empty lists for someone who may not. */
       choices: Choices;
+      plan: Plan;
+      /** Changes to the orders since the event was announced, the latest first. */
+      amendments: Amendment[];
+      /** The latest amendment this member has acknowledged, if any. */
+      acknowledged: number | null;
+      /**
+       * For whoever runs the event: who of those attending has not acknowledged the latest amendment.
+       * Empty for everyone else, and when there is no amendment.
+       */
+      awaiting: Person[];
     };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -591,8 +625,11 @@ export async function getOperation(id: string): Promise<Operation> {
   if (!supabase) return { state: "no-database" };
   const { member } = who;
 
-  const [found, orders, lines, marks, report, roster, units, keyPosts, extraPosts, awards, roleRows, areaRows, battle, types, qualifications] =
-    await Promise.all([
+  const [
+    found, orders, lines, marks, report, roster, units, keyPosts, extraPosts, awards, roleRows, areaRows,
+    objectives, elements, timings, ships, nets, amendments, acknowledgements,
+    battle, types, qualifications,
+  ] = await Promise.all([
       supabase.from("events").select(EVENT).eq("id", id).maybeSingle(),
       supabase
         .from("event_orders")
@@ -614,11 +651,22 @@ export async function getOperation(id: string): Promise<Operation> {
       supabase.from("qualification_awards").select("qualification_id").eq("member_id", member.id),
       supabase.from("fleet_roles").select("id, name, slug, area_id"),
       supabase.from("areas").select("id, slug"),
+      supabase.from("event_objectives").select("id, title, sort_order").eq("event_id", id),
+      supabase.from("event_elements").select("id, name, callsign, task, sort_order").eq("event_id", id),
+      supabase.from("event_timings").select("id, offset_minutes, label").eq("event_id", id),
+      supabase.from("event_ships").select("id, ship, note, sort_order").eq("event_id", id),
+      supabase.from("event_nets").select("id, name, purpose, controller, sort_order").eq("event_id", id),
+      supabase.from("event_amendments").select("number, body, issued_by, issued_at").eq("event_id", id),
+      // The database returns this member's own line, or every line to whoever runs the event.
+      supabase.from("event_acknowledgements").select("member_id, amendment_number").eq("event_id", id),
       getOrderOfBattle(),
       readEventTypes(supabase),
       readQualifications(supabase),
     ]);
-  for (const result of [found, orders, lines, marks, report, roster, units, keyPosts, extraPosts, awards, roleRows, areaRows]) {
+  for (const result of [
+    found, orders, lines, marks, report, roster, units, keyPosts, extraPosts, awards, roleRows, areaRows,
+    objectives, elements, timings, ships, nets, amendments, acknowledgements,
+  ]) {
     if (result.error) throw new Error(`The event could not be read: ${result.error.message}`);
   }
   // A draft that is not this member's to see comes back as nothing at all.
@@ -691,6 +739,50 @@ export async function getOperation(id: string): Promise<Operation> {
   }
 
   const reserveAt = roll.reserve.findIndex((person) => person.id === member.id);
+
+  // The plan's lists, each in its own order.
+  type Ordered = { sort_order: number };
+  const inOrder = <T extends Ordered>(rows: unknown) => ((rows ?? []) as T[]).sort((a, b) => a.sort_order - b.sort_order);
+  const plan: Plan = {
+    objectives: inOrder<Ordered & { id: string; title: string }>(objectives.data).map((entry) => ({ id: entry.id, title: entry.title })),
+    elements: inOrder<Ordered & Plan["elements"][number]>(elements.data).map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      callsign: entry.callsign,
+      task: entry.task,
+    })),
+    timings: ((timings.data ?? []) as { id: string; offset_minutes: number; label: string }[])
+      .sort((a, b) => a.offset_minutes - b.offset_minutes || a.label.localeCompare(b.label))
+      .map((entry) => ({ id: entry.id, offsetMinutes: entry.offset_minutes, label: entry.label, at: offsetFrom(row.starts_at, entry.offset_minutes) })),
+    ships: inOrder<Ordered & Plan["ships"][number]>(ships.data).map((entry) => ({ id: entry.id, ship: entry.ship, note: entry.note })),
+    nets: inOrder<Ordered & Plan["nets"][number]>(nets.data).map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      purpose: entry.purpose,
+      controller: entry.controller,
+    })),
+  };
+
+  const issued = ((amendments.data ?? []) as { number: number; body: string; issued_by: string | null; issued_at: string }[])
+    .sort((a, b) => b.number - a.number)
+    .map((entry): Amendment => ({
+      number: entry.number,
+      body: entry.body,
+      issuedBy: nameOf(entry.issued_by ? people.get(entry.issued_by) : undefined, entry.issued_by),
+      issuedAt: entry.issued_at,
+    }));
+  const latest = issued[0]?.number ?? null;
+  const acknowledgedBy = new Map(
+    ((acknowledgements.data ?? []) as { member_id: string; amendment_number: number }[]).map((entry) => [entry.member_id, entry.amendment_number]),
+  );
+  // Everyone attending is asked to acknowledge the latest amendment, whether they have a place yet or not.
+  const awaiting =
+    runs && latest !== null
+      ? attendance
+          .filter((line) => line.reply === "attending" && (acknowledgedBy.get(line.memberId) ?? 0) < latest)
+          .map((line) => nameOf(people.get(line.memberId), line.memberId)!)
+          .sort((a, b) => a.name.localeCompare(b.name))
+      : [];
   return {
     state: "ready",
     member,
@@ -751,6 +843,10 @@ export async function getOperation(id: string): Promise<Operation> {
           qualifications,
         }
       : { units: [], posts: [], roles: [], qualifications: [] },
+    plan,
+    amendments: issued,
+    acknowledged: acknowledgedBy.get(member.id) ?? null,
+    awaiting,
   };
 }
 

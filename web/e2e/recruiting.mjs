@@ -556,6 +556,12 @@ try {
     await page.goto(`${site}/operations/${(await patrol()).id}`);
     await headingIs("Patrol 001");
   };
+  // An event is changed on three pages, with a row of links between them.
+  const editPart = async (name) => {
+    const parts = page.locator('nav[aria-label="Parts of the event"]:visible');
+    await parts.getByRole("link", { name, exact: true }).click();
+    await page.locator('nav[aria-label="Parts of the event"]:visible a[aria-current="page"]', { hasText: name }).waitFor();
+  };
   await check("an applicant is not shown operations", async () => {
     await signInAs(sam);
     await page.goto(`${site}/operations`);
@@ -593,6 +599,7 @@ try {
     await signInAs(founder);
     await openPatrol();
     await page.getByRole("link", { name: "Change the details and orders" }).click();
+    await editPart("Orders and plan");
     await page.getByLabel("Warning order").fill("Patrol the lane at 1900 UTC.\nCommander: Ada Vance.");
     await page.getByLabel("2 Mission").fill("Task Force Jericho will patrol the lane in order to deter piracy against traders.");
     await page.getByRole("button", { name: "Save the orders" }).click();
@@ -1377,12 +1384,14 @@ try {
   });
   await check("the orders are written under the type's own headings", async () => {
     await page.getByRole("link", { name: "Change the details and orders" }).click();
+    await eventFormReady();
+    assert.equal(await page.getByLabel("Repeats weekly").isChecked(), true);
+    await editPart("Orders and plan");
     await page.getByLabel("2 Aim").fill("Every gunner hits a moving target from the dorsal turret.");
     await page.getByLabel("1 Situation").waitFor();
     await page.getByRole("button", { name: "Save the orders" }).click();
     await page.locator(".form-result:visible").filter({ hasText: "Saved." }).waitFor();
     assert.equal((await ordersOf("Training Night 001")).mission, "Every gunner hits a moving target from the dorsal turret.");
-    assert.equal(await page.getByLabel("Repeats weekly").isChecked(), true);
   });
   await check("closing a weekly event drafts next week's, with its details and orders, and announces nothing", async () => {
     const first = await eventTitled("Training Night 001");
@@ -1442,6 +1451,7 @@ try {
     assert.equal(copy.repeats_weekly, false, "a copy is one night unless it is set to repeat");
     assert.equal(copy.commander_id, (await memberOf(founder)).id);
     assert.ok(Date.parse(copy.starts_at) > Date.now(), "a copy starts in the future");
+    await editPart("Orders and plan");
     assert.equal(await page.getByLabel("2 Mission").inputValue(), "Task Force Jericho will patrol the lane in order to deter piracy against traders.");
     assert.equal((await ordersOf("Patrol 002")).warning_order, (await ordersOf("Patrol 001")).warning_order);
     await shot("operation-copy");
@@ -1528,7 +1538,7 @@ try {
   });
   await check("whoever drafts an event names its units, the posts that must be filled and posts of its own", async () => {
     await page.getByRole("link", { name: "Change the details and orders" }).click();
-    await page.getByRole("heading", { name: "Who takes part" }).waitFor();
+    await editPart("Who takes part");
     const units = page.locator("form.picks:visible", { hasText: "Units taking part" });
     await units.getByLabel("Task Force Jericho › Training Ship").check();
     await units.getByRole("button", { name: "Save the units" }).click();
@@ -1713,7 +1723,7 @@ try {
     await openGunnery();
     await page.getByRole("button", { name: "Draft another like this" }).click();
     await headingIs("Gunnery 002");
-    await page.getByRole("heading", { name: "Who takes part" }).waitFor();
+    await editPart("Who takes part");
     const copy = await eventTitled("Gunnery 002");
     assert.equal(copy.places, 2);
     assert.equal(copy.minimum_attending, 2);
@@ -1743,6 +1753,199 @@ try {
     assert.match(text, /Ada Vance moved Lee Tanaka to the reserve list for Gunnery 001\./);
     assert.match(text, /Ada Vance placed Ada Vance as Range Safety Officer for Gunnery 001\.|Ada Vance took the post Range Safety Officer for Gunnery 001\./);
     assert.match(text, /Ada Vance removed the post Trainee 2 from Gunnery 002\./);
+  });
+
+  console.log("Fuller orders");
+  const convoy = () => eventTitled("Convoy 001");
+  const openConvoy = () => openEvent("Convoy 001");
+  const planPart = (key) => page.locator(`#plan-${key}:visible`);
+  // Add a record to one of the plan's lists: open its form, fill it, and send it.
+  const addToPlan = async (key, values, button) => {
+    const adding = planPart(key).locator("details.record-new");
+    if ((await adding.getAttribute("open")) === null) await adding.locator("summary").click();
+    for (const [label, value] of Object.entries(values)) await adding.getByLabel(label).fill(value);
+    await adding.getByRole("button", { name: button }).click();
+    return adding;
+  };
+  const planRows = async (table, columns) =>
+    supabase.sql(`select ${columns} from public.${table} where event_id = $1 order by 1`, [(await convoy()).id]);
+
+  await check("an event says where to muster, and what to read before the night", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/operations/new`);
+    await eventFormReady();
+    await page.getByLabel("Type").selectOption({ label: "Patrol" });
+    await page.getByLabel("Title").fill("Convoy 001");
+    await page.getByLabel(/^Muster at/).fill("Baijini Point, pad 04");
+    await page.getByLabel(/^Area/).fill("ArcCorp to microTech");
+    await page.getByRole("button", { name: "Save as a draft" }).click();
+    await headingIs("Convoy 001");
+    const facts = await page.locator(".facts:visible").innerText();
+    assert.match(facts, /Muster at\s+Baijini Point, pad 04/i);
+    assert.match(facts, /Area\s+ArcCorp to microTech/i);
+    // The event starts at 19:00 UTC, so the timeline below is worked out against that.
+    await supabase.sql("update public.events set starts_at = date_trunc('day', now()) + interval '3 days 19 hours' where title = 'Convoy 001'");
+
+    await page.getByRole("link", { name: "Change the details and orders" }).click();
+    await editPart("Orders and plan");
+    const reading = page.locator("form:visible", { has: page.getByRole("button", { name: "Save the reading" }) });
+    await reading.getByLabel(/^Read before the night/).fill("the orders chapter");
+    await reading.getByRole("button", { name: "Save the reading" }).click();
+    await told(reading, /is not a section of the manual/);
+    assert.equal(await reading.getByLabel(/^Read before the night/).inputValue(), "the orders chapter", "the form lost what was typed");
+    // An address copied from the site is taken as it is.
+    await reading.getByLabel(/^Read before the night/).fill("/manual/command/orders\norganisation/navy-squadron");
+    await reading.getByRole("button", { name: "Save the reading" }).click();
+    await told(reading, "Saved.");
+    assert.deepEqual((await convoy()).reading, ["command/orders", "organisation/navy-squadron"]);
+  });
+  await check("the plan is written a record at a time: objectives, elements and tasks, the timeline, ships and nets", async () => {
+    await told(await addToPlan("objectives", { Objective: "Hold the lane for one hour" }, "Add the objective"), "Added.");
+    await told(await addToPlan("objectives", { Objective: "Bring every trader through" }, "Add the objective"), "Added.");
+    await told(
+      await addToPlan("elements", { Element: "UEES Nexus", Callsign: "Anvil", Task: "Screen the convoy from the sunward side." }, "Add the element"),
+      "Added.",
+    );
+    const again = await addToPlan("elements", { Element: "UEES Nexus", Task: "Something else." }, "Add the element");
+    await told(again, "The event already has an element with that name.");
+    assert.equal(await again.getByLabel("Task").inputValue(), "Something else.", "the form lost what was typed");
+    await again.getByLabel("Element").fill("A Flight");
+    await again.getByLabel("Callsign").fill("Hornet");
+    await again.getByRole("button", { name: "Add the element" }).click();
+    await told(again, "Added.");
+
+    // A time is given as the time of day in UTC, and kept against the start.
+    await told(await addToPlan("timings", { "Time, in UTC": "18:45", "What happens": "Muster" }, "Add the timing"), "Added.");
+    await told(await addToPlan("timings", { "Time, in UTC": "20:30", "What happens": "Hot debrief" }, "Add the timing"), "Added.");
+    await told(await addToPlan("ships", { Ship: "Hammerhead", Note: "Flagship for the night" }, "Add the ship"), "Added.");
+    await told(await addToPlan("ships", { Ship: "Gladius" }, "Add the ship"), "Added.");
+    await told(await addToPlan("nets", { Net: "Command", "What it is for": "Orders and reports", "Who controls it": "Zero" }, "Add the net"), "Added.");
+
+    assert.deepEqual(await planRows("event_timings", "offset_minutes, label"), [
+      { offset_minutes: -15, label: "Muster" },
+      { offset_minutes: 90, label: "Hot debrief" },
+    ]);
+    assert.deepEqual(await planRows("event_elements", "name, callsign, task"), [
+      { name: "A Flight", callsign: "Hornet", task: "Something else." },
+      { name: "UEES Nexus", callsign: "Anvil", task: "Screen the convoy from the sunward side." },
+    ]);
+
+    // A record is changed in place, and one that is not wanted is removed.
+    const flight = planPart("elements").locator("details.record:not(.record-new)", { has: page.locator("summary strong", { hasText: /^A Flight$/ }) });
+    await flight.locator("summary").click();
+    await flight.getByLabel("Task").fill("Top cover for the Nexus.");
+    await flight.getByRole("button", { name: "Save", exact: true }).click();
+    await told(flight, "Saved.");
+    const gladius = planPart("ships").locator("details.record:not(.record-new)", { has: page.locator("summary strong", { hasText: /^Gladius$/ }) });
+    await gladius.locator("summary").click();
+    await gladius.getByRole("button", { name: /Remove this ship/ }).click();
+    await gladius.waitFor({ state: "detached" });
+    assert.deepEqual(await planRows("event_ships", "ship, note"), [{ ship: "Hammerhead", note: "Flagship for the night" }]);
+    assert.equal((await planRows("event_elements", "name, task"))[0].task, "Top cover for the Nexus.");
+    await shot("operation-plan-edit");
+  });
+  await check("the event's page lays the plan out with the orders, in the reader's own time as well as UTC", async () => {
+    await openConvoy();
+    const orders = (await page.locator(".orders:visible").innerText()).replace(/\s+/g, " ");
+    assert.match(orders, /Objectives Hold the lane for one hour Bring every trader through/i);
+    assert.match(orders, /3 Execution .* Tasks UEES Nexus Screen the convoy from the sunward side\. A Flight Top cover for the Nexus\./i);
+    assert.match(orders, /Timeline .*18:45 UTC.*H-15 Muster .*20:30 UTC.*H\+90 Hot debrief/i);
+    assert.match(orders, /4 Support .* Ships .*Hammerhead Flagship for the night/i);
+    assert.match(orders, /Comms plan .*Command Orders and reports Zero .*UEES Nexus Anvil A Flight Hornet/i);
+    assert.deepEqual(await page.locator(".orders:visible + .reading a").allInnerTexts(), ["Orders", "Navy squadron"]);
+
+    // Someone reading this in Sydney is shown their own clock beside UTC.
+    const starts = (await convoy()).starts_at;
+    const inSydney = (iso) =>
+      new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Australia/Sydney" }).format(new Date(iso));
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Emulation.setTimezoneOverride", { timezoneId: "Australia/Sydney" });
+    try {
+      await openConvoy();
+      await page.locator(".facts:visible").getByText(`${inSydney(starts)} your time`).waitFor();
+      const muster = new Date(Date.parse(starts) - 15 * 60_000).toISOString();
+      await page.locator(".plan-table:visible").getByText(`${inSydney(muster)} your time`).waitFor();
+      await shot("operation-plan");
+    } finally {
+      await cdp.send("Emulation.setTimezoneOverride", { timezoneId: "" });
+      await cdp.detach();
+    }
+  });
+  await check("an amendment is numbered and dated, and everyone attending is asked to acknowledge it", async () => {
+    await openConvoy();
+    assert.equal(await page.getByLabel("Issue an amendment").count(), 0, "a draft's orders are simply changed");
+    await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).click();
+    await page.getByRole("button", { name: "Yes, announce it" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
+
+    await signInAs(kit);
+    await openConvoy();
+    await page.getByRole("button", { name: "Attending", exact: true }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "You are down as attending." }).waitFor();
+    assert.equal(await page.getByLabel("Issue an amendment").count(), 0, "only whoever runs the event issues one");
+
+    await signInAs(founder);
+    await openConvoy();
+    await page.getByLabel("Issue an amendment").fill("Muster moved to pad 06.\nStart is unchanged.");
+    await page.getByRole("button", { name: "Issue the amendment" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "Amendment 1 is issued." }).waitFor();
+    await page.getByText("Not yet acknowledged amendment 1: Starman Recruit Kit Marlow.").waitFor();
+    const issued = await one("select * from public.event_amendments where event_id = $1", [(await convoy()).id]);
+    assert.equal(issued.number, 1);
+    assert.equal(issued.issued_by, (await memberOf(founder)).id);
+    assert.match(await page.locator(".amendment-list:visible").innerText(), /Amendment 1[\s\S]*by Lt\. Commander Ada Vance[\s\S]*Muster moved to pad 06\./);
+
+    await signInAs(kit);
+    await openConvoy();
+    await page.getByText("Amendment 1 changes these orders.").waitFor();
+    await shot("operation-amendment");
+    await page.getByRole("button", { name: "Acknowledge amendment 1" }).click();
+    await page.getByText("You have acknowledged amendment 1.").waitFor();
+    const line = await one("select * from public.event_acknowledgements where event_id = $1 and member_id = $2", [(await convoy()).id, (await memberOf(kit)).id]);
+    assert.equal(line.amendment_number, 1);
+
+    // Someone who has not said they are attending reads it, and is not asked.
+    await signInAs(lee);
+    await openConvoy();
+    await page.locator(".amendment-list:visible").waitFor();
+    assert.equal(await page.getByRole("button", { name: /Acknowledge amendment/ }).count(), 0);
+
+    await signInAs(founder);
+    await openConvoy();
+    await page.getByText("Everyone attending has acknowledged amendment 1.").waitFor();
+    await page.getByLabel("Issue an amendment").fill("Weapons tight throughout.");
+    await page.getByRole("button", { name: "Issue the amendment" }).click();
+    await page.getByText("Not yet acknowledged amendment 2: Starman Recruit Kit Marlow.").waitFor();
+    // The latest is first.
+    assert.match((await page.locator(".amendment-list:visible li").first().innerText()), /Amendment 2/);
+  });
+  await check("a copy carries the plan, and none of the amendments", async () => {
+    await page.getByRole("button", { name: "Draft another like this" }).click();
+    await headingIs("Convoy 002");
+    await eventFormReady();
+    assert.equal(await page.getByLabel(/^Muster at/).inputValue(), "Baijini Point, pad 04");
+    await editPart("Orders and plan");
+    await planPart("objectives").locator("details.record:not(.record-new)").first().waitFor();
+    assert.equal(await planPart("objectives").locator("details.record:not(.record-new)").count(), 2);
+    assert.equal(await planPart("timings").locator("details.record:not(.record-new)").count(), 2);
+    // A timing shows as its time of day, a week on.
+    assert.match(await planPart("timings").locator("details.record:not(.record-new) summary").first().innerText(), /Muster\s+18:45/);
+    assert.equal(await page.getByLabel(/^Read before the night/).inputValue(), "command/orders\norganisation/navy-squadron");
+    const copy = await eventTitled("Convoy 002");
+    assert.deepEqual(await supabase.sql("select 1 from public.event_amendments where event_id = $1", [copy.id]), []);
+    assert.equal((await supabase.sql("select 1 from public.event_nets where event_id = $1", [copy.id])).length, 1);
+  });
+  await check("the plan and its amendments are in the logs", async () => {
+    await page.goto(`${site}/admin/logs?show=operations`);
+    await page.locator(".log:visible").first().waitFor();
+    const text = await logText();
+    assert.match(text, /Ada Vance added the objective Hold the lane for one hour to the plan of Convoy 001\./);
+    assert.match(text, /Ada Vance added the element UEES Nexus to the plan of Convoy 001\./);
+    assert.match(text, /Ada Vance added H-15 Muster to the timeline of Convoy 001\./);
+    assert.match(text, /Ada Vance removed the ship Gladius from the plan of Convoy 001\./);
+    assert.match(text, /Ada Vance added the net Command to the plan of Convoy 001\./);
+    assert.match(text, /Ada Vance issued amendment 1 to the orders of Convoy 001\.\s+Muster moved to pad 06\./);
+    assert.match(text, /Kit Marlow acknowledged amendment 1 to the orders of Convoy 001\./);
   });
 
   await check("no page raised a script error", async () => {

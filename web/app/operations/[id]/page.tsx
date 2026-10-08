@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Suspense } from "react";
+import { Fragment, Suspense } from "react";
+import { ReadingList } from "@/components/manual/Reading";
 import { PageHead } from "@/components/PageHead";
+import { YourTime } from "@/components/YourTime";
 import { shortfall } from "@/lib/manning";
 import { getOperation, type FleetEvent, type Operation, type Person, type RollPost } from "@/lib/operations";
-import { formatWhen, returnedNames, serviceNames, stateNames, weapons, weaponsName } from "@/lib/operations-form";
+import { formatWhen, hLabel, returnedNames, serviceNames, stateNames, weapons, weaponsName, type ParagraphKey } from "@/lib/operations-form";
 import {
   CopyButton,
   GivePlace,
@@ -18,6 +20,7 @@ import {
   StandInButton,
   ToReserve,
 } from "../OpsForms";
+import { AcknowledgeButton, AmendmentForm } from "../PlanForms";
 
 export const metadata: Metadata = {
   title: "Event",
@@ -86,8 +89,12 @@ async function Event({ params }: { params: Props["params"] }) {
   if (result.state === "outside") return <Head title="Event" lead="Operations are for the serving fleet." />;
   if (result.state === "not-found") notFound();
 
-  const { event, orders, sections, runs, edits, report, manning, roll } = result;
+  const { event, orders, sections, runs, edits, report, manning, roll, plan, amendments } = result;
   const open_to = openTo(event);
+  const latest = amendments[0]?.number ?? null;
+  // Everyone who said they are attending is asked to acknowledge the latest amendment.
+  const toAcknowledge =
+    event.state === "announced" && latest !== null && result.mine.reply === "attending" && (result.acknowledged ?? 0) < latest ? latest : null;
   // Someone who may draft this type of event may draft another like it.
   const mayCopy = result.mayCreate.some((type) => type.key === event.kind);
   const when = formatWhen(event.startsAt);
@@ -115,13 +122,25 @@ async function Event({ params }: { params: Props["params"] }) {
             <dt>When</dt>
             <dd>
               {when.day}, {when.utc}
-              <span className="aside">{when.uk}</span>
+              <YourTime iso={event.startsAt} fallback={when.uk} withDay />
             </dd>
           </div>
           <div>
             <dt>Length</dt>
             <dd>{length(event.durationMinutes)}</dd>
           </div>
+          {event.musterAt ? (
+            <div>
+              <dt>Muster at</dt>
+              <dd>{event.musterAt}</dd>
+            </div>
+          ) : null}
+          {event.area ? (
+            <div>
+              <dt>Area</dt>
+              <dd>{event.area}</dd>
+            </div>
+          ) : null}
           <div>
             <dt>Roll</dt>
             <dd>
@@ -254,6 +273,18 @@ async function Event({ params }: { params: Props["params"] }) {
             editHref={edits ? `/operations/${event.id}/edit` : null}
             mayCancel={runs || event.state === "draft"}
           />
+          {runs && event.state === "announced" ? (
+            <div className="amend">
+              <AmendmentForm id={event.id} />
+              {latest !== null ? (
+                <p className="roll-note">
+                  {result.awaiting.length > 0
+                    ? `Not yet acknowledged amendment ${latest}: ${result.awaiting.map((person) => named(person, "")).join(", ")}.`
+                    : `Everyone attending has acknowledged amendment ${latest}.`}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -261,22 +292,68 @@ async function Event({ params }: { params: Props["params"] }) {
         <h2 id="orders">
           The <strong>orders</strong>
         </h2>
+        {amendments.length > 0 ? (
+          <div className="amendments">
+            <h3 className="unit-group-name">Amendments</h3>
+            {toAcknowledge !== null ? (
+              <div className="standing-in">
+                <p>
+                  <strong>Amendment {toAcknowledge}</strong> changes these orders. Read it, then acknowledge it.
+                </p>
+                <AcknowledgeButton id={event.id} number={toAcknowledge} />
+              </div>
+            ) : result.acknowledged !== null && result.acknowledged === latest ? (
+              <p className="roll-note">You have acknowledged amendment {latest}.</p>
+            ) : null}
+            <ol className="amendment-list" reversed>
+              {amendments.map((amendment) => {
+                const issued = formatWhen(amendment.issuedAt);
+                return (
+                  <li key={amendment.number} value={amendment.number}>
+                    <p className="amendment-head">
+                      <strong>Amendment {amendment.number}</strong>
+                      <span>
+                        {issued.day}, {issued.utc}, by {named(amendment.issuedBy, "a member who has left")}
+                      </span>
+                    </p>
+                    <p className="order-text">{amendment.body}</p>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        ) : null}
+
         <div className="orders">
           <div className="order">
             <h3>Warning order</h3>
             {orders.warning_order ? <p className="order-text">{orders.warning_order}</p> : <p className="order-none">Not written yet.</p>}
           </div>
-          {sections.map((section) => (
-            <div className="order" key={section.key}>
-              <h3>{section.name}</h3>
-              {orders[section.key] ? (
-                <p className="order-text">{orders[section.key]}</p>
-              ) : (
-                <p className="order-none">Not written yet. {section.holds}</p>
-              )}
+          {plan.objectives.length > 0 ? (
+            <div className="order">
+              <h3>Objectives</h3>
+              <ol className="plan-list">
+                {plan.objectives.map((objective) => (
+                  <li key={objective.id}>{objective.title}</li>
+                ))}
+              </ol>
             </div>
+          ) : null}
+          {sections.map((section) => (
+            <Fragment key={section.key}>
+              <div className="order">
+                <h3>{section.name}</h3>
+                {orders[section.key] ? (
+                  <p className="order-text">{orders[section.key]}</p>
+                ) : (
+                  <p className="order-none">Not written yet. {section.holds}</p>
+                )}
+              </div>
+              <PlanAfter section={section.key} result={result} />
+            </Fragment>
           ))}
         </div>
+        <ReadingList title="Read before the night" addresses={event.reading} />
       </section>
 
       {event.state !== "draft" ? <TheRoll result={result} /> : null}
@@ -350,6 +427,132 @@ async function Event({ params }: { params: Props["params"] }) {
       <div className="band-end" />
     </>
   );
+}
+
+/**
+ * The parts of the plan that sit with a section of the orders: tasks and the
+ * timeline after Execution, ships after Support, and the comms plan after
+ * Command and signal. Each is left out when the event has none.
+ */
+function PlanAfter({ section, result }: { section: ParagraphKey; result: Ready }) {
+  const { plan } = result;
+  if (section === "execution") {
+    return (
+      <>
+        {plan.elements.length > 0 ? (
+          <div className="order">
+            <h3>Tasks</h3>
+            <dl className="plan-tasks">
+              {plan.elements.map((element) => (
+                <div key={element.id}>
+                  <dt>{element.name}</dt>
+                  <dd className="order-text">{element.task || "No task given yet."}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ) : null}
+        {plan.timings.length > 0 ? (
+          <div className="order">
+            <h3>Timeline</h3>
+            <table className="plan-table">
+              <thead>
+                <tr>
+                  <th scope="col">When</th>
+                  <th scope="col">What happens</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plan.timings.map((timing) => {
+                  const at = formatWhen(timing.at);
+                  return (
+                    <tr key={timing.id}>
+                      <th scope="row">
+                        {at.utc}
+                        <YourTime iso={timing.at} fallback={at.uk} />
+                        <small>{hLabel(timing.offsetMinutes)}</small>
+                      </th>
+                      <td>{timing.label}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </>
+    );
+  }
+  if (section === "support" && plan.ships.length > 0) {
+    return (
+      <div className="order">
+        <h3>Ships</h3>
+        <table className="plan-table">
+          <thead>
+            <tr>
+              <th scope="col">Ship</th>
+              <th scope="col">Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {plan.ships.map((ship) => (
+              <tr key={ship.id}>
+                <th scope="row">{ship.ship}</th>
+                <td>{ship.note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  const callsigns = plan.elements.filter((element) => element.callsign);
+  if (section === "command_and_signal" && (plan.nets.length > 0 || callsigns.length > 0)) {
+    return (
+      <div className="order">
+        <h3>Comms plan</h3>
+        {plan.nets.length > 0 ? (
+          <table className="plan-table">
+            <thead>
+              <tr>
+                <th scope="col">Net</th>
+                <th scope="col">What it is for</th>
+                <th scope="col">Who controls it</th>
+              </tr>
+            </thead>
+            <tbody>
+              {plan.nets.map((net) => (
+                <tr key={net.id}>
+                  <th scope="row">{net.name}</th>
+                  <td>{net.purpose}</td>
+                  <td>{net.controller}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
+        {callsigns.length > 0 ? (
+          <table className="plan-table">
+            <thead>
+              <tr>
+                <th scope="col">Element</th>
+                <th scope="col">Callsign</th>
+              </tr>
+            </thead>
+            <tbody>
+              {callsigns.map((element) => (
+                <tr key={element.id}>
+                  <th scope="row">{element.name}</th>
+                  <td>{element.callsign}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
+      </div>
+    );
+  }
+  return null;
 }
 
 function YourReply({ result }: { result: Ready }) {

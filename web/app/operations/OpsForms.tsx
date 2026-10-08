@@ -70,6 +70,8 @@ export type EventFields = {
   /** Empty for no limit, and for no minimum. */
   places: string;
   minimumAttending: string;
+  musterAt: string;
+  area: string;
 };
 
 /** A type's own line: who usually runs one, and an example. */
@@ -201,6 +203,34 @@ export function EventForm({
       <p className="field-note">
         Orders use UTC. A warning order goes out at least 72 hours before, and the roll closes 24 hours before.
       </p>
+
+      <div className="field">
+        <label htmlFor="muster_at">
+          Muster at <span className="optional">Optional</span>
+        </label>
+        <p className="hint" id="muster_at_hint">
+          Where to be 15 minutes before the start, such as Baijini Point, pad 04.
+        </p>
+        <input
+          id="muster_at"
+          name="muster_at"
+          type="text"
+          defaultValue={held("muster_at", event.musterAt)}
+          maxLength={120}
+          autoComplete="off"
+          aria-describedby="muster_at_hint"
+        />
+      </div>
+
+      <div className="field">
+        <label htmlFor="area">
+          Area <span className="optional">Optional</span>
+        </label>
+        <p className="hint" id="area_hint">
+          Where the event takes place, such as the lane between ArcCorp and microTech.
+        </p>
+        <input id="area" name="area" type="text" defaultValue={held("area", event.area)} maxLength={120} autoComplete="off" aria-describedby="area_hint" />
+      </div>
 
       <div className="field">
         <label className="choice" htmlFor="repeats_weekly">
