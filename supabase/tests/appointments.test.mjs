@@ -202,9 +202,9 @@ test("a position cannot open before the unit it belongs to, or the units above t
   const id = await crewMember("Too early");
   const gunnery = (await fleet.one("select id from public.units where name = 'Gunnery'")).id;
   const added = await fleet.as(who.admin).one(
-    `insert into public.positions (unit_id, title, kind, nominal_grade, min_grade, max_grade, is_entry, opens_at_stage)
-     values ($1, 'Powder Monkey', 'primary', 'E2', 'E2', 'E4', false, 1) returning id`,
-    [gunnery],
+    `insert into public.positions (unit_id, role_id, title, kind, nominal_grade, min_grade, max_grade, is_entry, opens_at_stage)
+     values ($1, $2, 'Powder Monkey', 'primary', 'E2', 'E2', 'E4', false, 1) returning id`,
+    [gunnery, await fleet.roleId("gunner")],
   );
   await fleet.setStage(1);
   await assert.rejects(appoint(who.command, id, added.id), /does not open until stage 2/);
@@ -465,12 +465,15 @@ test("the admin keeps the order of battle, and nobody else can change it", async
 
   const admin = fleet.as(who.admin);
   await admin.query(
-    `insert into public.positions (unit_id, title, kind, nominal_grade, min_grade, max_grade, is_entry, opens_at_stage)
-     values ($1, 'Gunner 4', 'primary', 'E2', 'E2', 'E4', true, 4)`,
-    [unit],
+    `insert into public.positions (unit_id, role_id, title, kind, nominal_grade, min_grade, max_grade, is_entry, opens_at_stage)
+     values ($1, $2, 'Gunner 4', 'primary', 'E2', 'E2', 'E4', true, 4)`,
+    [unit, await fleet.roleId("gunner")],
   );
   await assert.rejects(
-    admin.query("insert into public.positions (unit_id, title, kind) values ($1, 'No grades', 'primary')", [unit]),
+    admin.query("insert into public.positions (unit_id, role_id, title, kind) values ($1, $2, 'No grades', 'primary')", [
+      unit,
+      await fleet.roleId("gunner"),
+    ]),
     /positions_primary_has_grades/,
   );
   await assert.rejects(admin.query("update public.units set parent_id = id where id = $1", [unit]), /units_not_own_parent/);

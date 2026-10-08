@@ -159,44 +159,84 @@ try {
     await page.getByRole("button", { name: "All areas" }).click();
     await shot("roles");
   });
-  await check("an area lists its posts, their grades and when they open", async () => {
+  await check("an area lists its roles, not each ship's posts", async () => {
     await page.getByRole("link", { name: "Gunnery" }).click();
     await headingIs("Gunnery");
     await page.locator(".role-card").first().waitFor();
-    assert.equal(await page.locator(".role-card").count(), 5);
-    const open = await page.locator(".role-group", { hasText: "Training Ship" }).innerText();
-    assert.match(open, /Open now/i);
-    assert.match(open, /4 posts/);
-    const turret = await page.locator(".role-card", { hasText: "Turret Gunner" }).innerText();
-    assert.match(turret, /Opens at stage 2/i);
-    assert.match(turret, /Entry post/i);
-    assert.match(turret, /E2 to E4/);
-    assert.match(turret, /7 posts/);
+    // Two roles: the chief, and one Gunner role for every gunner on every ship.
+    assert.deepEqual(await page.locator(".role-card h3").allInnerTexts(), ["Gunnery Chief", "Gunner"]);
+    const gunner = await page.locator(".role-card", { has: page.getByRole("link", { name: "Gunner", exact: true }) }).innerText();
+    assert.match(gunner, /Open now/i);
+    assert.match(gunner, /Entry post/i);
+    assert.match(gunner, /Mans a ship's weapons, from a turret or a remote weapons station\./);
+    assert.match(gunner, /E2 to E4/);
+    assert.match(gunner, /16 posts/);
+    assert.match(gunner, /3 ships/);
+    const chief = await page.locator(".role-card", { has: page.getByRole("link", { name: "Gunnery Chief" }) }).innerText();
+    assert.match(chief, /Opens at stage 2/i);
+    assert.match(chief, /UEES Nexus/);
     await shot("roles-area");
   });
-  await check("a role card shows the grade, what it needs and where it sits", async () => {
-    await page.getByRole("link", { name: "Turret Gunner" }).click();
-    await headingIs("Turret Gunner");
-    const facts = await page.locator(".facts").innerText();
-    assert.match(facts, /E2 to E4\s*Starman to Jr\. Petty Officer/);
-    assert.match(facts, /UEE 9th Fleet › Task Force Jericho › UEES Nexus › Gunnery/);
-    assert.match(facts, /At stage 2/);
-    assert.match(facts, /Navy crew, Radio user/);
-    assert.match(await page.locator(".cards").innerText(), /assessed radio exchange/);
+  await check("a role's page is about the role, and lists every ship it is found on", async () => {
+    await page.getByRole("link", { name: "Gunner", exact: true }).click();
+    await headingIs("Gunner");
+    await leadIs("Mans a ship's weapons, from a turret or a remote weapons station.");
+    const facts = await page.locator(".facts:visible").innerText();
+    assert.match(facts, /Primary role/);
+    assert.match(facts, /E2 to E4/);
+    assert.match(facts, /Training Ship, UEES Nexus and Escort One\s*16 posts/);
+    assert.match(facts, /Open now/);
+    assert.match(facts, /Leads to\s+Gunnery Chief/i);
+
+    const places = page.locator(".places:visible .role-card");
+    assert.deepEqual(await places.locator("h3").allInnerTexts(), ["Training Ship", "UEES Nexus", "Escort One"]);
+    const nexus = await places.nth(1).innerText();
+    assert.match(nexus, /Opens at stage 2/i);
+    assert.match(nexus, /UEE 9th Fleet › Task Force Jericho › UEES Nexus › Gunnery/);
+    // The posts keep the names of their stations, under the one role.
+    assert.match(nexus, /7 Turret Gunner, 2 Remote Weapons Operator/);
+    assert.match(nexus, /E2 to E4\s*Starman to Jr\. Petty Officer/);
+    assert.match(nexus, /Stage 2 to 3/);
+    assert.match(await places.nth(0).innerText(), /Open now[\s\S]*4 posts/i);
+
+    const qualify = await page.locator(".cards:visible").innerText();
+    assert.match(qualify, /assessed radio exchange/);
+    assert.match(qualify, /Every Gunner post needs this/i);
+    await shot("roles-card");
     // What to read leads into the manual.
     await page.getByRole("link", { name: "Navy squadron" }).click();
     await headingIs("Navy squadron");
-    await shot("roles-card");
+  });
+  await check("a role shows where it leads, so progression can be seen", async () => {
+    await page.goto(`${site}/roles/engineering/engineer`);
+    await headingIs("Engineer");
+    const steps = page.locator(".progression:visible li");
+    assert.deepEqual(await steps.allInnerTexts(), ["Engineer", "Senior Engineer", "Chief Engineer"]);
+    assert.equal(await page.locator(".progression:visible [aria-current]").innerText(), "Engineer");
+    // Engineer and Senior Engineer are roles of their own.
+    await page.locator(".progression:visible").getByRole("link", { name: "Senior Engineer" }).click();
+    await headingIs("Senior Engineer");
+    assert.match(await page.locator(".facts:visible").innerText(), /Leads to\s+Chief Engineer\s*Comes from Engineer/i);
+    // A pilot of the first flight is a Fighter Pilot, who can become a Flight Lead.
+    await page.goto(`${site}/roles/fighters/fighter-pilot`);
+    await headingIs("Fighter Pilot");
+    assert.match(await page.locator(".facts:visible").innerText(), /A Flight\s*3 posts[\s\S]*Leads to\s+Flight Lead/i);
   });
   await check("a duty is shown as a duty, with no rank", async () => {
-    await page.goto(`${site}/roles/staff-duties/fleet-staff-recruiter`);
+    await page.goto(`${site}/roles/staff-duties/recruiter`);
     await headingIs("Recruiter");
-    const facts = await page.locator(".facts").innerText();
+    await leadIs("Interviews the people who apply to join.");
+    const facts = await page.locator(".facts:visible").innerText();
     assert.match(facts, /Secondary duty/);
     assert.match(facts, /E4\s+and above/);
     assert.doesNotMatch(await page.locator("main").innerText(), /Rank follows the post/);
+    // What a post needs of its own is shown with the role.
+    await page.goto(`${site}/roles/signals/signaller`);
+    await headingIs("Signaller");
+    assert.match(await page.locator(".facts:visible").innerText(), /Needs\s+Nothing of its own yet\s*Some posts need more/i);
+    assert.match(await page.locator(".cards:visible").innerText(), /Net controller[\s\S]*Every Signaller post needs this/i);
   });
-  await check("an area that opens later says so, and an unknown area is not found", async () => {
+  await check("an area that opens later says so, and an unknown area or role is not found", async () => {
     await page.goto(`${site}/roles/boarding`);
     await headingIs("Boarding");
     await page.getByText("It opens at stage 6").waitFor();
@@ -204,18 +244,23 @@ try {
     await headingIs("Nothing heard.");
     await page.goto(`${site}/roles/gunnery/nothing-here`);
     await headingIs("Nothing heard.");
+    // A role is no longer one ship's posts, so the old addresses are gone.
+    await page.goto(`${site}/roles/gunnery/uees-nexus-turret-gunner`);
+    await headingIs("Nothing heard.");
   });
   await check("the roles pages never name who holds a post", async () => {
-    // Ada Vance holds Fleet Commander. A visitor is shown the post and not the person.
-    await page.goto(`${site}/roles/command/fleet-command-fleet-commander`);
+    // Ada Vance holds Fleet Commander. A visitor is shown the role and not the person.
+    await page.goto(`${site}/roles/command/fleet-commander`);
     await headingIs("Fleet Commander");
-    await page.locator(".facts").waitFor();
+    await page.locator(".facts:visible").waitFor();
     assert.doesNotMatch(await page.locator("body").innerText(), /Ada|Vance|ada_on_discord/i);
-    assert.match(await page.locator(".facts").innerText(), /Shown to serving members/);
+    assert.match(await page.locator(".facts:visible").innerText(), /Shown to serving members/);
   });
   await check("the database gives a visitor the structure and nothing about people", async () => {
     assert.ok((await asVisitor("units")).length > 0, "a visitor cannot read the units");
     assert.ok((await asVisitor("positions")).length > 0, "a visitor cannot read the posts");
+    assert.equal((await asVisitor("areas")).length, 15, "a visitor cannot read the areas");
+    assert.equal((await asVisitor("fleet_roles")).length, 30, "a visitor cannot read the roles");
     for (const table of [
       "members",
       "member_accounts",
@@ -862,7 +907,7 @@ try {
     await signInAs(founder);
     await page.goto(`${site}/admin`);
     await leadIs(/Stage 1: Cadre/);
-    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Logs"]);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Structure", "Logs"]);
     await adminTab("Logs").click();
     await headingIs("Logs");
     await page.locator(".log:visible").first().waitFor();
@@ -957,6 +1002,263 @@ try {
     assert.ok(totals.find((row) => row.path === "/ranks").views >= 1);
     assert.ok(totals.every((row) => row.landings <= row.views));
     assert.deepEqual(await supabase.sql("select * from public.page_view_ticks"), [], "a row was kept for a page view");
+  });
+
+  console.log("Structure");
+  // One record in an editor, by its title, opened.
+  const openRecord = async (title) => {
+    const record = page.locator("details.record:visible", {
+      has: page.locator("summary strong", { hasText: new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) }),
+    });
+    if ((await record.getAttribute("open")) === null) await record.locator("summary").first().click();
+    return record;
+  };
+  const addRecord = async (fill) => {
+    const adding = page.locator("details.record-new:visible");
+    if ((await adding.getAttribute("open")) === null) await adding.locator("summary").click();
+    await fill(adding);
+    await adding.getByRole("button", { name: /^Add the / }).click();
+    return adding;
+  };
+  // Wait for a form to say something. If it says something else, the failure shows what.
+  const told = async (within, text) => {
+    try {
+      await within.locator(".form-result").filter({ hasText: text }).first().waitFor({ timeout: 10_000 });
+    } catch {
+      const said = (await within.locator(".form-result").allInnerTexts()).filter(Boolean);
+      throw new Error(`Expected a form to say ${text}. It said: ${JSON.stringify(said)}`);
+    }
+  };
+  const openEditor = async (name) => {
+    await page.goto(`${site}/admin/structure`);
+    await headingIs("Structure");
+    await page.locator(".role-card:visible").getByRole("link", { name, exact: true }).click();
+    await headingIs(name);
+    await page.locator("details.record-new:visible").waitFor();
+  };
+  const roleRow = (slug) => one("select * from public.fleet_roles where slug = $1", [slug]);
+
+  await check("the editors are for admins", async () => {
+    await signInAs(jo);
+    for (const path of ["/admin/structure", "/admin/structure/roles", "/admin/structure/posts", "/admin/structure/ranks"]) {
+      await page.goto(`${site}${path}`);
+      await leadIs(/This page is for admins\./);
+      assert.equal(await page.locator("details.record:visible, form:visible").count(), 0, path);
+    }
+    await signInAs(founder);
+    await page.goto(`${site}/admin/structure`);
+    await headingIs("Structure");
+    const cards = await page.locator(".role-cards:visible").innerText();
+    assert.match(cards, /15\s+Areas/);
+    assert.match(cards, /30\s+Roles/);
+    assert.match(cards, /14\s+Units/);
+    assert.match(cards, /52\s+Posts/);
+    assert.match(cards, /6\s+Qualifications/);
+    assert.match(cards, /18 grades\s+Ranks and grades/i);
+    await shot("structure");
+  });
+  await check("an admin rewrites a role, and its page follows", async () => {
+    await openEditor("Roles");
+    assert.equal(await page.locator("details.record:visible:not(.record-new)").count(), 30);
+    const gunner = await openRecord("Gunner");
+    await gunner.getByLabel("Summary").fill("Fights a ship's guns.");
+    await gunner.getByLabel("What the role does").fill("Keep the turret ready to fire.\nCall targets to the Gunnery Chief.\n");
+    await gunner.getByRole("button", { name: "Save", exact: true }).click();
+    await told(gunner, "Saved.");
+    const stored = await roleRow("gunner");
+    assert.equal(stored.summary, "Fights a ship's guns.");
+    assert.equal(stored.duties, "Keep the turret ready to fire.\nCall targets to the Gunnery Chief.");
+    await shot("structure-roles");
+
+    // Saving again changes nothing, and writes no line to the log.
+    const before = await one("select count(*)::int as lines from public.audit_log where table_name = 'fleet_roles'");
+    await gunner.getByRole("button", { name: "Save", exact: true }).click();
+    await told(gunner, "Nothing was changed.");
+    assert.deepEqual(await one("select count(*)::int as lines from public.audit_log where table_name = 'fleet_roles'"), before);
+
+    await page.goto(`${site}/roles/gunnery/gunner`);
+    await headingIs("Gunner");
+    await leadIs("Fights a ship's guns.");
+    assert.deepEqual(await page.locator(".duties:visible li").allInnerTexts(), ["Keep the turret ready to fire.", "Call targets to the Gunnery Chief."]);
+  });
+  await check("a save that is turned down says why, keeps what was typed, and is logged", async () => {
+    await openEditor("Roles");
+    const gunner = await openRecord("Gunner");
+    await gunner.getByLabel("Address").fill("Bad Address");
+    await gunner.getByLabel("Summary").fill("Half-written.");
+    await gunner.getByRole("button", { name: "Save", exact: true }).click();
+    await told(gunner, /lower-case letters and numbers/);
+    assert.equal(await gunner.getByLabel("Address").inputValue(), "Bad Address");
+    assert.equal(await gunner.getByLabel("Summary").inputValue(), "Half-written.");
+    assert.equal((await roleRow("gunner")).summary, "Fights a ship's guns.", "a refused save changed the role");
+
+    // The database's own rule: a role keeps its kind while it has posts.
+    await gunner.getByLabel("Address").fill("gunner");
+    await gunner.getByLabel("Summary").fill("Fights a ship's guns.");
+    await gunner.getByLabel("Kind").selectOption({ label: "Secondary duty: held as well as a post" });
+    await gunner.getByRole("button", { name: "Save", exact: true }).click();
+    await told(gunner, "This role has positions. Move them to another role before changing its kind.");
+    assert.equal((await roleRow("gunner")).kind, "primary");
+    const logged = await one("select kind, action, shown from public.activity_log order by id desc limit 1");
+    assert.deepEqual(logged, {
+      kind: "refused",
+      action: "structure.save",
+      shown: "This role has positions. Move them to another role before changing its kind.",
+    });
+
+    // A role that still has posts cannot be removed.
+    await gunner.locator("summary", { hasText: "Remove this role" }).click();
+    await gunner.getByRole("button", { name: "Yes, remove it" }).click();
+    await told(gunner, "This role still has posts. Move them to another role first.");
+    assert.ok(await roleRow("gunner"));
+  });
+  await check("what a role needs is set in the editor, for every ship at once", async () => {
+    await openEditor("Roles");
+    const gunner = await openRecord("Gunner");
+    const need = gunner.locator(".record-needs li", { hasText: "Net controller" });
+    await need.getByRole("checkbox").first().check();
+    await gunner.getByRole("button", { name: "Save what it needs" }).click();
+    await told(gunner.locator(".record-needs"), "Saved.");
+    const needs = await supabase.sql(
+      `select q.code, n.waived_when_acting from public.fleet_role_qualifications n
+       join public.qualifications q on q.id = n.qualification_id where n.role_id = $1`,
+      [(await roleRow("gunner")).id],
+    );
+    assert.deepEqual(needs, [{ code: "net-controller", waived_when_acting: false }]);
+
+    await page.goto(`${site}/roles/gunnery/gunner`);
+    await headingIs("Gunner");
+    assert.match(await page.locator(".facts:visible").innerText(), /Needs\s+Net controller\s*Some posts need more/i);
+    assert.match(await page.locator(".cards:visible").innerText(), /Net controller[\s\S]*Every Gunner needs this/i);
+
+    // Taking it away again.
+    await openEditor("Roles");
+    const again = await openRecord("Gunner");
+    await again.locator(".record-needs li", { hasText: "Net controller" }).getByRole("checkbox").first().uncheck();
+    await again.getByRole("button", { name: "Save what it needs" }).click();
+    await told(again.locator(".record-needs"), "Saved.");
+    assert.deepEqual(await supabase.sql("select 1 from public.fleet_role_qualifications where role_id = $1", [(await roleRow("gunner")).id]), []);
+  });
+  await check("an admin adds an area, a role and a post, and the site shows them", async () => {
+    await openEditor("Areas");
+    const area = await addRecord(async (form) => {
+      await form.getByLabel("Name").fill("Sensors");
+      await form.getByLabel("Address").fill("sensors");
+      await form.getByLabel("Group").selectOption({ label: "Ship" });
+      await form.getByLabel("Picture").selectOption({ label: "Spare" });
+      await form.getByLabel("About").fill("The ship's sensor stations.");
+      await form.getByLabel("What to read").fill("organisation/navy-squadron\n/manual/command/orders");
+    });
+    await told(area, "Added.");
+    await page.locator("details.record:visible summary strong", { hasText: /^Sensors$/ }).waitFor();
+
+    await openEditor("Roles");
+    const role = await addRecord(async (form) => {
+      await form.getByLabel("Name").fill("Sensors Operator");
+      await form.getByLabel("Address").fill("sensors-operator");
+      await form.getByLabel("Area").selectOption({ label: "Sensors" });
+      await form.getByLabel("Kind").selectOption({ label: "Primary role: its post sets the holder's rank" });
+      await form.getByLabel("Summary").fill("Finds what the ship cannot see.");
+    });
+    await told(role, "Added.");
+
+    await openEditor("Posts");
+    assert.equal(await page.locator("details.record:visible:not(.record-new)").count(), 52);
+    // A primary post needs its grades.
+    const post = await addRecord(async (form) => {
+      await form.getByLabel("Title").fill("Sensors Operator 1");
+      await form.getByLabel("Unit").selectOption({ label: "Task Force Jericho › UEES Nexus › Bridge" });
+      await form.getByLabel("Role").selectOption({ label: "Sensors Operator" });
+      await form.getByLabel("Opens at stage").fill("2");
+    });
+    await told(post, "A primary post needs its usual, lowest and highest grades.");
+    assert.equal(await post.getByLabel("Title").inputValue(), "Sensors Operator 1", "the form lost what was typed");
+    await post.getByLabel("Usual grade").selectOption({ label: "E4" });
+    await post.getByLabel("Lowest grade").selectOption({ label: "E3" });
+    await post.getByLabel("Highest grade").selectOption({ label: "E5" });
+    await post.getByRole("button", { name: "Add the post" }).click();
+    await told(post, "Added.");
+    const stored = await one(
+      `select p.kind, p.nominal_grade, p.min_grade, p.max_grade, p.is_entry, p.opens_at_stage, r.slug as role, u.name as unit
+       from public.positions p join public.fleet_roles r on r.id = p.role_id join public.units u on u.id = p.unit_id
+       where p.title = 'Sensors Operator 1'`,
+    );
+    assert.deepEqual(stored, {
+      kind: "primary",
+      nominal_grade: "E4",
+      min_grade: "E3",
+      max_grade: "E5",
+      is_entry: false,
+      opens_at_stage: 2,
+      role: "sensors-operator",
+      unit: "Bridge",
+    });
+    await shot("structure-posts");
+
+    // The roles pages follow, for anyone.
+    await page.goto(`${site}/roles`);
+    await page.locator(".tile").first().waitFor();
+    assert.equal(await page.locator(".tile").count(), 16);
+    await page.goto(`${site}/roles/sensors/sensors-operator`);
+    await headingIs("Sensors Operator");
+    await leadIs("Finds what the ship cannot see.");
+    assert.match(await page.locator(".places:visible").innerText(), /UEES Nexus[\s\S]*E3 to E5/);
+    assert.deepEqual(await page.locator(".reading:visible a").allInnerTexts().then((links) => links.slice(0, 2)), ["Navy squadron", "Orders"]);
+    // And the order of battle lists the new post.
+    await page.goto(`${site}/order-of-battle`);
+    await page.locator(".tally").waitFor();
+    // It opens at stage 2, so it is listed with the posts that open later, folded away.
+    assert.match(await page.locator("main").textContent(), /Sensors Operator 1/);
+  });
+  await check("a post, a role and an area with nothing hanging from them can be removed", async () => {
+    for (const [editor, title, thing] of [
+      ["Posts", "Sensors Operator 1", "post"],
+      ["Roles", "Sensors Operator", "role"],
+      ["Areas", "Sensors", "area"],
+    ]) {
+      await openEditor(editor);
+      const record = await openRecord(title);
+      await record.locator("summary", { hasText: `Remove this ${thing}` }).click();
+      await record.getByRole("button", { name: "Yes, remove it" }).click();
+      await page.locator("details.record:visible summary strong", { hasText: new RegExp(`^${title}$`) }).waitFor({ state: "detached" });
+    }
+    assert.deepEqual(await supabase.sql("select 1 from public.areas where slug = 'sensors'"), []);
+    assert.deepEqual(await supabase.sql("select 1 from public.positions where title = 'Sensors Operator 1'"), []);
+    // A post that someone holds is part of the service record.
+    await openEditor("Posts");
+    const held = await openRecord("Fleet Commander");
+    await held.locator("summary", { hasText: "Remove this post" }).click();
+    await held.getByRole("button", { name: "Yes, remove it" }).click();
+    await told(held, /Someone holds or has held this post/);
+  });
+  await check("an admin renames a rank, and the ranks page follows", async () => {
+    await page.goto(`${site}/admin/structure/ranks`);
+    await headingIs("Ranks and grades");
+    const grade = page.locator("details.record:visible", { has: page.locator("summary strong", { hasText: /^E2$/ }) });
+    await grade.locator("summary").click();
+    await grade.getByLabel("Navy rank").fill("Able Starman");
+    await grade.getByLabel("What a member at this grade usually does").fill("Crew member");
+    await grade.getByRole("button", { name: "Save", exact: true }).click();
+    await told(grade, "Saved.");
+    assert.equal((await one("select name from public.ranks where service = 'navy' and grade_code = 'E2'")).name, "Able Starman");
+
+    await context.clearCookies();
+    await page.goto(`${site}/ranks`);
+    await page.getByRole("heading", { name: "Able Starman" }).waitFor();
+  });
+  await check("every change to the structure is in the logs, with who made it", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/admin/logs?show=structure`);
+    await page.locator(".log:visible").first().waitFor();
+    const text = await logText();
+    assert.match(text, /Ada Vance renamed the Navy rank for E2 from Starman to Able Starman\./);
+    assert.match(text, /Ada Vance removed the area Sensors\./);
+    assert.match(text, /Ada Vance added the post Sensors Operator 1, Bridge\./);
+    assert.match(text, /Ada Vance added the role Sensors Operator\./);
+    assert.match(text, /Ada Vance made the Net controller qualification a need of every Gunner\./);
+    assert.match(text, /Ada Vance stopped every Gunner needing the Net controller qualification\./);
+    assert.match(text, /Ada Vance changed the role Gunner\.\s+duties changed\. summary changed\./);
+    await shot("admin-logs-structure");
   });
 
   await check("no page raised a script error", async () => {

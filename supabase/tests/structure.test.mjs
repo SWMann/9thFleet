@@ -27,6 +27,9 @@ test("a visitor can read the settings, the grades and ranks and the structure, a
      order by 1, 2`,
   );
   assert.deepEqual(grants, [
+    { name: "public.areas", privilege_type: "SELECT" },
+    { name: "public.fleet_role_qualifications", privilege_type: "SELECT" },
+    { name: "public.fleet_roles", privilege_type: "SELECT" },
     { name: "public.fleet_settings", privilege_type: "SELECT" },
     { name: "public.grades", privilege_type: "SELECT" },
     { name: "public.position_qualifications", privilege_type: "SELECT" },
@@ -47,6 +50,7 @@ test("signed-in users hold no privilege on the private schema's tables, and none
   assert.deepEqual(grants, []);
 });
 
+// Grades and ranks are changed one column at a time, which the roles tests check.
 test("the audit log, member accounts and the member list cannot be written to directly", async () => {
   const writable = await fleet.rows(
     `select table_name, privilege_type

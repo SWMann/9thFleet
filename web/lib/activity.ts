@@ -35,6 +35,10 @@ export const attemptNames = {
   "event.stand-in": "set a stand-in",
   "event.return": "make an attendance return",
   "event.report": "file an after-action report",
+  "structure.save": "change the fleet's structure",
+  "structure.remove": "remove part of the fleet's structure",
+  "structure.needs": "change what a role or post needs",
+  "ranks.save": "change a grade or its rank names",
   "page.admin": "open an admin page",
   "page.staff": "open a staff page",
 } as const;
@@ -43,7 +47,7 @@ export type Attempt = keyof typeof attemptNames;
 type DatabaseError = { code?: string; message: string };
 
 /** Codes the database gives when one of its rules said no. Anything else is a fault. */
-const REFUSALS = ["42501", "23514", "23505", "23503", "23502", "P0001", "PGRST116"];
+const REFUSALS = ["42501", "23514", "23505", "23503", "23001", "23502", "P0001", "PGRST116"];
 
 async function write(
   supabase: SupabaseClient,

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { PageHead } from "@/components/PageHead";
 import { reaches, type Gate, type Tier } from "@/lib/admin";
 
-export type AdminPage = "overview" | "people" | "recruiting" | "operations" | "logs";
+export type AdminPage = "overview" | "people" | "recruiting" | "operations" | "structure" | "logs";
 
 /** The admin pages, in the order of their tabs, and the tier each one is for. */
 const pages: { key: AdminPage; href: string; label: string; needs: Tier }[] = [
@@ -11,6 +11,7 @@ const pages: { key: AdminPage; href: string; label: string; needs: Tier }[] = [
   { key: "people", href: "/admin/people", label: "People", needs: "staff" },
   { key: "recruiting", href: "/admin/recruiting", label: "Recruiting", needs: "staff" },
   { key: "operations", href: "/admin/operations", label: "Operations", needs: "command" },
+  { key: "structure", href: "/admin/structure", label: "Structure", needs: "admin" },
   { key: "logs", href: "/admin/logs", label: "Logs", needs: "admin" },
 ];
 
