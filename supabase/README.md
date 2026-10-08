@@ -14,9 +14,10 @@ or let someone promote themselves.
 | `migrations/…_reference_data.sql` | The 18 grades, the rank names for each service and the first six qualifications |
 | `migrations/…_launch_order_of_battle.sql` | The units and positions that open in stages 1 to 3, from Volume 1 |
 | `migrations/…_public_structure.sql` | Lets anyone read the units, the positions and what each requires, for the site's roles pages |
+| `migrations/…_operations.sql` | Events, their orders, the roll with its stand-ins, the attendance return and after-action reports |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
-Events, attendance and the link to the voice app are not here yet.
+The link to the voice app is not here yet.
 
 ## Words
 
@@ -34,10 +35,10 @@ Staff look after people, command makes appointments, and the admin owns the stru
 | --- | --- | --- |
 | Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: units, positions and the qualifications each requires. Never who holds one | Nothing |
 | Applicant | The same, and their own record and their own application | Set a character name and an RSI handle, apply while recruitment is open, withdraw |
-| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, and who holds which position and qualification | Change their RSI handle. A full member can apply for the cadet course |
-| Instructor | The same | Award a qualification to someone else, in their own name |
+| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position and qualification, and every announced event with its orders, roll and report | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. A full member can apply for the cadet course |
+| Instructor | The same | Award a qualification to someone else, in their own name. Draft a training event |
 | Staff | Everyone, every application and the interview notes | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
-| Command | The same as staff | Appoint members to positions, promote within a band, discharge and reinstate |
+| Command | The same as staff | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event |
 | Admin | Everything, including the audit log | Keep the order of battle, grant roles, open recruitment, open a service, move the fleet to a new stage |
 
 Roles add up: an admin holds every role. Things the database decides for itself:
@@ -57,6 +58,18 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   or an application, or sign one in someone else's name.
 - **Staff and command cannot change an admin's record or appointments,** and the last admin cannot
   be removed.
+- **An event is run by its operation commander, its second-in-command, or command.** Whoever runs it
+  writes its orders, places stand-ins, makes the attendance return and files the report. A draft is
+  seen only by the people working on it.
+- **The roll closes 24 hours before the start**, or at the start if the event was announced with less
+  than a day to go. After that a reply cannot change.
+- **A stand-in fills a position that is empty on the night.** An attending member who holds no
+  position may take an empty entry position. Leadership and key positions are filled by whoever runs
+  the event, who may also move a holder up for the night.
+- **The attendance return is not for the whole fleet.** Whoever ran the event makes it once the event
+  has started. A member sees their own line, and staff and whoever ran the event see them all.
+- **A finished event is fixed.** Its details and orders cannot change, and it is cancelled, never
+  deleted, once it has been announced.
 - **Names are unique inside the fleet.** Someone outside it cannot find out which are taken.
 - **Every change is logged** with who made it. Nobody can write to the log.
 - **Deleting an account** removes the member's records and blanks what the log held about them.

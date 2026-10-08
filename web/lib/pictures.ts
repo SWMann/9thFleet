@@ -196,6 +196,8 @@ export const pictures = {
   volume8: at(shots.raoul33969830708, "25% 50%"),
   volume9: at(shots.raoul48611189282, "50% 45%"),
   volume10: at(shots.raoul48963275031, "40% 45%"),
+  // The members' operations pages.
+  operations: at(shots.rellim26876289637, "50% 50%"),
   // The areas of work on the roles pages.
   roles: at(shots.raoul44451464481, "50% 45%"),
   areaCommand: at(shots.raoul45014160084, "50% 45%"),

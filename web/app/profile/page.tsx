@@ -110,6 +110,9 @@ async function Record() {
               <dt>The fleet</dt>
               <dd>
                 <Link href="/order-of-battle">See the order of battle</Link>
+                <span className="aside">
+                  <Link href="/operations">Operations</Link>
+                </span>
               </dd>
             </div>
           )}

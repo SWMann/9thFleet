@@ -10,6 +10,7 @@ export const config = {
   matcher: [
     "/profile/:path*",
     "/order-of-battle/:path*",
+    "/operations/:path*",
     "/apply/:path*",
     "/staff/:path*",
     "/sign-in",
