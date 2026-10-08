@@ -1,8 +1,12 @@
 import type { StaticImageData } from "next/image";
-import arieneo48537322302 from "@/pictures/arieneo-48537322302.jpg";
+import fankitSc12 from "@/pictures/fankit-sc-12.jpg";
+import fankitSc14 from "@/pictures/fankit-sc-14.jpg";
+import fankitSc25 from "@/pictures/fankit-sc-25.jpg";
+import fankitSc33 from "@/pictures/fankit-sc-33.jpg";
+import fankitSc34 from "@/pictures/fankit-sc-34.jpg";
+import madeByTheCommunityWhite from "@/pictures/made-by-the-community-white.png";
 import raoul30441782607 from "@/pictures/raoul-30441782607.jpg";
 import raoul31241378917 from "@/pictures/raoul-31241378917.jpg";
-import raoul31867603928 from "@/pictures/raoul-31867603928.jpg";
 import raoul41663107162 from "@/pictures/raoul-41663107162.jpg";
 import raoul42971102521 from "@/pictures/raoul-42971102521.jpg";
 import raoul44402204562 from "@/pictures/raoul-44402204562.jpg";
@@ -12,7 +16,6 @@ import raoul45120650855 from "@/pictures/raoul-45120650855.jpg";
 import raoul48325577926 from "@/pictures/raoul-48325577926.jpg";
 import raoul48325936481 from "@/pictures/raoul-48325936481.jpg";
 import raoul48340609227 from "@/pictures/raoul-48340609227.jpg";
-import raoul48408781722 from "@/pictures/raoul-48408781722.jpg";
 import raoul48494606591 from "@/pictures/raoul-48494606591.jpg";
 import raoul48695092918 from "@/pictures/raoul-48695092918.jpg";
 import raoul47272219531 from "@/pictures/raoul-47272219531.jpg";
@@ -37,28 +40,36 @@ import raoul44451464481 from "@/pictures/raoul-44451464481.jpg";
 import raoul48305982842 from "@/pictures/raoul-48305982842.jpg";
 
 /**
- * Every picture on the site is a Star Citizen screenshot that its author has
- * published on Flickr under a Creative Commons licence. The licences ask for
- * the author to be named and the licence linked, which the corner of each
- * picture and the credits page do. They also bar commercial use, which suits
- * a fan site. Each licence was checked on the picture's own page on 8 October 2026.
+ * The pictures come from two places.
+ *
+ * Most are Star Citizen screenshots that players published on Flickr under a
+ * Creative Commons licence. The licences ask for the author to be named and
+ * the licence linked, which the corner of each picture and the credits page
+ * do. They also bar commercial use, which suits a fan site. Each licence was
+ * checked on the picture's own page on 8 October 2026.
+ *
+ * The rest are wallpapers from Cloud Imperium's fan kit, used under its Fankit
+ * Agreement. Its rules are stricter: a wallpaper keeps its Star Citizen
+ * watermark and is shown as it is, with nothing over it, no tint and no
+ * cropping. So a fan kit picture only goes in a plain frame, never behind
+ * words. `Picture` and the style sheet see to that from `source`.
  */
 
 export type Licence = { name: string; url: string };
 
 const byNc: Licence = { name: "CC BY-NC 2.0", url: "https://creativecommons.org/licenses/by-nc/2.0/" };
-const byNcSa: Licence = { name: "CC BY-NC-SA 2.0", url: "https://creativecommons.org/licenses/by-nc-sa/2.0/" };
 
 type Author = { name: string; url: string };
 
 const raoul: Author = { name: "Captain_Raoul", url: "https://www.flickr.com/photos/156307102@N07" };
-const arieNeo: Author = { name: "ArieNeo", url: "https://www.flickr.com/photos/183426206@N07" };
 const yajih: Author = { name: "yajih", url: "https://www.flickr.com/photos/143015670@N06" };
 const jonRellim: Author = { name: "Jon-Rellim", url: "https://www.flickr.com/photos/86001647@N00" };
 
-/** One screenshot: the file, whose it is, and where it came from. */
+/** One picture: the file, whose it is, and where it came from. */
 export type Shot = {
   id: string;
+  /** A player's screenshot from Flickr, or a wallpaper from the fan kit. */
+  source: "flickr" | "fankit";
   image: StaticImageData;
   author: Author;
   /** The title its author gave it. */
@@ -70,6 +81,7 @@ export type Shot = {
 
 const shot = (id: string, image: StaticImageData, author: Author, title: string, licence: Licence): Shot => ({
   id,
+  source: "flickr",
   image,
   author,
   title,
@@ -77,17 +89,32 @@ const shot = (id: string, image: StaticImageData, author: Author, title: string,
   licence,
 });
 
+export const fanKitPage = "https://robertsspaceindustries.com/en/fankit";
+const fankitAgreement: Licence = { name: "Star Citizen Fankit Agreement", url: fanKitPage };
+const cloudImperium: Author = { name: "Cloud Imperium Games", url: "https://robertsspaceindustries.com" };
+
+/** A wallpaper from the fan kit, resized and otherwise as supplied. `number` is the kit's own. */
+const wallpaper = (number: number, image: StaticImageData): Shot => ({
+  id: `fankit-sc-${number}`,
+  source: "fankit",
+  image,
+  author: cloudImperium,
+  title: `Star Citizen wallpaper ${number}`,
+  page: fanKitPage,
+  licence: fankitAgreement,
+});
+
+/** The fan kit's logo for fan sites. Cloud Imperium asks for it wherever its material is used. */
+export const madeByTheCommunity = madeByTheCommunityWhite;
+
 export const shots = {
   raoul48325577926: shot("48325577926", raoul48325577926, raoul, "Star Citizen", byNc),
-  arieneo48537322302: shot("48537322302", arieneo48537322302, arieNeo, "StarCitizen 2019-02-03 00-41-03", byNcSa),
   raoul41663107162: shot("41663107162", raoul41663107162, raoul, "Star Citizen", byNc),
   raoul45120650855: shot("45120650855", raoul45120650855, raoul, "Star Citizen", byNc),
   yajih41594388540: shot("41594388540", yajih41594388540, yajih, "StarCitizen 2018-07-12 22-09-53", byNc),
   rellim41638209562: shot("41638209562", rellim41638209562, jonRellim, "[2K] Quantum flower", byNc),
   raoul31241378917: shot("31241378917", raoul31241378917, raoul, "Star Citizen", byNc),
   raoul48340609227: shot("48340609227", raoul48340609227, raoul, "Star Citizen", byNc),
-  raoul48408781722: shot("48408781722", raoul48408781722, raoul, "Star Citizen", byNc),
-  raoul31867603928: shot("31867603928", raoul31867603928, raoul, "Star Citizen", byNc),
   raoul48695092918: shot("48695092918", raoul48695092918, raoul, "Star Citizen", byNc),
   raoul44402204562: shot("44402204562", raoul44402204562, raoul, "Star Citizen", byNc),
   raoul44799036785: shot("44799036785", raoul44799036785, raoul, "Star Citizen", byNc),
@@ -114,6 +141,11 @@ export const shots = {
   raoul45086600895: shot("45086600895", raoul45086600895, raoul, "Star Citizen", byNc),
   raoul44451464481: shot("44451464481", raoul44451464481, raoul, "Star Citizen", byNc),
   raoul48305982842: shot("48305982842", raoul48305982842, raoul, "Star Citizen", byNc),
+  fankitSc12: wallpaper(12, fankitSc12),
+  fankitSc14: wallpaper(14, fankitSc14),
+  fankitSc25: wallpaper(25, fankitSc25),
+  fankitSc33: wallpaper(33, fankitSc33),
+  fankitSc34: wallpaper(34, fankitSc34),
 } satisfies Record<string, Shot>;
 
 export type Picture = {
@@ -127,19 +159,22 @@ const at = (shot: Shot, focus = "50% 50%"): Picture => ({ shot, focus });
 /**
  * The pictures by the place each one fills. To change a picture, put the new
  * file in `pictures/`, add it to `shots` above and point the place at it.
+ *
+ * The plain frames are `intro`, `work`, `route`, `officers` and `duty`. A fan
+ * kit wallpaper may only go in one of those.
  */
 export const pictures = {
   hero: at(shots.raoul48325577926, "50% 50%"),
-  intro: at(shots.arieneo48537322302, "40% 50%"),
+  intro: at(shots.fankitSc25),
   why: at(shots.raoul41663107162, "50% 60%"),
   hail: at(shots.raoul45120650855, "50% 55%"),
-  work: at(shots.yajih41594388540, "70% 55%"),
+  work: at(shots.fankitSc14),
   apply: at(shots.rellim41638209562, "50% 50%"),
   standards: at(shots.raoul31241378917, "50% 62%"),
   joining: at(shots.raoul48340609227, "60% 45%"),
-  route: at(shots.raoul48408781722, "35% 55%"),
-  officers: at(shots.raoul31867603928, "45% 40%"),
-  duty: at(shots.raoul48695092918, "55% 45%"),
+  route: at(shots.fankitSc34),
+  officers: at(shots.fankitSc33),
+  duty: at(shots.fankitSc12),
   members: at(shots.raoul44402204562, "60% 45%"),
   fleet: at(shots.raoul44799036785, "50% 42%"),
   staff: at(shots.raoul45014160084, "50% 40%"),

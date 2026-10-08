@@ -183,6 +183,31 @@ main {
   object-fit: cover;
 }
 
+/*
+ * A fan kit wallpaper is shown whole and untouched: no crop, no tint, no fade
+ * and no effect. Its frame takes the wallpaper's own shape, 16 to 9.
+ */
+.picture-asis {
+  object-fit: contain;
+  filter: none !important;
+  transform: none !important;
+}
+
+.split-pic:has(.picture-asis),
+.beside-pic:has(.picture-asis) {
+  align-self: center;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+}
+
+.split-pic:has(.picture-asis)::after {
+  content: none;
+}
+
+.beside-pic:has(.picture-asis) {
+  border-radius: 0;
+}
+
 /* A slow drift, so the picture at the top of the front page is not quite still. */
 .picture-drift {
   animation: drift 44s ease-in-out infinite alternate;
@@ -610,6 +635,13 @@ button.button:disabled {
 .foot-note .foot-notice {
   color: var(--text-2);
   font-size: 0.9375rem;
+}
+
+/* The fan kit's logo for fan sites, as supplied: not recoloured, tinted or faded. */
+.foot-made {
+  flex: none;
+  width: 104px;
+  height: 104px;
 }
 
 .foot-links {
