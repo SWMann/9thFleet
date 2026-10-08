@@ -509,6 +509,16 @@ button.button:disabled {
   transform: translateX(4px);
 }
 
+.menu-note {
+  position: relative;
+  max-width: 22em;
+  margin: 10px 0 0;
+  color: #c3cad6;
+  font-size: 1rem;
+  line-height: 1.5;
+  text-shadow: 0 1px 10px rgb(0 0 0 / 0.8);
+}
+
 .menu-close {
   position: fixed;
   top: 12px;

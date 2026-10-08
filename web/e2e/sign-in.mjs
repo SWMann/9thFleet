@@ -48,6 +48,22 @@ try {
     assert.equal(new URL(page.url()).pathname, "/sign-in");
     assert.doesNotMatch(await nav(), /Fleet/i);
   });
+  // The full-screen menu's links, read with it open.
+  const menuLinks = async () => {
+    await page.getByRole("link", { name: "Menu", exact: true }).click();
+    const menu = page.locator("dialog.menu[open]");
+    await menu.waitFor();
+    const labels = await menu.locator(".menu-column li a").allInnerTexts();
+    await page.keyboard.press("Escape");
+    await menu.waitFor({ state: "detached" }).catch(() => {});
+    return labels.map((label) => label.trim());
+  };
+  await check("the full menu offers a signed-out visitor sign-in, not the member pages", async () => {
+    await page.goto(`${site}/`);
+    const labels = await menuLinks();
+    assert.ok(labels.includes("Sign in"), `no Sign in among ${labels.join(", ")}`);
+    assert.ok(!labels.includes("Your record") && !labels.includes("Order of battle"), labels.join(", "));
+  });
   await check("leaving Discord early is explained", async () => {
     await page.goto(`${site}/auth/callback?error=access_denied`);
     assert.equal(new URL(page.url()).pathname, "/sign-in");
@@ -143,6 +159,12 @@ try {
     await page.goto(`${site}/`);
     await page.getByRole("link", { name: "Your record" }).click();
     await page.waitForURL(`${site}/profile`);
+  });
+  await check("the full menu lists the member pages once signed in", async () => {
+    await page.goto(`${site}/`);
+    const labels = await menuLinks();
+    assert.ok(labels.includes("Your record") && labels.includes("Order of battle"), labels.join(", "));
+    assert.ok(!labels.includes("Sign in"), "Sign in is still offered to a signed-in member");
   });
   await check("the sign-in page sends a signed-in member to their record", async () => {
     await page.goto(`${site}/sign-in`);

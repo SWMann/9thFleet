@@ -1,7 +1,20 @@
 import type { PictureName } from "@/lib/pictures";
 
-/** Every page a visitor can go to, grouped as the menu shows them. */
-export const menu: { title: string; picture: PictureName; links: { href: string; label: string }[] }[] = [
+export type MenuLink = { href: string; label: string };
+
+export type MenuGroup = {
+  title: string;
+  picture: PictureName;
+  /** What a visitor sees. */
+  links: MenuLink[];
+  /** What a signed-in member sees instead, where that differs. */
+  signedIn?: MenuLink[];
+  /** A line under a visitor's links, saying what signing in adds. */
+  note?: string;
+};
+
+/** Every page, grouped as the menu shows them. Add a page here when it ships. */
+export const menu: MenuGroup[] = [
   {
     title: "The fleet",
     picture: "menuFleet",
@@ -22,10 +35,11 @@ export const menu: { title: string; picture: PictureName; links: { href: string;
   {
     title: "Members",
     picture: "menuMembers",
-    links: [
-      { href: "/sign-in", label: "Sign in" },
+    links: [{ href: "/sign-in", label: "Sign in" }],
+    signedIn: [
       { href: "/profile", label: "Your record" },
       { href: "/order-of-battle", label: "Order of battle" },
     ],
+    note: "Your record and the order of battle appear here once you have signed in.",
   },
 ];
