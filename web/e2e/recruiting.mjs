@@ -661,6 +661,174 @@ try {
     await shot("operation-done");
   });
 
+  console.log("Admin");
+  const adminPages = ["/admin", "/admin/people", "/admin/recruiting", "/admin/operations"];
+  // A page left by a link stays in the document, hidden, so every one of these looks only at what is shown.
+  const adminTabs = async () =>
+    (await page.locator('nav[aria-label="Fleet admin"]:visible a').allInnerTexts()).map((label) => label.trim());
+  const adminTab = (name) => page.locator('nav[aria-label="Fleet admin"]:visible').getByRole("link", { name, exact: true });
+  // A headline figure, with the line under it.
+  const stat = async (label) => {
+    const tile = page.locator(".kpis:visible > div", { has: page.locator("dt", { hasText: new RegExp(`^${label}$`) }) });
+    return (await tile.locator("dd").innerText()).replace(/\s+/g, " ").trim();
+  };
+  const chart = (title) => page.locator(".chart:visible", { has: page.getByRole("heading", { name: title, exact: true }) });
+  const bar = async (title, label) =>
+    (await chart(title).locator("tr", { has: page.locator("th", { hasText: new RegExp(`^${label}$`) }) }).locator(".bars-value").innerText()).trim();
+  const record = (name) => page.locator(".data:visible tbody tr", { has: page.locator("th", { hasText: name }) });
+  const cells = async (row) => (await row.locator("td").allInnerTexts()).map((text) => text.replace(/\s+/g, " ").trim());
+  const menuLabels = async () => {
+    await page.goto(`${site}/`);
+    await page.getByRole("link", { name: "Menu", exact: true }).click();
+    const menu = page.locator("dialog.menu[open]");
+    await menu.waitFor();
+    return (await menu.locator(".menu-column li a").allInnerTexts()).map((label) => label.trim());
+  };
+  const grant = async (person, role) =>
+    supabase.sql("insert into public.member_roles (member_id, role) values ($1, $2)", [(await memberOf(person)).id, role]);
+
+  await check("a visitor is sent to sign in, and nobody without a role is shown a figure", async () => {
+    await context.clearCookies();
+    for (const path of adminPages) {
+      await page.goto(`${site}${path}`);
+      assert.equal(new URL(page.url()).pathname, "/sign-in", path);
+    }
+    // An applicant, and a recruit who serves but holds no role.
+    for (const person of [sam, kit]) {
+      await signInAs(person);
+      for (const path of adminPages) {
+        await page.goto(`${site}${path}`);
+        await leadIs(/for the people who run the fleet/);
+        assert.equal(await page.locator(".kpis:visible, .chart:visible, .data:visible, .attention:visible").count(), 0, path);
+        assert.deepEqual(await adminTabs(), [], path);
+      }
+      assert.ok(!(await menuLabels()).includes("Fleet admin"), "the menu offers the admin pages");
+    }
+  });
+  await check("staff see the fleet's strength, its posts and what needs attention", async () => {
+    // One application left waiting for nine days, so there is something to attend to.
+    await supabase.sql("update public.fleet_settings set recruitment_open = true");
+    await signInAs(lee);
+    await apply();
+    // The database fixes the day an application was sent, so its rule is set aside for this one change.
+    await supabase.sql("alter table public.applications disable trigger applications_guard");
+    await supabase.sql("update public.applications set submitted_at = now() - interval '9 days' where member_id = $1", [
+      (await memberOf(lee)).id,
+    ]);
+    await supabase.sql("alter table public.applications enable trigger applications_guard");
+
+    await grant(kit, "staff");
+    await signInAs(kit);
+    await page.getByRole("link", { name: "Fleet admin" }).click();
+    await headingIs("Fleet admin");
+    await leadIs(/Stage 1: Cadre\. 3 active, 1 of \d+ open posts filled\./);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting"]);
+
+    assert.match(await stat("Active strength"), /^3 /);
+    assert.match(await stat("Posts filled"), /^1 of \d+ \d+ vacant, 6 of them entry posts/);
+    assert.equal(await stat("Applications open"), "1 1 to read, 0 at interview");
+    assert.match(await stat("Recruitment"), /^Open/);
+    // Operations and attendance are for command.
+    assert.equal(await page.locator(".kpis:visible dt", { hasText: /turnout|Events/ }).count(), 0);
+
+    const waiting = page.locator(".attention:visible li");
+    assert.equal(await waiting.count(), 1);
+    assert.match(await waiting.innerText(), /Lee Tanaka's application has waited 9 days\s+Not read yet\./);
+    const [application] = await applicationsOf(lee);
+    assert.equal(await waiting.getByRole("link").getAttribute("href"), `/staff/applications/${application.id}`);
+
+    const meter = page.getByRole("meter");
+    assert.equal(await meter.getAttribute("aria-valuenow"), "3");
+    assert.equal(await meter.getAttribute("aria-valuemax"), "8");
+    assert.match(await chart("Towards stage 2: Ship's company").innerText(), /3\s+of the 8 active that stage 2 needs/);
+    assert.equal(await bar("Everyone on the books", "Recruit"), "2");
+    assert.equal(await bar("Everyone on the books", "Applicant"), "2");
+    assert.deepEqual(await cells(record("Cadre")), ["1", "1 to 7", "The fleet is here"]);
+    assert.deepEqual(await cells(record("Ship's company")), ["2", "8 to 15", "5 more active"]);
+    assert.match(await chart("By unit").innerText(), /1 of \d+/);
+    await shot("admin-overview");
+  });
+  await check("staff see everyone on the books and can narrow the list, without attendance", async () => {
+    await adminTab("People").click();
+    await headingIs("People");
+    await page.locator(".data-people:visible").waitFor();
+    assert.equal(await stat("Recruits"), "2 In training");
+    assert.equal(await bar("By service", "Navy"), "3");
+    assert.match(await chart("Qualifications held").innerText(), /No qualification has been awarded yet\./);
+    assert.match(await chart("Joined, month by month").innerText(), /2/);
+
+    const rows = page.locator(".data-people:visible tbody tr");
+    assert.equal(await rows.count(), 5);
+    const mine = await record("Starman Recruit Kit Marlow").innerText();
+    assert.match(mine, /Kit_Marlow · kit_on_discord/);
+    assert.match(mine, /Recruit\s+Navy · E1 · Staff/);
+    assert.equal(await page.locator(".data-people:visible thead th", { hasText: /Events|Absent|Last attended/ }).count(), 0);
+
+    await page.getByLabel("Status").selectOption({ label: "Applicant" });
+    assert.equal(await rows.count(), 2);
+    assert.match(await page.locator(".filters-count:visible").innerText(), /2 of 5 people/);
+    await page.getByLabel("Find").fill("tanaka");
+    assert.equal(await rows.count(), 1);
+    await page.getByLabel("Find").fill("nobody at all");
+    await page.getByText("Nobody matches.").waitFor();
+    await page.getByLabel("Find").fill("");
+    await page.getByLabel("Status").selectOption({ label: "Everyone" });
+    await shot("admin-people");
+  });
+  await check("staff see how recruiting is going, and are not shown operations", async () => {
+    await adminTab("Recruiting").click();
+    await headingIs("Recruiting");
+    await leadIs(/Recruitment is open\. 1 application is waiting to be read and 0 are at interview\./);
+    assert.equal(await stat("Applications"), "7 From 4 people, 2 of them more than once");
+    assert.match(await stat("Acceptance rate"), /^67% /);
+    assert.match(await stat("Time to decide"), /^Under a day /);
+    assert.equal(await bar("How far applications get", "Applied"), "7");
+    assert.equal(await bar("How far applications get", "Reached interview or a decision"), "3");
+    assert.equal(await bar("How far applications get", "Accepted"), "2");
+    assert.equal(await bar("Where they stand now", "Withdrawn"), "3");
+    assert.equal(await bar("Service asked for", "Navy"), "7");
+    // Six sent this week and one nine days ago.
+    const weeks = await chart("Applications sent, week by week").locator("li .visually-hidden").allInnerTexts();
+    assert.equal(weeks.length, 8);
+    assert.match(weeks.at(-1), /: 6 applications$/);
+    assert.equal(weeks.filter((week) => /: 1 application$/.test(week)).length, 1);
+    assert.deepEqual((await cells(record("Lee Tanaka"))).slice(0, 1), ["Waiting to be read"]);
+    assert.match((await cells(record("Lee Tanaka"))).at(-1), /^9 ?A week or more$/);
+    await shot("admin-recruiting");
+
+    await page.goto(`${site}/admin/operations`);
+    await leadIs(/This page is for command\./);
+    assert.equal(await page.locator(".kpis:visible, .chart:visible, .data:visible").count(), 0);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting"]);
+  });
+  await check("command also sees operations and attendance", async () => {
+    await grant(jo, "command");
+    await signInAs(jo);
+    assert.ok((await menuLabels()).includes("Fleet admin"), "the menu does not offer the admin pages");
+    await page.goto(`${site}/admin`);
+    await leadIs(/Stage 1: Cadre\. 3 active/);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations"]);
+    assert.equal(await stat("Events in 30 days"), "1 0 coming up");
+    assert.match(await stat("Average turnout"), /^67% /);
+
+    await adminTab("Operations").click();
+    await leadIs(/1 event held, 0 coming up and 0 in draft\./);
+    assert.equal(await stat("Events held"), "1 1 in the last 30 days");
+    assert.match(await stat("Reports on time"), /^1 of 1 /);
+    assert.equal(await bar("By type", "Patrol"), "1");
+    // Three said attending, one of them a stand-in. Two were present and one absent without notice.
+    assert.deepEqual((await cells(record("Patrol 001"))).slice(1), ["Done", "3", "1", "2", "0", "1", "On time"]);
+    assert.match(await record("Patrol 001").innerText(), /Patrol · Ada Vance/);
+    assert.deepEqual((await cells(record("Jo Reyes"))).slice(0, 5), ["0", "0", "0", "1", "1"]);
+    assert.deepEqual((await cells(record("Kit Marlow"))).slice(0, 5), ["1", "1", "1", "0", "0"]);
+    await shot("admin-operations");
+
+    await page.goto(`${site}/admin/people`);
+    await page.locator(".data-people:visible").waitFor();
+    assert.equal(await page.locator(".data-people:visible thead th", { hasText: "Events, 30 days" }).count(), 1);
+    assert.deepEqual((await cells(record("Jo Reyes"))).slice(4, 8), ["0", "0", "0", "1"]);
+  });
+
   await check("no page raised a script error", async () => {
     assert.deepEqual(pageErrors, []);
   });

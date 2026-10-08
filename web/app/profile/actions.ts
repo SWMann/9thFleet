@@ -3,7 +3,7 @@
 import { refresh } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { SIGNED_IN_COOKIE } from "@/lib/supabase/cookies";
+import { SIGNED_IN_COOKIE, TIER_COOKIE } from "@/lib/supabase/cookies";
 import { createClient } from "@/lib/supabase/server";
 
 export type NamesResult = { ok: boolean; message: string };
@@ -80,6 +80,8 @@ function explain(error: { code?: string; message: string }): string {
 export async function signOut() {
   const supabase = await createClient();
   if (supabase) await supabase.auth.signOut();
-  (await cookies()).delete(SIGNED_IN_COOKIE);
+  const jar = await cookies();
+  jar.delete(SIGNED_IN_COOKIE);
+  jar.delete(TIER_COOKIE);
   redirect("/");
 }

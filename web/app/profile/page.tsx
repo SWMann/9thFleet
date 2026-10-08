@@ -155,10 +155,13 @@ async function Record() {
         <section className="wrap band" aria-labelledby="staff">
           <h2 id="staff">Staff work</h2>
           <div>
-            <p>Read applications, keep interview notes, and accept or decline.</p>
+            <p>Read applications, keep interview notes, and accept or decline. The admin pages hold the fleet&apos;s figures.</p>
             <p className="actions">
               <Link className="button button-quiet" href="/staff/applications">
                 Applications
+              </Link>
+              <Link className="button button-quiet" href="/admin">
+                Fleet admin
               </Link>
             </p>
           </div>

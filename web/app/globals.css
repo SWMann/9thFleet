@@ -3741,3 +3741,543 @@ a.contents-name:hover {
   font-size: 0.9375rem;
   font-weight: 400;
 }
+
+/*
+ * The admin pages: figures about the fleet.
+ *
+ * Chart colours are not the site's gold. Gold marks things to press, and it is
+ * too pale to tell from white text on a bar. One blue carries every chart with
+ * one series. The funnel's steps run from light to dark in the same blue.
+ * Green, amber and red stay for states.
+ */
+
+.subbar-many {
+  justify-content: flex-start;
+  gap: 0 clamp(20px, 4vw, 44px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.subbar-many a {
+  flex: none;
+}
+
+.kpis,
+.charts {
+  --series: #3987e5;
+  --step-1: #86b6ef;
+  --step-2: #5598e7;
+  --step-3: #256abf;
+  --step-4: #184f95;
+  --track: rgb(255 255 255 / 0.09);
+}
+
+/* A row of headline figures: the label, the figure, and a line saying what it counts. */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(var(--per-row, 4), minmax(0, 1fr));
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--seam);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+/* Each figure draws the lines to its right and below. The frame hides the ones at the edge. */
+.kpis > div {
+  margin: 0 -1px -1px 0;
+  padding: 18px 20px 20px;
+  border-right: 1px solid var(--seam);
+  border-bottom: 1px solid var(--seam);
+}
+
+.kpis dt {
+  color: var(--text-3);
+  font-size: 0.78125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.kpis dd {
+  margin: 6px 0 0;
+  color: var(--white);
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.kpis dd small,
+.chart-figure small {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.band > h2 + .charts,
+.band > .intro + .charts {
+  margin-top: 0;
+}
+
+.chart {
+  min-width: 0;
+  padding: 20px 22px 22px;
+  border: 1px solid var(--seam);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.chart-wide {
+  grid-column: 1 / -1;
+}
+
+.chart h3 {
+  margin-bottom: 16px;
+}
+
+.band .chart-note,
+.band .chart-empty {
+  max-width: none;
+  margin: 16px 0 0;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.band .chart-empty {
+  margin-top: 0;
+  color: var(--text-2);
+}
+
+.band .chart-figure {
+  margin: 0 0 16px;
+  color: var(--white);
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+/* Bars across the page. A table, so it reads as one without the bars. */
+.bars {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.bars th,
+.bars td {
+  padding: 7px 0;
+  vertical-align: middle;
+}
+
+.bars th {
+  width: 42%;
+  padding-right: 16px;
+  color: var(--text);
+  font-size: 0.96875rem;
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.bars th small {
+  display: block;
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+.bars-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* A bar is thin, square where it starts and rounded where it ends. */
+.bars-bar {
+  flex: none;
+  width: calc(var(--share) * (100% - 3.5em));
+  /* The smallest count still shows a mark. Nothing shows none. */
+  min-width: 2px;
+  height: 14px;
+  border-radius: 0 4px 4px 0;
+  background: var(--series);
+}
+
+.bars-bar[data-none] {
+  min-width: 0;
+  margin-right: -10px;
+}
+
+.bars-value {
+  color: var(--white);
+  font-size: 0.96875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bars-ordered tr:nth-child(1) .bars-bar {
+  background: var(--step-1);
+}
+
+.bars-ordered tr:nth-child(2) .bars-bar {
+  background: var(--step-2);
+}
+
+.bars-ordered tr:nth-child(3) .bars-bar {
+  background: var(--step-3);
+}
+
+.bars-ordered tr:nth-child(4) .bars-bar {
+  background: var(--step-4);
+}
+
+.bars-track {
+  flex: 1;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--track);
+}
+
+.bars-track span {
+  display: block;
+  width: calc(var(--share) * 100%);
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--series);
+}
+
+.bars-ratio .bars-value {
+  flex: none;
+  min-width: 5.5em;
+  text-align: right;
+}
+
+/* Columns over time: oldest on the left, the value on top of each. */
+.colchart {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.colchart li {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+.colchart-plot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  height: 150px;
+  border-bottom: 1px solid var(--seam-2);
+}
+
+.colchart-value {
+  margin-bottom: 4px;
+  color: var(--white);
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.colchart-bar {
+  width: min(24px, 70%);
+  height: calc(var(--share) * 120px);
+  border-radius: 4px 4px 0 0;
+  background: var(--series);
+}
+
+.colchart-label {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* One number against the number it is heading for. */
+.meter {
+  height: 14px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--track);
+}
+
+.meter span {
+  display: block;
+  width: calc(var(--share) * 100%);
+  min-width: 2px;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--series);
+}
+
+.band .meter-ends {
+  display: flex;
+  justify-content: space-between;
+  max-width: none;
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Things someone should look at. */
+.attention {
+  display: grid;
+  max-width: 54rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--seam);
+  border-radius: 6px;
+  background: var(--panel);
+  list-style: none;
+}
+
+.attention li {
+  display: grid;
+  gap: 2px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--seam);
+  border-left: 3px solid var(--gold);
+}
+
+.attention li:first-child {
+  border-top: 0;
+}
+
+.attention a,
+.attention strong {
+  color: var(--white);
+  font-weight: 600;
+}
+
+.attention span {
+  color: var(--text-2);
+  font-size: 0.96875rem;
+}
+
+/* A table of records. */
+.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.96875rem;
+  line-height: 1.4;
+}
+
+.data th,
+.data td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--seam);
+  text-align: left;
+  vertical-align: top;
+}
+
+.data thead th {
+  border-bottom-color: var(--seam-2);
+  background: #090d16;
+  color: var(--text-2);
+  font-size: 0.78125rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+  text-transform: uppercase;
+  vertical-align: bottom;
+}
+
+.data tbody th {
+  min-width: 11em;
+  color: var(--white);
+  font-weight: 600;
+}
+
+.data td {
+  color: var(--text);
+}
+
+.data small {
+  display: block;
+  color: var(--text-3);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.data .number {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.data td.number {
+  white-space: nowrap;
+}
+
+.data .number .chip {
+  margin-left: 10px;
+}
+
+.data a {
+  color: var(--white);
+}
+
+.data-current th,
+.data-current td {
+  background: rgb(200 164 90 / 0.08);
+}
+
+.table-scroll:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.chart .table-scroll,
+.band > .table-scroll {
+  margin: 0;
+  border: 1px solid var(--seam);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.chart .table-scroll {
+  border: 0;
+  background: none;
+}
+
+.data tbody tr:last-child th,
+.data tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.data-people td {
+  min-width: 8em;
+}
+
+.data-people td.number {
+  min-width: 0;
+}
+
+/* The filters above a table, in one row. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.filters label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-2);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.filters input,
+.filters select {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 4px;
+  background: var(--deep);
+  color: var(--white);
+  font: inherit;
+  font-weight: 400;
+}
+
+.filters input {
+  width: min(17rem, 100%);
+}
+
+.filters input:focus-visible,
+.filters select:focus-visible {
+  border-color: var(--gold);
+  outline: 2px solid var(--gold);
+  outline-offset: 0;
+}
+
+.band .filters-count {
+  max-width: none;
+  margin: 0 0 9px auto;
+  color: var(--text-2);
+  font-size: 0.96875rem;
+}
+
+@media (max-width: 1000px) {
+  .kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kpis > div {
+    padding: 14px 14px 16px;
+  }
+
+  .kpis dd,
+  .band .chart-figure {
+    font-size: 1.75rem;
+  }
+
+  .chart {
+    padding: 16px 16px 18px;
+  }
+
+  .bars th {
+    width: 46%;
+  }
+
+  .data th,
+  .data td {
+    padding: 10px;
+  }
+
+  .data tbody th {
+    min-width: 8em;
+  }
+
+  .filters label,
+  .filters input,
+  .filters select {
+    width: 100%;
+  }
+
+  .band .filters-count {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Eight labels do not fit across a phone, so every other one is left out. */
+  .colchart li:nth-child(even) .colchart-label {
+    visibility: hidden;
+  }
+}

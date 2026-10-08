@@ -174,6 +174,8 @@ try {
     const readable = await page.evaluate(() => document.cookie);
     assert.doesNotMatch(readable, /auth-token/, "a script in the page can read the session");
     assert.match(readable, /nf_signed_in=1/);
+    // The menu's second hint: an applicant is offered no admin pages.
+    assert.match(readable, /nf_tier=none/);
     await page.reload();
     await headingIs("Your record");
   });
@@ -421,7 +423,7 @@ try {
     assert.ok(mock.state.signOuts > before, "the sign-in service was not told");
     assert.match(await nav(), /Sign in/i);
     const left = (await context.cookies()).map((cookie) => cookie.name);
-    assert.deepEqual(left.filter((name) => /auth-token|nf_signed_in/.test(name)), [], "cookies were left behind");
+    assert.deepEqual(left.filter((name) => /auth-token|nf_signed_in|nf_tier/.test(name)), [], "cookies were left behind");
     await page.goto(`${site}/profile`);
     assert.equal(new URL(page.url()).pathname, "/sign-in");
   });

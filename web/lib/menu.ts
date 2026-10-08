@@ -9,6 +9,8 @@ export type MenuGroup = {
   links: MenuLink[];
   /** What a signed-in member sees instead, where that differs. */
   signedIn?: MenuLink[];
+  /** Added to a signed-in member's links when they help run the fleet. */
+  admin?: MenuLink[];
   /** A line under a visitor's links, saying what signing in adds. */
   note?: string;
 };
@@ -51,6 +53,7 @@ export const menu: MenuGroup[] = [
       { href: "/order-of-battle", label: "Order of battle" },
       { href: "/operations", label: "Operations" },
     ],
+    admin: [{ href: "/admin", label: "Fleet admin" }],
     note: "Your record, the order of battle and operations appear here once you have signed in.",
   },
 ];

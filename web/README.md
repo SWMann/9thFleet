@@ -33,7 +33,7 @@ The browser tests do not touch Discord or the live database. They need a browser
 | Test | Stand-in | What it is for |
 | --- | --- | --- |
 | `e2e/sign-in.mjs` | `e2e/mock-supabase.mjs`, which answers from memory | Sign-in, cookies, redirects, the member's record and the order of battle |
-| `e2e/recruiting.mjs` | `e2e/supabase-with-database.mjs`, which runs the real migrations in an in-memory PostgreSQL | The ranks, roles and manual pages, applying, the staff pages and operations, against the database's real rules |
+| `e2e/recruiting.mjs` | `e2e/supabase-with-database.mjs`, which runs the real migrations in an in-memory PostgreSQL | The ranks, roles and manual pages, applying, the staff pages, operations and the admin pages, against the database's real rules |
 
 Write new tests the second way. A refusal in that test is the database's own refusal, so the test
 fails if the site and the rules ever disagree. The stand-in understands only the kinds of query the
@@ -51,6 +51,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/operations` | Training and operation nights: the orders, the roll, stand-ins, the attendance return and the after-action report. For the serving fleet. Command drafts events, and instructors draft training |
 | `/apply` | The application form, and the state of your application once it is sent |
 | `/staff/applications` | For staff: the applications, their answers, interview notes and the decision. An admin opens and closes recruitment here |
+| `/admin` | For the people who run the fleet: its figures. See Admin pages below |
 | `/ranks` | Every grade and its rank name in each service, read from the database. Open to everyone |
 | `/roles` | The areas of work, the posts in each and a card for each kind of post, read from the database. Open to everyone. It never shows who holds a post |
 | `/manual` | The fleet manual: the doctrine volumes that have been reviewed, section by section. Open to everyone |
@@ -64,6 +65,10 @@ How it is kept safe:
 - **The session is in cookies that scripts cannot read.** Only the server talks to the database.
 - **Every page and action checks the session again.** `proxy.ts` sends signed-out visitors to
   sign-in, but that is a convenience, not the lock.
+- **Two more cookies hold no secret, and scripts can read them.** `nf_signed_in` tells the menu to
+  offer "Your record" instead of "Sign in". `nf_tier` tells it whether to offer the admin pages. It
+  lasts ten minutes, so a new role shows in the menu within ten minutes. Both are hints. Neither
+  opens anything.
 - **Leaving the site is done with a plain form and a plain redirect.** A Server Action that
   redirects to another site leaves the page's router pointing there, and in Safari the button then
   stops working after Back. Use a route handler for anything that sends the visitor elsewhere.
@@ -79,6 +84,29 @@ Two things are set in the Supabase dashboard, under Authentication:
 2. **URL Configuration.** The Site URL is this site's address, and the same address followed by
    `/auth/callback` is in the list of Redirect URLs. Supabase refuses to send anyone back to an
    address that is not listed.
+
+## Admin pages
+
+The figures of the fleet, for the people who run it. A role decides which pages the site offers:
+
+| Page | Who it is for | What it shows |
+| --- | --- | --- |
+| `/admin` | Staff, command and admins | Active strength against the stage, posts filled, and a list of what needs attention |
+| `/admin/people` | Staff, command and admins | Everyone on the books, by status, service and grade, with qualifications. Command also sees attendance |
+| `/admin/recruiting` | Staff, command and admins | How far applications get, how long decisions take, and which are still open |
+| `/admin/operations` | Command and admins | Every event, turnout, late reports, and attendance member by member |
+
+An admin holds every role, so sees all of them. A role only counts while its holder is serving.
+
+- **The tiers are in `lib/admin.ts`,** with every figure. The pages only lay the figures out.
+- **The tiers are what the site offers, not the lock.** Every figure is read as the signed-in
+  person, so the database's rules decide which rows come back.
+- **The figures are counted from whole tables.** That suits a fleet of hundreds. Supabase returns at
+  most a thousand rows to one request, so past that the counting moves into the database.
+- **The charts are plain HTML,** in `components/admin/Charts.tsx`. Each is a table or a list, so it
+  reads the same without its bars. Every bar of a chart is one blue, because gold is for things to
+  press and green, amber and red are for states. The colours were checked for contrast and for
+  colour-blind readers against the site's dark panels. Check any new colour the same way.
 
 ## Change the words
 
@@ -100,6 +128,8 @@ Two things are set in the Supabase dashboard, under Authentication:
 | The questions on the application form | `lib/application-form.ts` |
 | The application page and the staff pages | `app/apply/` and `app/staff/applications/` |
 | The member's record | `app/profile/page.tsx` |
+| The admin pages | `app/admin/`, and the figures in `lib/admin.ts` |
+| Which role opens which admin page | `lib/admin.ts` and the list of tabs in `components/admin/AdminHead.tsx` |
 | The menu | `lib/menu.ts` |
 | The pictures | `lib/pictures.ts`. See Pictures below |
 | Colours and type | `app/globals.css` |
