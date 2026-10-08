@@ -1054,6 +1054,7 @@ try {
     assert.match(cards, /14\s+Units/);
     assert.match(cards, /52\s+Posts/);
     assert.match(cards, /6\s+Qualifications/);
+    assert.match(cards, /5\s+Event types/);
     assert.match(cards, /18 grades\s+Ranks and grades/i);
     await shot("structure");
   });
@@ -1259,6 +1260,233 @@ try {
     assert.match(text, /Ada Vance stopped every Gunner needing the Net controller qualification\./);
     assert.match(text, /Ada Vance changed the role Gunner\.\s+duties changed\. summary changed\./);
     await shot("admin-logs-structure");
+  });
+
+  console.log("Event types");
+  const typeRow = (key) => one("select * from public.event_types where key = $1", [key]);
+  const eventTitled = (title) => one("select * from public.events where title = $1", [title]);
+  const ordersOf = async (title) => one("select * from public.event_orders where event_id = $1", [(await eventTitled(title)).id]);
+  const typeOptions = async () => (await page.getByLabel("Type").locator("option").allInnerTexts()).map((text) => text.trim());
+  // The event form fills in a type's usual length when the type is chosen, which it can only do once the page's script runs.
+  const eventFormReady = async () => {
+    await page.getByLabel("Title").waitFor();
+    await page.waitForFunction(() => {
+      const list = document.querySelector("select#kind");
+      return list !== null && Object.keys(list).some((key) => key.startsWith("__reactProps"));
+    });
+  };
+  const openEvent = async (title) => {
+    await page.goto(`${site}/operations/${(await eventTitled(title)).id}`);
+    await headingIs(title);
+  };
+
+  await check("the types of event are records an admin edits, and a type names its own order sections", async () => {
+    await signInAs(founder);
+    await openEditor("Event types");
+    assert.equal(await page.locator("details.record:visible:not(.record-new)").count(), 5);
+    const training = await openRecord("Training evolution");
+    assert.match(await training.locator("summary").first().innerText(), /Drafted by command and instructors/);
+    assert.equal(await training.getByLabel("Code").count(), 0, "a type's code is set once, when it is added");
+    await training.getByLabel("Usual length, in minutes").fill("90");
+    await training.getByLabel("Usual weapons state").selectOption({ label: "Weapons hold: self-defence only" });
+    await training.getByLabel("Section 2 is called").fill("2 Aim");
+    await training.getByLabel("What section 2 holds").fill("What everyone will be able to do by the end.");
+    await training.getByRole("button", { name: "Save", exact: true }).click();
+    await told(training, "Saved.");
+    const stored = await typeRow("training");
+    assert.equal(stored.default_duration_minutes, 90);
+    assert.equal(stored.default_weapons_state, "hold");
+    assert.equal(stored.mission_name, "2 Aim");
+    assert.equal(stored.situation_name, "", "a section left alone keeps Volume 2's name");
+    await shot("structure-event-types");
+  });
+  await check("an admin adds a type of the fleet's own, and a name already taken is refused", async () => {
+    const adding = await addRecord(async (form) => {
+      await form.getByLabel("Name").fill("Patrol");
+      await form.getByLabel("Code").fill("boarding-drill");
+      await form.getByLabel("Usually run by").fill("Marine detachment");
+      await form.getByLabel("Such as").fill("Clearing a Caterpillar deck by deck.");
+      await form.getByLabel("Instructors may draft it, as well as command").check();
+      assert.equal(await form.getByLabel("Usual length, in minutes").inputValue(), "120", "a new type starts at two hours");
+      await form.getByLabel("Place in the list").fill("6");
+    });
+    await told(adding, "Another event type already has that name or code.");
+    assert.equal(await adding.getByLabel("Code").inputValue(), "boarding-drill", "the form lost what was typed");
+    assert.equal(await adding.getByLabel("Instructors may draft it, as well as command").isChecked(), true);
+    await adding.getByLabel("Name").fill("Boarding drill");
+    await adding.getByRole("button", { name: "Add the event type" }).click();
+    await told(adding, "Added.");
+    const stored = await typeRow("boarding-drill");
+    assert.equal(stored.name, "Boarding drill");
+    assert.equal(stored.instructors_may_draft, true);
+    assert.equal(stored.run_by, "Marine detachment");
+    assert.equal(stored.default_weapons_state, null);
+  });
+  await check("someone who may draft nothing is offered no form and no copy", async () => {
+    // Kit is staff, and staff do not draft events.
+    await signInAs(kit);
+    await page.goto(`${site}/operations/new`);
+    await leadIs(/instructors draft the types open to them/);
+    assert.equal(await page.getByLabel("Title").count(), 0);
+    await openPatrol();
+    assert.equal(await page.getByRole("button", { name: "Draft another like this" }).count(), 0);
+  });
+  await check("an instructor is offered the types open to instructors, each with its usual length and weapons state", async () => {
+    await grant(kit, "instructor");
+    await signInAs(kit);
+    await page.goto(`${site}/operations/new`);
+    await eventFormReady();
+    assert.deepEqual(await typeOptions(), ["Training evolution", "Boarding drill"]);
+    assert.equal(await page.getByLabel("Minutes").inputValue(), "90");
+    assert.equal(await page.getByLabel(/^Weapons state/).inputValue(), "hold");
+    await page.getByLabel("Type").selectOption({ label: "Boarding drill" });
+    await page.getByText("Usually run by: Marine detachment. Such as: Clearing a Caterpillar deck by deck.").waitFor();
+    assert.equal(await page.getByLabel("Minutes").inputValue(), "120");
+    assert.equal(await page.getByLabel(/^Weapons state/).inputValue(), "");
+    await page.getByLabel("Type").selectOption({ label: "Training evolution" });
+    await page.getByText("Usually run by: Training team.").waitFor();
+    assert.equal(await page.getByLabel("Minutes").inputValue(), "90");
+    await shot("operation-new-type");
+
+    // A save that is turned down says why and keeps what was typed.
+    await page.getByLabel("Title").fill("Training Night 001");
+    await page.getByLabel("Repeats weekly").check();
+    await page.getByLabel(/^Second-in-command/).selectOption({ label: "Starman Recruit Kit Marlow" });
+    await page.getByRole("button", { name: "Save as a draft" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "The second-in-command is someone other than the commander." }).waitFor();
+    assert.equal(await page.getByLabel("Title").inputValue(), "Training Night 001", "the form lost what was typed");
+    assert.equal(await page.getByLabel("Repeats weekly").isChecked(), true);
+    assert.equal(await page.getByLabel("Minutes").inputValue(), "90");
+    await page.getByLabel(/^Second-in-command/).selectOption({ label: "Not named yet" });
+    await page.getByRole("button", { name: "Save as a draft" }).click();
+    await headingIs("Training Night 001");
+
+    const event = await eventTitled("Training Night 001");
+    assert.equal(event.kind, "training");
+    assert.equal(event.duration_minutes, 90);
+    assert.equal(event.weapons_state, "hold");
+    assert.equal(event.repeats_weekly, true);
+    assert.equal(event.created_by, (await memberOf(kit)).id);
+    const chips = await page.locator(".page-head:visible .chips").innerText();
+    assert.match(chips, /Training evolution/i);
+    assert.match(chips, /Weapons hold/i);
+    assert.match(chips, /Weekly/i);
+    // The event's page uses the type's own name for the section, and its own guidance.
+    assert.match(await page.locator(".orders:visible").innerText(), /2 Aim\s+Not written yet\. What everyone will be able to do by the end\./i);
+    assert.match(await page.locator(".orders:visible").innerText(), /1 Situation/i);
+  });
+  await check("the orders are written under the type's own headings", async () => {
+    await page.getByRole("link", { name: "Change the details and orders" }).click();
+    await page.getByLabel("2 Aim").fill("Every gunner hits a moving target from the dorsal turret.");
+    await page.getByLabel("1 Situation").waitFor();
+    await page.getByRole("button", { name: "Save the orders" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "Saved." }).waitFor();
+    assert.equal((await ordersOf("Training Night 001")).mission, "Every gunner hits a moving target from the dorsal turret.");
+    assert.equal(await page.getByLabel("Repeats weekly").isChecked(), true);
+  });
+  await check("closing a weekly event drafts next week's, with its details and orders, and announces nothing", async () => {
+    const first = await eventTitled("Training Night 001");
+    await openEvent("Training Night 001");
+    await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).click();
+    await page.getByRole("button", { name: "Yes, announce it" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
+    assert.deepEqual(await supabase.sql("select 1 from public.events where copied_from = $1", [first.id]), [], "announcing drafts nothing");
+
+    await supabase.sql("update public.events set starts_at = now() - interval '1 hour' where id = $1", [first.id]);
+    await openEvent("Training Night 001");
+    await page.getByRole("button", { name: "Make the return and close the event" }).click();
+    const said = page.locator(".form-result:visible").filter({ hasText: "The attendance return is made." });
+    await said.waitFor();
+    await shot("operation-weekly-closed");
+    await said.getByRole("link", { name: "Next week's is drafted: Training Night 002" }).click();
+    await headingIs("Training Night 002");
+
+    const next = await eventTitled("Training Night 002");
+    assert.equal(next.state, "draft");
+    assert.equal(next.announced_at, null);
+    assert.equal(next.copied_from, first.id);
+    assert.equal(next.repeats_weekly, true);
+    assert.equal(next.duration_minutes, 90);
+    assert.equal(next.created_by, (await memberOf(kit)).id, "whoever closed the last one drafted the next");
+    const gap = await one(
+      "select (n.starts_at - e.starts_at) = interval '7 days' as a_week from public.events e, public.events n where e.id = $1 and n.id = $2",
+      [first.id, next.id],
+    );
+    assert.equal(gap.a_week, true);
+    const facts = await page.locator(".facts:visible").innerText();
+    assert.match(facts, /Repeats\s+Weekly/i);
+    assert.match(facts, /Copied from\s+Training Night 001/i);
+    assert.match(await page.locator(".orders:visible").innerText(), /Every gunner hits a moving target from the dorsal turret\./);
+    await shot("operation-weekly-next");
+
+    // Command sees every draft, and the list marks the ones that repeat.
+    await signInAs(jo);
+    await page.goto(`${site}/operations`);
+    const listed = page.locator(".event:visible", { hasText: "Training Night 002" });
+    await listed.waitFor();
+    assert.match(await listed.innerText(), /Draft[\s\S]*Weekly/i);
+  });
+  await check("an event is copied into a new draft, with its orders, by someone who may draft its type", async () => {
+    await signInAs(founder);
+    await openPatrol();
+    await page.getByRole("button", { name: "Draft another like this" }).click();
+    await headingIs("Patrol 002");
+    await eventFormReady();
+    const source = await patrol();
+    const copy = await eventTitled("Patrol 002");
+    assert.equal(copy.state, "draft");
+    assert.equal(copy.kind, "patrol");
+    assert.equal(copy.copied_from, source.id);
+    assert.equal(copy.summary, source.summary);
+    assert.equal(copy.weapons_state, "tight");
+    assert.equal(copy.repeats_weekly, false, "a copy is one night unless it is set to repeat");
+    assert.equal(copy.commander_id, (await memberOf(founder)).id);
+    assert.ok(Date.parse(copy.starts_at) > Date.now(), "a copy starts in the future");
+    assert.equal(await page.getByLabel("2 Mission").inputValue(), "Task Force Jericho will patrol the lane in order to deter piracy against traders.");
+    assert.equal((await ordersOf("Patrol 002")).warning_order, (await ordersOf("Patrol 001")).warning_order);
+    await shot("operation-copy");
+  });
+  await check("a type that has events cannot be removed, and one that has none can", async () => {
+    await openEditor("Event types");
+    const held = await openRecord("Patrol");
+    await held.locator("summary", { hasText: "Remove this event type" }).click();
+    await held.getByRole("button", { name: "Yes, remove it" }).click();
+    await told(held, /Events of this type exist/);
+
+    const spare = await openRecord("Strike");
+    await spare.locator("summary", { hasText: "Remove this event type" }).click();
+    await spare.getByRole("button", { name: "Yes, remove it" }).click();
+    await page.locator("details.record:visible summary strong", { hasText: /^Strike$/ }).waitFor({ state: "detached" });
+    assert.equal(await typeRow("strike"), undefined);
+
+    await page.goto(`${site}/operations/new`);
+    await eventFormReady();
+    assert.deepEqual(await typeOptions(), ["Training evolution", "Patrol", "Response", "Tasked PvE", "Boarding drill"]);
+    // The figures follow the types the fleet has.
+    await page.goto(`${site}/admin/operations`);
+    await leadIs(/event/);
+    assert.equal(await bar("By type", "Boarding drill"), "0");
+    assert.equal(await bar("By type", "Training evolution"), "1");
+    assert.equal(await chart("By type").locator("th", { hasText: /^Strike$/ }).count(), 0);
+  });
+  await check("event types, copies and repeats are in the logs", async () => {
+    await page.goto(`${site}/admin/logs?show=structure`);
+    await page.locator(".log:visible").first().waitFor();
+    const structure = await logText();
+    assert.match(structure, /Ada Vance added the event type Boarding drill\./);
+    assert.match(structure, /Ada Vance changed the event type Training evolution\./);
+    assert.match(structure, /Ada Vance removed the event type Strike\./);
+
+    await page.goto(`${site}/admin/logs?show=operations`);
+    await page.locator(".log:visible").first().waitFor();
+    const operations = await logText();
+    assert.match(operations, /Kit Marlow drafted Training Night 001\.\s+Training evolution\. It repeats weekly\./);
+    assert.match(operations, /Training Night 002 was drafted for next week when Kit Marlow ended Training Night 001\./);
+    assert.match(operations, /Ada Vance drafted Patrol 002, as a copy of Patrol 001\.\s+Patrol\./);
+
+    await page.goto(`${site}/admin/logs?show=refused`);
+    await page.locator(".log:visible").first().waitFor();
+    assert.match(await logText(), /Ada Vance was refused: tried to remove part of the fleet's structure\./);
   });
 
   await check("no page raised a script error", async () => {

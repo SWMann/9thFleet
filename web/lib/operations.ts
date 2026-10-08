@@ -1,6 +1,15 @@
 import "server-only";
 import { getSession, isServing, type Member } from "@/lib/member";
-import type { EventKind, EventState, ParagraphKey, Reply, Returned, WeaponsState } from "@/lib/operations-form";
+import {
+  sectionsFrom,
+  type EventState,
+  type EventType,
+  type ParagraphKey,
+  type Reply,
+  type Returned,
+  type Section,
+  type WeaponsState,
+} from "@/lib/operations-form";
 import { getOrderOfBattle, type Unit } from "@/lib/order-of-battle";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,7 +24,7 @@ export type Person = { id: string; name: string; rankName: string | null };
 
 type EventRow = {
   id: string;
-  kind: EventKind;
+  kind: string;
   title: string;
   summary: string;
   starts_at: string;
@@ -29,6 +38,8 @@ type EventRow = {
   created_by: string | null;
   announced_at: string | null;
   roll_closes_at: string | null;
+  copied_from: string | null;
+  repeats_weekly: boolean;
 };
 type AttendanceRow = {
   event_id: string;
@@ -39,12 +50,14 @@ type AttendanceRow = {
 type RosterRow = { member_id: string; character_name: string | null; rank_name: string | null; status: string };
 
 const EVENT =
-  "id, kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, state, created_by, announced_at, roll_closes_at";
+  "id, kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, state, created_by, announced_at, roll_closes_at, copied_from, repeats_weekly";
 const SERVING = ["recruit", "auxiliary", "member", "reserve"];
 
 export type FleetEvent = {
   id: string;
-  kind: EventKind;
+  /** Its type's key, and what the type is called. */
+  kind: string;
+  kindName: string;
   title: string;
   summary: string;
   startsAt: string;
@@ -60,6 +73,8 @@ export type FleetEvent = {
   /** Whether members can still change their reply. */
   rollOpen: boolean;
   started: boolean;
+  /** Closing it, or cancelling it once announced, drafts next week's. */
+  repeatsWeekly: boolean;
 };
 
 /** One primary post on the night: who holds it, whether they are coming, and who stands in if not. */
@@ -104,15 +119,34 @@ type Outside =
 
 export type Operations =
   | Outside
-  | { state: "ready"; member: Member; mayCreate: EventKind[]; drafts: Summary[]; coming: Summary[]; past: Summary[] };
+  | { state: "ready"; member: Member; mayCreate: EventType[]; drafts: Summary[]; coming: Summary[]; past: Summary[] };
 
-/** The kinds of event this member may draft: any as command, training as an instructor. */
-export function kindsFor(member: Member): EventKind[] {
+type Client = NonNullable<Awaited<ReturnType<typeof createClient>>>;
+type TypeRow = Record<string, unknown>;
+
+/** The types of event, in the order the Fleet Commander has put them. */
+export async function readEventTypes(supabase: Client): Promise<EventType[]> {
+  const { data, error } = await supabase.from("event_types").select("*").order("sort_order", { ascending: true });
+  if (error) throw new Error(`The event types could not be read: ${error.message}`);
+  return ((data ?? []) as TypeRow[]).map(
+    (row): EventType => ({
+      key: row.key as string,
+      name: row.name as string,
+      runBy: (row.run_by as string) ?? "",
+      example: (row.example as string) ?? "",
+      instructorsMayDraft: row.instructors_may_draft === true,
+      defaultDuration: Number(row.default_duration_minutes ?? 120),
+      defaultWeaponsState: (row.default_weapons_state as WeaponsState | null) ?? null,
+      sections: sectionsFrom((key, part) => row[`${key}_${part}`] as string | null),
+    }),
+  );
+}
+
+/** The types this member may draft: any as command, and as an instructor the ones open to instructors. */
+export function typesFor(member: Member, types: EventType[]): EventType[] {
   if (!isServing(member)) return [];
-  if (member.roles.includes("command") || member.roles.includes("admin")) {
-    return ["training", "patrol", "response", "strike", "tasked_pve"];
-  }
-  return member.roles.includes("instructor") ? ["training"] : [];
+  if (member.roles.includes("command") || member.roles.includes("admin")) return types;
+  return member.roles.includes("instructor") ? types.filter((type) => type.instructorsMayDraft) : [];
 }
 
 const isCommand = (member: Member) =>
@@ -137,11 +171,12 @@ function openPosts(fleet: Unit) {
   return groups;
 }
 
-function toEvent(row: EventRow, people: Map<string, RosterRow>, now: number): FleetEvent {
+function toEvent(row: EventRow, people: Map<string, RosterRow>, types: EventType[], now: number): FleetEvent {
   const person = (id: string | null) => nameOf(id ? people.get(id) : undefined, id);
   return {
     id: row.id,
     kind: row.kind,
+    kindName: types.find((type) => type.key === row.kind)?.name ?? row.kind,
     title: row.title,
     summary: row.summary,
     startsAt: row.starts_at,
@@ -156,6 +191,7 @@ function toEvent(row: EventRow, people: Map<string, RosterRow>, now: number): Fl
     rollClosesAt: row.roll_closes_at,
     rollOpen: row.state === "announced" && row.roll_closes_at !== null && now < Date.parse(row.roll_closes_at),
     started: now >= Date.parse(row.starts_at),
+    repeatsWeekly: row.repeats_weekly === true,
   };
 }
 
@@ -228,10 +264,11 @@ export async function getOperations(): Promise<Operations> {
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
 
-  const [events, roster, battle] = await Promise.all([
+  const [events, roster, battle, types] = await Promise.all([
     supabase.from("events").select(EVENT).order("starts_at", { ascending: true }),
     supabase.from("roster").select("member_id, character_name, rank_name, status"),
     getOrderOfBattle(),
+    readEventTypes(supabase),
   ]);
   for (const result of [events, roster]) {
     if (result.error) throw new Error(`The events could not be read: ${result.error.message}`);
@@ -254,7 +291,7 @@ export async function getOperations(): Promise<Operations> {
   const now = Date.now();
 
   const summaries = rows.map((row): Summary => {
-    const event = toEvent(row, people, now);
+    const event = toEvent(row, people, types, now);
     const mine = ((lines.data ?? []) as AttendanceRow[]).filter((line) => line.event_id === row.id);
     const roll = buildRoll(event, groups, mine, people);
     return {
@@ -268,7 +305,7 @@ export async function getOperations(): Promise<Operations> {
   return {
     state: "ready",
     member: who.member,
-    mayCreate: kindsFor(who.member),
+    mayCreate: typesFor(who.member, types),
     drafts: summaries.filter((event) => event.state === "draft"),
     coming: summaries.filter((event) => event.state === "announced"),
     // The latest first.
@@ -288,6 +325,10 @@ export type Operation =
       member: Member;
       event: FleetEvent;
       orders: Orders;
+      /** The five sections of the orders, as this event's type names them. */
+      sections: Section[];
+      /** The event this one was copied from, if the member can still read it. */
+      copiedFrom: { id: string; title: string } | null;
       roll: Roll;
       /** The member's own line on the roll. */
       mine: { reply: Reply | null; standInFor: string | null; holdsAPost: boolean };
@@ -305,7 +346,10 @@ export type Operation =
       report: { whatHappened: string; toKeep: string; toChange: string; author: Person | null; filedAt: string } | null;
       /** Serving members, for choosing a commander. Only read for someone who may edit the event. */
       people: Person[];
-      mayCreate: EventKind[];
+      /** The types this member may draft. */
+      mayCreate: EventType[];
+      /** Every type, so an event keeps its own on the list when someone else changes it. */
+      types: EventType[];
     };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -319,7 +363,7 @@ export async function getOperation(id: string): Promise<Operation> {
   if (!supabase) return { state: "no-database" };
   const { member } = who;
 
-  const [found, orders, lines, marks, report, roster, battle] = await Promise.all([
+  const [found, orders, lines, marks, report, roster, battle, types] = await Promise.all([
     supabase.from("events").select(EVENT).eq("id", id).maybeSingle(),
     supabase
       .from("event_orders")
@@ -336,6 +380,7 @@ export async function getOperation(id: string): Promise<Operation> {
       .maybeSingle(),
     supabase.from("roster").select("member_id, character_name, rank_name, status"),
     getOrderOfBattle(),
+    readEventTypes(supabase),
   ]);
   for (const result of [found, orders, lines, marks, report, roster]) {
     if (result.error) throw new Error(`The event could not be read: ${result.error.message}`);
@@ -344,9 +389,14 @@ export async function getOperation(id: string): Promise<Operation> {
   if (!found.data) return { state: "not-found" };
 
   const row = found.data as EventRow;
+  // The event it was copied from, which comes back as nothing if it is a draft this member cannot see.
+  const source = row.copied_from
+    ? await supabase.from("events").select("id, title").eq("id", row.copied_from).maybeSingle()
+    : { data: null, error: null };
+  if (source.error) throw new Error(`The event could not be read: ${source.error.message}`);
   const rosterRows = (roster.data ?? []) as RosterRow[];
   const people = new Map(rosterRows.map((entry) => [entry.member_id, entry]));
-  const event = toEvent(row, people, Date.now());
+  const event = toEvent(row, people, types, Date.now());
   const attendance = (lines.data ?? []) as AttendanceRow[];
   const roll = buildRoll(event, battle.state === "ready" ? openPosts(battle.fleet) : [], attendance, people);
 
@@ -389,6 +439,8 @@ export async function getOperation(id: string): Promise<Operation> {
       support: orders.data?.support ?? "",
       command_and_signal: orders.data?.command_and_signal ?? "",
     },
+    sections: types.find((type) => type.key === row.kind)?.sections ?? sectionsFrom(() => null),
+    copiedFrom: source.data ? { id: source.data.id as string, title: source.data.title as string } : null,
     roll,
     mine: {
       reply: myLine?.reply ?? null,
@@ -414,7 +466,8 @@ export async function getOperation(id: string): Promise<Operation> {
           .map((entry) => nameOf(entry, entry.member_id)!)
           .sort((a, b) => a.name.localeCompare(b.name))
       : [],
-    mayCreate: kindsFor(member),
+    mayCreate: typesFor(member, types),
+    types,
   };
 }
 
@@ -424,7 +477,7 @@ export async function getDraftingState(): Promise<
   | {
       state: "ready";
       member: Member;
-      mayCreate: EventKind[];
+      mayCreate: EventType[];
       people: Person[];
       /** A start to offer: three days out at 19:00 UTC, far enough ahead for the warning order. */
       suggested: { date: string; time: string };
@@ -434,12 +487,15 @@ export async function getDraftingState(): Promise<
   if (who.state !== "ready") return who;
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
-  const roster = await supabase.from("roster").select("member_id, character_name, rank_name, status");
+  const [roster, types] = await Promise.all([
+    supabase.from("roster").select("member_id, character_name, rank_name, status"),
+    readEventTypes(supabase),
+  ]);
   if (roster.error) throw new Error(`The fleet could not be read: ${roster.error.message}`);
   return {
     state: "ready",
     member: who.member,
-    mayCreate: kindsFor(who.member),
+    mayCreate: typesFor(who.member, types),
     suggested: { date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), time: "19:00" },
     people: ((roster.data ?? []) as RosterRow[])
       .filter((entry) => SERVING.includes(entry.status))

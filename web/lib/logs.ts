@@ -2,7 +2,7 @@ import "server-only";
 import { attemptNames, type Attempt } from "@/lib/activity";
 import { gate } from "@/lib/admin";
 import type { Role, Service, Status } from "@/lib/member";
-import { kindName, returnedNames, type EventKind, type Returned } from "@/lib/operations-form";
+import { returnedNames, type Returned } from "@/lib/operations-form";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -91,7 +91,7 @@ const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
   operations: ["events", "event_orders", "attendance", "attendance_returns", "after_action_reports"],
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
-    "grades", "ranks", "fleet_settings",
+    "grades", "ranks", "fleet_settings", "event_types",
   ],
   records: ["members"],
 };
@@ -126,6 +126,8 @@ type Names = {
   role: (id: unknown) => string;
   area: (id: unknown) => string;
   event: (id: unknown) => string;
+  /** What a type of event is called, from its key. */
+  eventType: (key: unknown) => string;
   /** Whether the second grade is above the first. Null when either is unknown. */
   higher: (from: unknown, to: unknown) => boolean | null;
   rank: (service: Service | null, grade: unknown) => string;
@@ -241,7 +243,7 @@ export async function readLog(filters: Filters): Promise<LogPage> {
 
 /** Everything a line needs to name the people and things it mentions. */
 async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>) {
-  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas] = await Promise.all([
+  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes] = await Promise.all([
     supabase.from("members").select("id, character_name, service"),
     supabase.from("member_accounts").select("member_id, discord_name"),
     supabase.from("positions").select("id, title, unit_id"),
@@ -252,8 +254,9 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     supabase.from("ranks").select("service, grade_code, name"),
     supabase.from("fleet_roles").select("id, name"),
     supabase.from("areas").select("id, name"),
+    supabase.from("event_types").select("key, name"),
   ]);
-  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas]) {
+  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes]) {
     if (result.error) throw new Error(`The names for the log could not be read: ${result.error.message}`);
   }
 
@@ -274,6 +277,7 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
   const eventTitle = new Map((events.data ?? []).map((row) => [row.id as string, row.title as string]));
   const roleName = new Map((roles.data ?? []).map((row) => [row.id as string, row.name as string]));
   const areaName = new Map((areas.data ?? []).map((row) => [row.id as string, row.name as string]));
+  const typeName = new Map((eventTypes.data ?? []).map((row) => [row.key as string, row.name as string]));
   const order = new Map((grades.data ?? []).map((row) => [row.code as string, row.sort_order as number]));
   const rankName = new Map((ranks.data ?? []).map((row) => [`${row.service}:${row.grade_code}`, row.name as string]));
 
@@ -284,6 +288,7 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     unit: (id) => (typeof id === "string" ? (unitName.get(id) ?? "a unit that is gone") : "no unit"),
     qualification: (id) => (typeof id === "string" ? (qualificationName.get(id) ?? "a qualification that is gone") : "a qualification"),
     event: (id) => (typeof id === "string" ? (eventTitle.get(id) ?? "an event that is gone") : "an event"),
+    eventType: (key) => (typeof key === "string" ? (typeName.get(key) ?? key) : "no type"),
     role: (id) => (typeof id === "string" ? (roleName.get(id) ?? "a role that is gone") : "no role"),
     area: (id) => (typeof id === "string" ? (areaName.get(id) ?? "an area that is gone") : "no area"),
     higher: (from, to) => {
@@ -327,7 +332,7 @@ const moment = new Intl.DateTimeFormat("en-GB", {
 const date = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 /** One value of a changed field, as words: a name for an id, a date as a date. */
-function shown(key: string, value: unknown, names: Names): string {
+function shown(key: string, value: unknown, names: Names, table: string): string {
   if (value === null || value === undefined || value === "") return "nothing";
   if (typeof value === "boolean") return value ? "yes" : "no";
   if (typeof value === "string") {
@@ -337,7 +342,8 @@ function shown(key: string, value: unknown, names: Names): string {
     if (key === "qualification_id") return names.qualification(value);
     if (key === "role_id" || key === "next_role_id") return names.role(value);
     if (key === "area_id") return names.area(value);
-    if (key === "event_id") return names.event(value);
+    if (key === "event_id" || key === "copied_from") return names.event(value);
+    if (key === "kind" && table === "events") return names.eventType(value);
     if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return `${moment.format(new Date(value))} UTC`;
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return date.format(new Date(value));
   }
@@ -345,11 +351,12 @@ function shown(key: string, value: unknown, names: Names): string {
 }
 
 /** The fields an update changed, as "field: old to new". Long text is only named. */
-function changes(row: AuditRow, names: Names): string | null {
+function changes(row: AuditRow, names: Names, said: string[] = []): string | null {
   if (row.action !== "update" || !row.old_row || !row.new_row) return null;
   const parts: string[] = [];
   for (const key of Object.keys(row.new_row)) {
-    if (QUIET.has(key)) continue;
+    // A field the line itself already speaks of is not said twice.
+    if (QUIET.has(key) || said.includes(key)) continue;
     const was = row.old_row[key];
     const now = row.new_row[key];
     if (JSON.stringify(was) === JSON.stringify(now)) continue;
@@ -357,7 +364,7 @@ function changes(row: AuditRow, names: Names): string | null {
     const long =
       [was, now].some((value) => typeof value === "object" && value !== null) ||
       [was, now].some((value) => typeof value === "string" && value.length > 60);
-    parts.push(long ? `${label} changed` : `${label}: ${shown(key, was, names)} to ${shown(key, now, names)}`);
+    parts.push(long ? `${label} changed` : `${label}: ${shown(key, was, names, row.table_name)} to ${shown(key, now, names, row.table_name)}`);
   }
   return parts.length > 0 ? `${parts.join(". ")}.` : null;
 }
@@ -516,14 +523,39 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       return line("structure", `${actor} ${row.action === "insert" ? "added" : row.action === "delete" ? "removed" : "changed"} the ${service} rank for ${any.grade_code}`, changes(row, names));
     }
 
+    case "event_types": {
+      const name = String(any.name ?? "an event type");
+      if (row.action === "insert") return line("structure", `${actor} added the event type ${name}`);
+      if (row.action === "delete") return line("structure", `${actor} removed the event type ${name}`);
+      if (changed("instructors_may_draft")) {
+        return line(
+          "structure",
+          now.instructors_may_draft === true ? `${actor} opened the event type ${name} to instructors` : `${actor} closed the event type ${name} to instructors`,
+          changes(row, names, ["instructors_may_draft"]),
+        );
+      }
+      return line("structure", `${actor} changed the event type ${name}`, changes(row, names));
+    }
+
     case "events": {
       const title = String(any.title ?? "an event");
-      if (row.action === "insert") return line("operations", `${actor} drafted ${title}`, `${kindName(now.kind as EventKind)}.`);
+      if (row.action === "insert") {
+        const type = `${names.eventType(now.kind)}.`;
+        // With nobody's hand on it but the closer's, a weekly event's follow-on is drafted by the database.
+        if (now.copied_from && now.repeats_weekly === true) {
+          return line("operations", `${title} was drafted for next week when ${actor} ended ${names.event(now.copied_from)}`, type);
+        }
+        if (now.copied_from) return line("operations", `${actor} drafted ${title}, as a copy of ${names.event(now.copied_from)}`, type);
+        return line("operations", `${actor} drafted ${title}`, `${type}${now.repeats_weekly === true ? " It repeats weekly." : ""}`);
+      }
       if (row.action === "delete") return line("operations", `${actor} deleted the draft ${title}`);
       if (changed("state")) {
         if (now.state === "announced") return line("operations", `${actor} announced ${title}`);
         if (now.state === "cancelled") return line("operations", `${actor} cancelled ${title}`);
         if (now.state === "done") return line("operations", `${actor} closed ${title}`);
+      }
+      if (changed("repeats_weekly") && Object.keys(now).filter((key) => changed(key) && !QUIET.has(key)).length === 1) {
+        return line("operations", now.repeats_weekly === true ? `${actor} set ${title} to repeat weekly` : `${actor} stopped ${title} repeating weekly`);
       }
       return line("operations", `${actor} changed the details of ${title}`, changes(row, names));
     }

@@ -48,7 +48,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/auth/callback` | Where Discord sends you back. It turns Discord's one-time code into a session |
 | `/profile` | Your record: status, service, rank, post, and your names |
 | `/order-of-battle` | Every unit and post, who holds each, what is vacant and what opens later. For the serving fleet |
-| `/operations` | Training and operation nights: the orders, the roll, stand-ins, the attendance return and the after-action report. For the serving fleet. Command drafts events, and instructors draft training |
+| `/operations` | Training and operation nights: the orders, the roll, stand-ins, the attendance return and the after-action report. For the serving fleet. Command drafts events, and instructors draft the types open to them. An event can be copied, and can repeat weekly |
 | `/apply` | The application form, and the state of your application once it is sent |
 | `/staff/applications` | For staff: the applications, their answers, interview notes and the decision. An admin opens and closes recruitment here |
 | `/admin` | For the people who run the fleet: its figures. See Admin pages below |
@@ -97,7 +97,7 @@ The figures of the fleet, for the people who run it. A role decides which pages 
 | `/admin/people` | Staff, command and admins | Everyone on the books, by status, service and grade, with qualifications. Command also sees attendance |
 | `/admin/recruiting` | Staff, command and admins | How far applications get, how long decisions take, and which are still open |
 | `/admin/operations` | Command and admins | Every event, turnout, late reports, and attendance member by member |
-| `/admin/structure` | Admins | The editors: areas, roles, units, posts, qualifications, and ranks and grades. See Editors below |
+| `/admin/structure` | Admins | The editors: areas, roles, units, posts, qualifications, event types, and ranks and grades. See Editors below |
 | `/admin/logs` | Admins | Everything that has happened: changes to records, sign-ins and sign-outs, anything refused or failed, and how often each public page is read |
 
 An admin holds every role, so sees all of them. A role only counts while its holder is serving.
@@ -124,6 +124,7 @@ area, a unit or a post is written in the code.
 | Units | The formations, ships and departments, each under the one above |
 | Posts | The places in each unit: title, role, grades, whether a new member can be given it, and what it needs on top of its role |
 | Qualifications | What members earn in training |
+| Event types | The kinds of night the fleet runs: who may draft each, its usual length and weapons state, and its own names for the five sections of its orders |
 | Ranks and grades | What each service calls a grade, and what a member at that grade usually does |
 
 - **A role is a record of its own.** Gunner is one role, on every ship. A post is one place for that
@@ -136,7 +137,8 @@ area, a unit or a post is written in the code.
   nothing writes no line.
 - **The database has the last word.** Only an admin's changes get through. A post takes its kind
   from its role. A role keeps its kind while it has posts, and its steps cannot run in a circle. A
-  post that someone has held cannot be removed. The 18 grades, their codes and their order are fixed.
+  post that someone has held cannot be removed, and neither can a type of event that has events. The
+  18 grades, their codes and their order are fixed.
 - **A picture is chosen from the ones the site has.** A new picture still has to be added to
   `lib/pictures.ts` with its credit.
 
@@ -186,7 +188,8 @@ to be tracked.
 | The sign-in page | `app/sign-in/page.tsx` |
 | The order of battle page | `app/order-of-battle/page.tsx`, and what it reads in `lib/order-of-battle.ts` |
 | The operations pages | `app/operations/`, and what they read in `lib/operations.ts` |
-| The types of event, the weapons states, the order's five paragraphs and the event cycle | `lib/operations-form.ts` |
+| The types of event | Nowhere in the code. An admin keeps them at `/admin/structure/event-types` |
+| The weapons states, Volume 2's names for the order's five sections, and the event cycle | `lib/operations-form.ts` |
 | The questions on the application form | `lib/application-form.ts` |
 | The application page and the staff pages | `app/apply/` and `app/staff/applications/` |
 | The member's record | `app/profile/page.tsx` |

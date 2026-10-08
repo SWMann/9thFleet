@@ -1,18 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
-  kinds,
-  paragraphs,
   returnedNames,
   weapons,
-  type EventKind,
+  type EventType,
   type Reply,
   type Returned,
+  type Section,
   type WeaponsState,
 } from "@/lib/operations-form";
 import {
+  copyEvent,
   createEvent,
   fileReport,
   fileReturn,
@@ -33,13 +33,20 @@ function Result({ result }: { result: OpsResult }) {
   return (
     <p className={result.ok ? "form-result" : "form-result form-result-bad"} role="status">
       {result.message}
+      {result.link ? (
+        <>
+          {" "}
+          <Link href={result.link.href}>{result.link.label}</Link>
+        </>
+      ) : null}
     </p>
   );
 }
 
 export type EventFields = {
   id?: string;
-  kind: EventKind;
+  /** Its type's key. */
+  kind: string;
   title: string;
   summary: string;
   date: string;
@@ -50,50 +57,83 @@ export type EventFields = {
   observer: string;
   weaponsState: WeaponsState | "";
   pveFallback: string;
+  repeatsWeekly: boolean;
 };
+
+/** A type's own line: who usually runs one, and an example. */
+function aboutType(type: EventType | undefined): string {
+  if (!type) return "";
+  const tidy = (text: string) => text.trim().replace(/\.$/, "");
+  return [type.runBy ? `Usually run by: ${tidy(type.runBy)}.` : "", type.example ? `Such as: ${tidy(type.example)}.` : ""]
+    .filter(Boolean)
+    .join(" ");
+}
 
 /** The details of an event: what it is, when, and who commands it. Used to draft one and to change one. */
 export function EventForm({
   event,
-  mayCreate,
+  types,
   people,
 }: {
   event: EventFields;
-  mayCreate: EventKind[];
+  /** The types this member may choose: the ones they may draft, and the event's own. */
+  types: EventType[];
   people: Named[];
 }) {
   const [result, action, pending] = useActionState(event.id ? updateEvent : createEvent, untouched);
-  // Someone changing an event they did not draft keeps its type on the list.
-  const offered = kinds.filter((kind) => mayCreate.includes(kind.key) || kind.key === event.kind);
+  // After a save is turned down the form shows what was typed. Otherwise it shows the event.
+  const held = (key: string, otherwise: string) => result.values?.[key] ?? otherwise;
 
+  // The type, the length and the weapons state are held here, because choosing
+  // the type of a new event fills in the other two with that type's usual ones.
+  const [kind, setKind] = useState(event.kind);
+  const [duration, setDuration] = useState(String(event.duration));
+  const [weaponsState, setWeaponsState] = useState<string>(event.weaponsState);
+  const type = types.find((entry) => entry.key === kind);
+  const choose = (key: string) => {
+    setKind(key);
+    const chosen = types.find((entry) => entry.key === key);
+    if (!event.id && chosen) {
+      setDuration(String(chosen.defaultDuration));
+      setWeaponsState(chosen.defaultWeaponsState ?? "");
+    }
+  };
+  const about = aboutType(type);
+
+  // The form is drawn afresh after each answer, so a list shows what is now true
+  // after a save, and what was chosen after a refusal.
   return (
-    <form action={action} className="fields fields-wide">
+    <form action={action} className="fields fields-wide" key={result.stamp ?? 0}>
       {event.id ? <input type="hidden" name="id" value={event.id} /> : null}
 
       <div className="field">
         <label htmlFor="kind">Type</label>
         <p className="hint" id="kind_hint">
-          Command drafts any type. An instructor drafts training.
+          Command drafts any type. Instructors draft the types open to them.
+          {event.id ? "" : " Choosing a type sets its usual length and weapons state."}
         </p>
-        <select id="kind" name="kind" defaultValue={event.kind} required aria-describedby="kind_hint">
-          {offered.map((kind) => (
-            <option key={kind.key} value={kind.key}>
-              {kind.name}
+        <select id="kind" name="kind" value={kind} onChange={(change) => choose(change.target.value)} required aria-describedby="kind_hint kind_about">
+          {types.map((entry) => (
+            <option key={entry.key} value={entry.key}>
+              {entry.name}
             </option>
           ))}
         </select>
+        <p className="type-about" id="kind_about" aria-live="polite">
+          {about}
+        </p>
       </div>
 
       <div className="field">
         <label htmlFor="title">Title</label>
         <p className="hint" id="title_hint">
-          A short name, such as Patrol 001.
+          A short name, such as Patrol 001. A number at the end goes up by one when the event is copied or repeats.
         </p>
         <input
           id="title"
           name="title"
           type="text"
-          defaultValue={event.title}
+          defaultValue={held("title", event.title)}
           required
           minLength={3}
           maxLength={80}
@@ -113,7 +153,7 @@ export function EventForm({
           id="summary"
           name="summary"
           type="text"
-          defaultValue={event.summary}
+          defaultValue={held("summary", event.summary)}
           maxLength={200}
           autoComplete="off"
           aria-describedby="summary_hint"
@@ -123,15 +163,25 @@ export function EventForm({
       <div className="field-row">
         <div className="field">
           <label htmlFor="date">Date</label>
-          <input id="date" name="date" type="date" defaultValue={event.date} required />
+          <input id="date" name="date" type="date" defaultValue={held("date", event.date)} required />
         </div>
         <div className="field">
           <label htmlFor="time">Start, in UTC</label>
-          <input id="time" name="time" type="time" defaultValue={event.time} required />
+          <input id="time" name="time" type="time" defaultValue={held("time", event.time)} required />
         </div>
         <div className="field">
           <label htmlFor="duration">Minutes</label>
-          <input id="duration" name="duration" type="number" defaultValue={event.duration} min={15} max={480} step={5} required />
+          <input
+            id="duration"
+            name="duration"
+            type="number"
+            value={duration}
+            onChange={(change) => setDuration(change.target.value)}
+            min={15}
+            max={480}
+            step={5}
+            required
+          />
         </div>
       </div>
       <p className="field-note">
@@ -139,11 +189,28 @@ export function EventForm({
       </p>
 
       <div className="field">
+        <label className="choice" htmlFor="repeats_weekly">
+          <input
+            id="repeats_weekly"
+            name="repeats_weekly"
+            type="checkbox"
+            defaultChecked={result.values ? result.values.repeats_weekly === "on" : event.repeatsWeekly}
+            aria-describedby="repeats_weekly_hint"
+          />
+          <span>Repeats weekly</span>
+        </label>
+        <p className="hint" id="repeats_weekly_hint">
+          When this one is closed, or cancelled after it was announced, next week&apos;s is drafted with the same details and
+          orders. A draft is never announced by itself.
+        </p>
+      </div>
+
+      <div className="field">
         <label htmlFor="commander">Operation commander</label>
         <p className="hint" id="commander_hint">
           They command everyone present, whatever rank anyone wears.
         </p>
-        <select id="commander" name="commander" defaultValue={event.commander} required aria-describedby="commander_hint">
+        <select id="commander" name="commander" defaultValue={held("commander", event.commander)} required aria-describedby="commander_hint">
           {people.map((person) => (
             <option key={person.id} value={person.id}>
               {label(person)}
@@ -159,7 +226,7 @@ export function EventForm({
         <p className="hint" id="second_hint">
           They take over at once if the commander drops out. Name one from whoever is attending if nobody is set yet.
         </p>
-        <select id="second" name="second" defaultValue={event.second} aria-describedby="second_hint">
+        <select id="second" name="second" defaultValue={held("second", event.second)} aria-describedby="second_hint">
           <option value="">Not named yet</option>
           {people.map((person) => (
             <option key={person.id} value={person.id}>
@@ -176,7 +243,7 @@ export function EventForm({
         <p className="hint" id="observer_hint">
           An instructor who watches and debriefs on training and assessed operations. They give no orders.
         </p>
-        <select id="observer" name="observer" defaultValue={event.observer} aria-describedby="observer_hint">
+        <select id="observer" name="observer" defaultValue={held("observer", event.observer)} aria-describedby="observer_hint">
           <option value="">None</option>
           {people.map((person) => (
             <option key={person.id} value={person.id}>
@@ -190,7 +257,7 @@ export function EventForm({
         <label htmlFor="weapons_state">
           Weapons state <span className="optional">Optional</span>
         </label>
-        <select id="weapons_state" name="weapons_state" defaultValue={event.weaponsState}>
+        <select id="weapons_state" name="weapons_state" value={weaponsState} onChange={(change) => setWeaponsState(change.target.value)}>
           <option value="">Not set</option>
           {weapons.map((state) => (
             <option key={state.key} value={state.key}>
@@ -211,7 +278,7 @@ export function EventForm({
           id="pve_fallback"
           name="pve_fallback"
           type="text"
-          defaultValue={event.pveFallback}
+          defaultValue={held("pve_fallback", event.pveFallback)}
           maxLength={200}
           autoComplete="off"
           aria-describedby="pve_fallback_hint"
@@ -228,8 +295,22 @@ export function EventForm({
   );
 }
 
-/** The warning order and the five paragraphs of the operation order. */
-export function OrdersForm({ id, orders }: { id: string; orders: Record<string, string> }) {
+/** One button: draft another event like this one, with its details and orders. */
+export function CopyButton({ id }: { id: string }) {
+  const [result, action, pending] = useActionState(copyEvent, untouched);
+  return (
+    <form action={action} className="copy-event">
+      <input type="hidden" name="id" value={id} />
+      <button className="button button-quiet" type="submit" disabled={pending}>
+        {pending ? "Copying" : "Draft another like this"}
+      </button>
+      {result.message ? <Result result={result} /> : null}
+    </form>
+  );
+}
+
+/** The warning order and the five sections of the operation order, named as the event's type names them. */
+export function OrdersForm({ id, orders, sections }: { id: string; orders: Record<string, string>; sections: Section[] }) {
   const [result, action, pending] = useActionState(saveOrders, untouched);
   return (
     <form action={action} className="fields fields-wide">
@@ -248,19 +329,19 @@ export function OrdersForm({ id, orders }: { id: string; orders: Record<string, 
           aria-describedby="warning_order_hint"
         />
       </div>
-      {paragraphs.map((paragraph) => (
-        <div className="field" key={paragraph.key}>
-          <label htmlFor={paragraph.key}>{paragraph.name}</label>
-          <p className="hint" id={`${paragraph.key}_hint`}>
-            {paragraph.holds}
+      {sections.map((section) => (
+        <div className="field" key={section.key}>
+          <label htmlFor={section.key}>{section.name}</label>
+          <p className="hint" id={`${section.key}_hint`}>
+            {section.holds}
           </p>
           <textarea
-            id={paragraph.key}
-            name={paragraph.key}
-            rows={paragraph.key === "mission" ? 2 : 4}
-            maxLength={paragraph.max}
-            defaultValue={orders[paragraph.key]}
-            aria-describedby={`${paragraph.key}_hint`}
+            id={section.key}
+            name={section.key}
+            rows={section.key === "mission" ? 2 : 4}
+            maxLength={section.max}
+            defaultValue={orders[section.key]}
+            aria-describedby={`${section.key}_hint`}
           />
         </div>
       ))}

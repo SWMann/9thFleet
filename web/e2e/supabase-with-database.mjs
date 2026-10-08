@@ -231,15 +231,14 @@ function columns(url) {
 
 function ordering(url) {
   const wanted = url.searchParams.get("order");
-  if (!wanted) return "";
-  const parts = wanted.split(",").map((part) => {
+  const parts = (wanted ? wanted.split(",") : []).map((part) => {
     const [name, direction = "asc"] = part.split(".");
     if (!["asc", "desc"].includes(direction)) throw new Unsupported(`The stand-in does not understand order=${wanted}.`);
     return `${column(name)} ${direction}`;
   });
   const limit = url.searchParams.get("limit");
   if (limit && !/^\d+$/.test(limit)) throw new Unsupported(`The stand-in does not understand limit=${limit}.`);
-  return ` order by ${parts.join(", ")}${limit ? ` limit ${limit}` : ""}`;
+  return `${parts.length > 0 ? ` order by ${parts.join(", ")}` : ""}${limit ? ` limit ${limit}` : ""}`;
 }
 
 /** Values go to the database as text and it works out the type, as it does for the real API. */

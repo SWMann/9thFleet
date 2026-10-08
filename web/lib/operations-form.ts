@@ -3,31 +3,10 @@
  * forms and the actions. The types match the database's own.
  */
 
-export type EventKind = "training" | "patrol" | "response" | "strike" | "tasked_pve";
 export type EventState = "draft" | "announced" | "done" | "cancelled";
 export type WeaponsState = "hold" | "tight" | "free";
 export type Reply = "attending" | "not_attending";
 export type Returned = "present" | "absent_with_notice" | "absent_without_notice";
-
-/** The operation types, who runs each and an example, from the roadmap. */
-export const kinds: { key: EventKind; name: string; runBy: string; example: string }[] = [
-  {
-    key: "training",
-    name: "Training evolution",
-    runBy: "Training team",
-    example: "Ship emergency drills, turret gunnery, launch and recovery",
-  },
-  { key: "patrol", name: "Patrol", runBy: "Duty commander", example: "Presence patrol of a Stanton sector, reporting contacts" },
-  { key: "response", name: "Response", runBy: "Duty commander", example: "Answering a piracy report from the public request line" },
-  {
-    key: "strike",
-    name: "Strike",
-    runBy: "Command",
-    example: "Planned action against a declared hostile org or a known pirate spot",
-  },
-  { key: "tasked_pve", name: "Tasked PvE", runBy: "Duty commander", example: "In-game contracts given a tasking, when no hostile shows" },
-];
-export const kindName = (kind: EventKind) => kinds.find((entry) => entry.key === kind)?.name ?? kind;
 
 export const stateNames: Record<EventState, string> = {
   draft: "Draft",
@@ -49,7 +28,11 @@ export const returnedNames: Record<Returned, string> = {
   absent_without_notice: "Absent, without notice",
 };
 
-/** The five paragraphs of an operation order and what each holds, from Volume 2. */
+/**
+ * The five sections of an operation order and what each holds, from Volume 2.
+ * A type of event can give a section its own name and its own guidance. These
+ * are what a section is called when its type does not.
+ */
 export const paragraphs = [
   { key: "situation", name: "1 Situation", holds: "Hostile forces and reports, friendly forces and the area.", max: 4000 },
   { key: "mission", name: "2 Mission", holds: "One sentence: who, what, where, when, and in order to do what.", max: 1000 },
@@ -74,6 +57,38 @@ export const paragraphs = [
   },
 ] as const;
 export type ParagraphKey = (typeof paragraphs)[number]["key"];
+
+/** One section of an event's orders, as its type names it. */
+export type Section = { key: ParagraphKey; name: string; holds: string; max: number };
+
+/** The five sections, each with a type's own name and guidance where it has them. */
+export function sectionsFrom(own: (key: ParagraphKey, part: "name" | "holds") => string | null | undefined): Section[] {
+  return paragraphs.map((paragraph) => ({
+    key: paragraph.key,
+    max: paragraph.max,
+    name: own(paragraph.key, "name") || paragraph.name,
+    holds: own(paragraph.key, "holds") || paragraph.holds,
+  }));
+}
+
+/**
+ * A type of event. The types are records the Fleet Commander keeps under
+ * Structure, so the site reads them from the database and never lists them itself.
+ */
+export type EventType = {
+  /** What an event holds to say which type it is. */
+  key: string;
+  name: string;
+  /** Who usually runs one, and an example. Shown to whoever drafts it. */
+  runBy: string;
+  example: string;
+  /** Command drafts every type. This one is open to instructors too. */
+  instructorsMayDraft: boolean;
+  /** What a new event of this type starts with. */
+  defaultDuration: number;
+  defaultWeaponsState: WeaponsState | null;
+  sections: Section[];
+};
 
 /** How every event runs, from the roadmap. */
 export const cycle: { step: string; detail: string }[] = [
@@ -102,4 +117,26 @@ export function formatWhen(iso: string): { day: string; utc: string; uk: string 
 export function toFields(iso: string): { date: string; time: string } {
   const text = new Date(iso).toISOString();
   return { date: text.slice(0, 10), time: text.slice(11, 16) };
+}
+
+const WEEK = 7 * 24 * 60 * 60 * 1000;
+
+/** The same time of the week as a moment, the first one after now. For a copy of an event. */
+export function aWeekOn(iso: string, now: number): string {
+  let at = Date.parse(iso) + WEEK;
+  while (at <= now) at += WEEK;
+  return new Date(at).toISOString();
+}
+
+/**
+ * The title of the event that follows this one: a number at its end goes up by
+ * one, so Patrol 001 is followed by Patrol 002. The database does the same when
+ * it drafts next week's event.
+ */
+export function nextTitle(title: string): string {
+  const found = /[0-9]{1,9}$/.exec(title);
+  if (!found) return title;
+  const following = String(Number(found[0]) + 1).padStart(found[0].length, "0");
+  const next = title.slice(0, found.index) + following;
+  return next.length > 80 ? title : next;
 }

@@ -35,7 +35,7 @@ async function Structure() {
         current="structure"
         tier={access.tier}
         title={title}
-        lead="What the fleet is made of: its areas, roles, units, posts, qualifications and ranks. Change any of it here, and the site follows."
+        lead="What the fleet is made of: its areas, roles, units, posts, qualifications, ranks and types of event. Change any of it here, and the site follows."
       />
       <section className="wrap band band-last" aria-labelledby="editors">
         <h2 id="editors">
@@ -66,7 +66,8 @@ async function Structure() {
         <div className="prose log-note">
           <p>
             Only an admin can change these. Every change is written to the <Link href="/admin/logs?show=structure">logs</Link> with who made
-            it and what it was before. A role keeps to its kind while it has posts, and a post that someone has held cannot be removed.
+            it and what it was before. A role keeps to its kind while it has posts, a post that someone has held cannot be removed, and
+            neither can a type of event that has events.
           </p>
         </div>
       </section>
