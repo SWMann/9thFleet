@@ -64,6 +64,28 @@ try {
     assert.ok(labels.includes("Sign in"), `no Sign in among ${labels.join(", ")}`);
     assert.ok(!labels.includes("Your record") && !labels.includes("Order of battle"), labels.join(", "));
   });
+  await check("the footer carries Cloud Imperium's notices and the community logo", async () => {
+    await page.goto(`${site}/`);
+    const foot = await page.locator("footer").innerText();
+    assert.match(foot, /This is an unofficial Star Citizen fan site, not affiliated with the Cloud Imperium group of companies\./);
+    assert.match(foot, /not endorsed by or affiliated with the Cloud Imperium or Roberts Space Industries group of companies\./);
+    assert.match(foot, /Star Citizen®, Squadron 42®, Roberts Space Industries®, and Cloud Imperium® are registered trademarks/);
+    assert.equal(await page.locator("footer").getByRole("img", { name: /made by the community/i }).count(), 1);
+  });
+  await check("a fan kit wallpaper is shown whole, with nothing over it", async () => {
+    // The first frame on the front page holds one. Its frame takes the wallpaper's own shape.
+    const frame = page.locator(".split-pic").first();
+    await frame.scrollIntoViewIfNeeded();
+    const box = await frame.boundingBox();
+    assert.ok(Math.abs(box.width / box.height - 16 / 9) < 0.02, `the frame is ${box.width} by ${box.height}`);
+    assert.equal(await frame.locator(".credit").count(), 0, "a credit sits over the wallpaper");
+    const shown = await frame.locator("img").evaluate((img) => {
+      const style = getComputedStyle(img);
+      const over = getComputedStyle(img.parentElement, "::after").content;
+      return `${style.objectFit} ${style.filter} ${over}`;
+    });
+    assert.equal(shown, "contain none none");
+  });
   await check("leaving Discord early is explained", async () => {
     await page.goto(`${site}/auth/callback?error=access_denied`);
     assert.equal(new URL(page.url()).pathname, "/sign-in");

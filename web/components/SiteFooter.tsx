@@ -1,4 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
+import { madeByTheCommunity } from "@/lib/pictures";
 import { site } from "@/lib/site";
 import { Roundel } from "./Crest";
 
@@ -19,9 +21,16 @@ export function SiteFooter() {
             This is an unofficial Star Citizen fan site, not affiliated with the Cloud Imperium group of companies. All
             content on this site not authored by its host or users are property of their respective owners.
           </p>
+          {/* The notice the Fankit Agreement requires wherever fan kit material is used, word for word. */}
+          <p className="foot-notice">
+            This site is not endorsed by or affiliated with the Cloud Imperium or Roberts Space Industries group of
+            companies. All game content and materials are copyright Cloud Imperium Rights LLC and Cloud Imperium Rights
+            Ltd.. Star Citizen®, Squadron 42®, Roberts Space Industries®, and Cloud Imperium® are registered trademarks
+            of Cloud Imperium Rights LLC. All rights reserved.
+          </p>
           <p>
-            {site.name} is a player-run organisation. Star Citizen is a trademark of Cloud Imperium. The official site
-            is <a href={site.officialSite}>robertsspaceindustries.com</a>.
+            {site.name} is a player-run organisation. The official site is{" "}
+            <a href={site.officialSite}>robertsspaceindustries.com</a>.
           </p>
           <ul className="foot-links">
             <li>
@@ -47,6 +56,7 @@ export function SiteFooter() {
             {site.formation}, Stanton. Flagship {site.flagship}.
           </p>
         </div>
+        <Image className="foot-made" src={madeByTheCommunity} alt="Star Citizen: made by the community" sizes="104px" />
       </div>
     </footer>
   );

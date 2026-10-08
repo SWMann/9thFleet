@@ -136,22 +136,40 @@ roundel are drawn as outlines in `components/Crest.tsx`, so they need no font.
 
 ## Pictures
 
-Every picture is a Star Citizen screenshot whose author published it on Flickr under a Creative
-Commons licence. `lib/pictures.ts` lists each one with its author, the page it came from and its
-licence, and says which picture fills which place. The author is named in the corner of each
-picture, and `/credits` lists them all, as the licences ask.
+The pictures come from two places, and `lib/pictures.ts` lists every one with its source, its author
+and its licence, and says which picture fills which place. `/credits` lists them all.
+
+**Players' screenshots.** Star Citizen screenshots whose authors published them on Flickr under a
+Creative Commons licence. The author is named in the corner of each picture, as the licences ask.
+These can be cropped and sit behind a dark tint, so they are used for banners, tiles and the menu.
+
+**The fan kit.** Wallpapers and the "Made by the Community" logo from Cloud Imperium's
+[fan kit](https://robertsspaceindustries.com/en/fankit), used under its Fankit Agreement, which the
+Fleet Commander accepted when he downloaded it. Its rules are stricter, and the site keeps them like
+this:
+
+- **A wallpaper is shown whole and as supplied.** It keeps its Star Citizen watermark, and is not
+  cropped, tinted, faded, recoloured or flipped. Only its size changes. `Picture` and the style sheet
+  do this for any picture whose `source` is `fankit`.
+- **So a wallpaper only goes in a plain frame**, never behind words. The plain frames are `intro`,
+  `work`, `route`, `officers` and `duty`.
+- **The logo is in the footer of every page**, as supplied.
+- **The agreement's notice is in the footer, word for word.** Do not reword it.
+- **If the site's address changes, Cloud Imperium must be told**, at the address in the agreement.
 
 To add or change a picture:
 
 1. Put the file in `pictures/`, no wider than 1920 pixels.
-2. Add it to `shots` in `lib/pictures.ts` with its author, title, page and licence.
+2. Add it to `shots` in `lib/pictures.ts`: `shot(...)` for a player's screenshot with its author,
+   title, page and licence, or `wallpaper(...)` for one from the fan kit.
 3. Point a place in `pictures` at it. The credits page picks it up by itself.
 
-Three rules, which are Cloud Imperium's for fan sites and the licences' for the pictures:
+Three rules for every picture, which are Cloud Imperium's for fan sites and the licences' for the
+screenshots:
 
-- **Only use a picture you may use.** That means your own screenshots, the RSI fan kit once you have
-  accepted its agreement, or a picture whose licence allows it. Do not copy pictures from the RSI
-  website or from other players without a licence.
-- **No commercial use.** The licences here bar it, and so does Cloud Imperium.
-- **Keep the notice in the footer and the link to the official site.** The wording is Cloud
+- **Only use a picture you may use.** That means your own screenshots, the fan kit under its
+  agreement, or a picture whose licence allows it. Do not copy pictures from the RSI website or from
+  other players without a licence.
+- **No commercial use.** The licences bar it, and so does Cloud Imperium.
+- **Keep both notices in the footer and the link to the official site.** The wording is Cloud
   Imperium's own.

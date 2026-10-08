@@ -3,8 +3,12 @@ import Link from "next/link";
 import { pictures, type PictureName } from "@/lib/pictures";
 
 /**
- * A picture that fills its parent, which must be positioned. It is decoration
- * behind words, so it has no description. Its author is named in a corner.
+ * A picture that fills its parent, which must be positioned. It is decoration,
+ * so it has no description. Its author is named in a corner.
+ *
+ * A wallpaper from the fan kit is the exception. It is shown whole and as it
+ * is, with nothing over it: its own watermark says whose it is, and the style
+ * sheet gives its frame the picture's shape so nothing is cropped.
  */
 export function Picture({
   name,
@@ -23,20 +27,22 @@ export function Picture({
   credit?: "top-right" | "top-left" | "bottom-right" | "bottom-left" | false;
 }) {
   const picture = pictures[name];
+  const asIs = picture.shot.source === "fankit";
+  const classes = ["picture", asIs ? "picture-asis" : "", className ?? ""].filter(Boolean).join(" ");
   return (
     <>
       <Image
-        className={className ? `picture ${className}` : "picture"}
+        className={classes}
         src={picture.shot.image}
         alt=""
         fill
         sizes={sizes}
-        placeholder="blur"
+        placeholder={asIs ? "empty" : "blur"}
         loading={eager ? "eager" : "lazy"}
         fetchPriority={eager ? "high" : undefined}
         style={{ objectPosition: picture.focus }}
       />
-      {credit ? <Credit name={name} corner={credit} /> : null}
+      {credit && !asIs ? <Credit name={name} corner={credit} /> : null}
     </>
   );
 }
