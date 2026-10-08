@@ -2,22 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSyncExternalStore } from "react";
 import { Icon } from "./Icon";
-
-/**
- * Whether the server has left its "signed in" hint in this browser. The hint
- * only chooses which links to show. The session itself is in cookies that
- * scripts cannot read, and the member pages check it on the server.
- */
-function hasSignedInHint() {
-  return /(?:^|;\s*)nf_signed_in=1(?:;|$)/.test(document.cookie);
-}
-const subscribe = () => () => {};
+import { useSignedIn } from "./useSignedIn";
 
 export function HeaderLinks() {
   const pathname = usePathname();
-  const signedIn = useSyncExternalStore(subscribe, hasSignedInHint, () => false);
+  const signedIn = useSignedIn();
   const links = signedIn
     ? [
         // The page is the order of battle. "Fleet" is short enough for a phone.
