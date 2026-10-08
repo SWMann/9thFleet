@@ -18,6 +18,23 @@ import raoul48695092918 from "@/pictures/raoul-48695092918.jpg";
 import raoul47272219531 from "@/pictures/raoul-47272219531.jpg";
 import rellim41638209562 from "@/pictures/rellim-41638209562.jpg";
 import yajih41594388540 from "@/pictures/yajih-41594388540.jpg";
+import raoul30704058668 from "@/pictures/raoul-30704058668.jpg";
+import rellim32755715032 from "@/pictures/rellim-32755715032.jpg";
+import raoul41370523202 from "@/pictures/raoul-41370523202.jpg";
+import raoul48638850352 from "@/pictures/raoul-48638850352.jpg";
+import raoul44265106231 from "@/pictures/raoul-44265106231.jpg";
+import raoul49604605628 from "@/pictures/raoul-49604605628.jpg";
+import raoul30997365617 from "@/pictures/raoul-30997365617.jpg";
+import raoul33969830708 from "@/pictures/raoul-33969830708.jpg";
+import raoul48963275031 from "@/pictures/raoul-48963275031.jpg";
+import raoul48611189282 from "@/pictures/raoul-48611189282.jpg";
+import raoul40065596950 from "@/pictures/raoul-40065596950.jpg";
+import raoul43359806212 from "@/pictures/raoul-43359806212.jpg";
+import raoul47532987492 from "@/pictures/raoul-47532987492.jpg";
+import rellim26876289637 from "@/pictures/rellim-26876289637.jpg";
+import raoul45086600895 from "@/pictures/raoul-45086600895.jpg";
+import raoul44451464481 from "@/pictures/raoul-44451464481.jpg";
+import raoul48305982842 from "@/pictures/raoul-48305982842.jpg";
 
 /**
  * Every picture on the site is a Star Citizen screenshot that its author has
@@ -80,6 +97,23 @@ export const shots = {
   raoul30441782607: shot("30441782607", raoul30441782607, raoul, "Star Citizen", byNc),
   raoul48494606591: shot("48494606591", raoul48494606591, raoul, "Star Citizen", byNc),
   raoul47272219531: shot("47272219531", raoul47272219531, raoul, "Star Citizen", byNc),
+  raoul30704058668: shot("30704058668", raoul30704058668, raoul, "Star Citizen", byNc),
+  rellim32755715032: shot("32755715032", rellim32755715032, jonRellim, "Herald ops #2", byNc),
+  raoul41370523202: shot("41370523202", raoul41370523202, raoul, "Star Citizen", byNc),
+  raoul48638850352: shot("48638850352", raoul48638850352, raoul, "Star Citizen", byNc),
+  raoul44265106231: shot("44265106231", raoul44265106231, raoul, "Star Citizen", byNc),
+  raoul49604605628: shot("49604605628", raoul49604605628, raoul, "Star Citizen", byNc),
+  raoul30997365617: shot("30997365617", raoul30997365617, raoul, "Star Citizen", byNc),
+  raoul33969830708: shot("33969830708", raoul33969830708, raoul, "Star Citizen", byNc),
+  raoul48963275031: shot("48963275031", raoul48963275031, raoul, "Star Citizen", byNc),
+  raoul48611189282: shot("48611189282", raoul48611189282, raoul, "Star Citizen", byNc),
+  raoul40065596950: shot("40065596950", raoul40065596950, raoul, "Star Citizen", byNc),
+  raoul43359806212: shot("43359806212", raoul43359806212, raoul, "Star Citizen", byNc),
+  raoul47532987492: shot("47532987492", raoul47532987492, raoul, "Star Citizen", byNc),
+  rellim26876289637: shot("26876289637", rellim26876289637, jonRellim, "[4K] Spinning Metal", byNc),
+  raoul45086600895: shot("45086600895", raoul45086600895, raoul, "Star Citizen", byNc),
+  raoul44451464481: shot("44451464481", raoul44451464481, raoul, "Star Citizen", byNc),
+  raoul48305982842: shot("48305982842", raoul48305982842, raoul, "Star Citizen", byNc),
 } satisfies Record<string, Shot>;
 
 export type Picture = {
@@ -114,6 +148,37 @@ export const pictures = {
   menuFleet: at(shots.raoul42971102521, "38% 50%"),
   menuJoining: at(shots.raoul30441782607, "42% 50%"),
   menuMembers: at(shots.raoul48494606591, "50% 55%"),
+  menuManual: at(shots.raoul48305982842, "50% 50%"),
+  // The fleet manual and its ten volumes.
+  manual: at(shots.raoul43359806212, "50% 50%"),
+  volume1: at(shots.raoul44799036785, "50% 40%"),
+  volume2: at(shots.raoul45014160084, "50% 45%"),
+  volume3: at(shots.raoul30704058668, "55% 50%"),
+  volume4: at(shots.raoul47532987492, "40% 35%"),
+  volume5: at(shots.raoul45086600895, "50% 55%"),
+  volume6: at(shots.rellim26876289637, "50% 55%"),
+  volume7: at(shots.raoul43359806212, "60% 50%"),
+  volume8: at(shots.raoul33969830708, "25% 50%"),
+  volume9: at(shots.raoul48611189282, "50% 45%"),
+  volume10: at(shots.raoul48963275031, "40% 45%"),
+  // The areas of work on the roles pages.
+  roles: at(shots.raoul44451464481, "50% 45%"),
+  areaCommand: at(shots.raoul45014160084, "50% 45%"),
+  areaSignals: at(shots.raoul30704058668, "55% 50%"),
+  areaHelm: at(shots.rellim32755715032, "60% 45%"),
+  areaGunnery: at(shots.yajih41594388540, "70% 55%"),
+  areaEngineering: at(shots.raoul41370523202, "50% 50%"),
+  areaMedical: at(shots.raoul48638850352, "50% 50%"),
+  areaDeck: at(shots.raoul44265106231, "55% 55%"),
+  areaSecurity: at(shots.raoul49604605628, "30% 40%"),
+  areaFighters: at(shots.raoul45086600895, "50% 55%"),
+  areaLift: at(shots.raoul30997365617, "50% 45%"),
+  areaInfantry: at(shots.raoul33969830708, "25% 50%"),
+  areaBoarding: at(shots.raoul48963275031, "40% 45%"),
+  areaSupport: at(shots.raoul48611189282, "50% 45%"),
+  areaRecon: at(shots.raoul40065596950, "40% 60%"),
+  areaStaff: at(shots.raoul48695092918, "55% 45%"),
+  areaOther: at(shots.raoul44799036785, "50% 42%"),
 } satisfies Record<string, Picture>;
 
 export type PictureName = keyof typeof pictures;

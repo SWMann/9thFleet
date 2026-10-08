@@ -2203,3 +2203,1170 @@ a.post-title {
   font-size: 0.9375rem;
   font-weight: 700;
 }
+
+/* Chips: a short label on a picture or beside a title */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: 4px;
+  background: rgb(9 13 22 / 0.8);
+  color: var(--text);
+  font-size: 0.84375rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.chip-on {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--white);
+}
+
+.chip-gold {
+  border-color: #8d7439;
+  background: #8d7439;
+  color: var(--white);
+}
+
+.chip-amber {
+  border-color: var(--amber);
+  background: var(--amber);
+  color: var(--white);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: none;
+  margin: 6px 0 0;
+}
+
+/* Grade codes are set in a face whose capital O is plainly not a zero. */
+.grade {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 0.95em;
+}
+
+.flip {
+  transform: scaleX(-1);
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+/* The bar under the header: the two ways into the fleet manual */
+
+.subbar {
+  position: relative;
+  z-index: 1;
+  border-bottom: 1px solid var(--seam);
+  background: #090d16;
+}
+
+.subbar-row {
+  display: flex;
+  justify-content: center;
+  gap: 0 clamp(24px, 6vw, 72px);
+}
+
+.subbar a {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  border-block: 2px solid transparent;
+  color: #dfe4ec;
+  font-size: 1.0625rem;
+  text-decoration: none;
+}
+
+.subbar a:hover {
+  color: var(--white);
+}
+
+.subbar a[aria-current] {
+  border-bottom-color: var(--gold);
+  color: var(--white);
+  font-weight: 600;
+}
+
+/* The manual's mark: the fleet roundel, a rule, and the words */
+
+.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  max-width: none;
+  margin: 0;
+  color: var(--white);
+}
+
+.mark-rule {
+  align-self: stretch;
+  width: 2px;
+  background: rgb(255 255 255 / 0.85);
+}
+
+.mark-words {
+  max-width: 4.6em;
+  font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 0.98;
+  text-align: left;
+  text-shadow: 0 2px 20px rgb(0 0 0 / 0.8);
+  text-transform: uppercase;
+}
+
+.rule {
+  width: min(680px, 100%);
+  height: 1px;
+  margin: 8px 0;
+  border: 0;
+  background: rgb(255 255 255 / 0.28);
+}
+
+/* The manual's pages: contents down one side, the text in a panel that overlaps the banner */
+
+.manual-head {
+  padding-bottom: calc(clamp(52px, 7.5vw, 100px) + 40px);
+}
+
+.banner-slim .manual-head {
+  padding-bottom: calc(clamp(34px, 4.6vw, 48px) + 56px);
+}
+
+.columns {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 22px;
+  margin-top: -56px;
+  padding-bottom: clamp(56px, 7vw, 84px);
+}
+
+.columns > aside {
+  flex: 1 1 280px;
+  max-width: 330px;
+  min-width: 0;
+}
+
+.columns > .panel {
+  flex: 4 1 560px;
+  min-width: 0;
+}
+
+.panel {
+  padding: 28px clamp(18px, 3vw, 34px) 34px;
+  border: 1px solid var(--seam);
+  background: var(--panel);
+  box-shadow: 0 14px 34px rgb(0 0 0 / 0.4);
+}
+
+.panel h2 {
+  font-size: clamp(1.5rem, 2.4vw, 1.85rem);
+}
+
+.panel h2::after,
+.shelf h2::after {
+  display: block;
+  width: 56px;
+  height: 3px;
+  margin-top: 12px;
+  background: var(--gold);
+  content: "";
+}
+
+.panel .panel-next {
+  margin-top: 44px;
+}
+
+.panel-title {
+  margin-top: 6px;
+  font-size: clamp(1.9rem, 3.2vw, 2.5rem);
+}
+
+.panel-title::after {
+  display: block;
+  width: 56px;
+  height: 3px;
+  margin-top: 14px;
+  background: var(--gold);
+  content: "";
+}
+
+.eyebrow {
+  max-width: none;
+  margin: 0;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.eyebrow a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.eyebrow a:hover {
+  color: var(--white);
+  text-decoration: underline;
+}
+
+.panel-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  max-width: none;
+  margin: 18px 0 22px;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
+.panel-lead {
+  max-width: 40em;
+  margin: 18px 0 0;
+  color: var(--text);
+  font-size: 1.1875rem;
+  line-height: 1.5;
+}
+
+.panel-note {
+  max-width: none;
+  margin: 16px 0 0;
+  color: var(--text-2);
+  font-size: 1.03125rem;
+}
+
+/* A row of figures. Each is read after its label but shown above it. */
+.figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 50%), 1fr));
+  gap: 1px;
+  margin: 22px 0 0;
+  border: 1px solid var(--seam);
+  background: var(--seam);
+}
+
+.figures > div {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  padding: 16px 12px 18px;
+  background: var(--panel);
+  text-align: center;
+}
+
+.figures dd {
+  margin: 0;
+  color: var(--white);
+  font-size: 2.375rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.figures dt {
+  color: var(--text-3);
+  font-size: 0.78125rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* The contents: every volume, and the sections of the ones that are published */
+
+.contents {
+  border: 1px solid var(--seam);
+  background: var(--bar);
+}
+
+.contents-head {
+  margin: 0;
+  padding: 14px 20px;
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.contents-volume {
+  border-top: 1px solid rgb(255 255 255 / 0.07);
+}
+
+.contents-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  max-width: none;
+  min-height: 48px;
+  margin: 0;
+  padding: 4px 16px 4px 20px;
+  color: var(--white);
+  font-size: 1.03125rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-decoration: none;
+}
+
+summary.contents-name {
+  cursor: pointer;
+  list-style: none;
+}
+
+summary.contents-name::-webkit-details-marker {
+  display: none;
+}
+
+summary.contents-name:hover,
+a.contents-name:hover {
+  background: rgb(255 255 255 / 0.05);
+  color: var(--white);
+}
+
+.contents-later .contents-name {
+  color: var(--text-3);
+  font-weight: 600;
+}
+
+.contents-later a.contents-name {
+  color: #d5dbe5;
+}
+
+.contents-number {
+  display: inline-block;
+  min-width: 1.5em;
+  color: var(--gold-text);
+}
+
+.contents-later .contents-number {
+  color: var(--text-3);
+}
+
+.contents ul {
+  margin: 0;
+  padding: 0 0 10px;
+  list-style: none;
+}
+
+.contents li a {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 3px 16px 3px 41px;
+  border-left: 3px solid transparent;
+  color: #d5dbe5;
+  font-size: 0.96875rem;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.contents li a:hover {
+  background: rgb(255 255 255 / 0.05);
+  color: var(--white);
+}
+
+.contents a[aria-current="page"] {
+  border-left-color: var(--gold);
+  background: rgb(200 164 90 / 0.16);
+  color: var(--white);
+  font-weight: 700;
+}
+
+.count {
+  flex: none;
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: #2a3548;
+  color: #d5dbe5;
+  font-size: 0.78125rem;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.count-amber {
+  background: var(--amber);
+  color: var(--white);
+}
+
+/* The manual's own words */
+
+.manual-text {
+  margin-top: 22px;
+  color: #d5dbe5;
+}
+
+.manual-text p,
+.manual-text ul,
+.manual-text ol {
+  max-width: 68ch;
+  margin: 0 0 1em;
+}
+
+.manual-text ul,
+.manual-text ol {
+  padding-left: 1.3em;
+}
+
+.manual-text li {
+  margin-bottom: 0.45em;
+}
+
+.manual-text li::marker {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.manual-text strong {
+  color: var(--white);
+}
+
+.manual-text h3 {
+  margin: 34px 0 14px;
+  padding-left: 12px;
+  border-left: 3px solid var(--gold);
+  font-size: 1.3125rem;
+  font-weight: 700;
+  scroll-margin-top: 90px;
+}
+
+.manual-text > :last-child {
+  margin-bottom: 0;
+}
+
+.table-scroll {
+  margin: 0 0 1.2em;
+  overflow-x: auto;
+}
+
+.manual-text table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.96875rem;
+  line-height: 1.5;
+}
+
+.manual-text th {
+  padding: 10px 14px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: #090d16;
+  color: var(--white);
+  font-weight: 700;
+  text-align: left;
+}
+
+.manual-text td {
+  min-width: 7em;
+  padding: 11px 14px;
+  border: 1px solid var(--seam);
+  vertical-align: top;
+}
+
+.manual-text tr:nth-child(even) td {
+  background: rgb(255 255 255 / 0.03);
+}
+
+/* The headings inside a section, as links at its top */
+.parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.parts a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--seam-2);
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: #dfe4ec;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.parts a:hover {
+  border-color: var(--gold);
+  color: var(--white);
+}
+
+/* A volume's sections, each with the sentence it opens with */
+.section-list {
+  display: grid;
+  margin: 18px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--seam);
+  list-style: none;
+  counter-reset: section;
+}
+
+.section-list li {
+  position: relative;
+  padding: 14px 0 14px 46px;
+  border-bottom: 1px solid var(--seam);
+  counter-increment: section;
+}
+
+.section-list li::before {
+  position: absolute;
+  top: 15px;
+  left: 0;
+  width: 34px;
+  color: var(--gold-text);
+  font-weight: 700;
+  text-align: right;
+  content: counter(section);
+}
+
+.section-list a {
+  color: var(--white);
+  font-size: 1.125rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.section-list a:hover {
+  color: var(--gold-bright);
+  text-decoration: underline;
+}
+
+.section-list p {
+  max-width: 62ch;
+  margin: 2px 0 0;
+  color: var(--text-2);
+  font-size: 0.96875rem;
+}
+
+/* Back and forward between sections */
+.turn {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
+  gap: 14px;
+  margin-top: 34px;
+}
+
+.turn a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 8px 18px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: var(--white);
+  text-decoration: none;
+}
+
+.turn a:hover {
+  border-color: var(--gold);
+}
+
+.turn .turn-on {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.turn a > span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.turn-way {
+  color: var(--text-3);
+  font-size: 0.8125rem;
+}
+
+.turn-name {
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+/* The ten volumes, as cards */
+
+.shelf {
+  padding-block: clamp(48px, 6vw, 64px) clamp(60px, 8vw, 88px);
+  border-top: 1px solid var(--seam);
+  background: #131b29;
+}
+
+.volume-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+  gap: 14px;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.volume-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--seam);
+  border-radius: 5px;
+  background: var(--panel);
+  transition: border-color 0.15s;
+}
+
+.volume-card:has(a:hover) {
+  border-color: var(--gold);
+}
+
+.volume-card-pic {
+  position: relative;
+  height: 118px;
+  overflow: hidden;
+  background: var(--deep);
+}
+
+.volume-card-pic::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgb(8 12 20 / 0.72), rgb(8 12 20 / 0.1) 60%);
+  content: "";
+}
+
+.volume-card-later .picture {
+  filter: saturate(0.45) brightness(0.8);
+}
+
+.volume-card-number {
+  position: absolute;
+  bottom: 2px;
+  left: 14px;
+  z-index: 1;
+  color: #f6f3ea;
+  font-size: 3.4rem;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 0.8);
+}
+
+.volume-card-pic .chip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+}
+
+.volume-card-words {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px 16px;
+}
+
+.volume-card h3 {
+  font-size: 1.1875rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.volume-card h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* The whole card is the link. The picture's credit stays clickable above it. */
+.volume-card h3 a::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  content: "";
+}
+
+.volume-card p {
+  max-width: none;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.90625rem;
+  line-height: 1.5;
+}
+
+.volume-card .volume-card-date {
+  margin-top: auto;
+  padding-top: 6px;
+  color: var(--text-3);
+  font-size: 0.78125rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.volume-card-later h3 {
+  color: #c3cad6;
+}
+
+.shelf-credit {
+  max-width: none;
+  margin: 16px 0 0;
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+/* What has changed in the manual lately, newest first */
+.changes {
+  display: grid;
+  margin: 20px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--seam);
+  list-style: none;
+}
+
+.changes li {
+  padding: 14px 0 16px;
+  border-bottom: 1px solid var(--seam);
+}
+
+.changes-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  max-width: none;
+  margin: 0 0 6px;
+  color: var(--text-3);
+  font-size: 0.875rem;
+  letter-spacing: 0.06em;
+}
+
+.changes h3 {
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.changes li > p:last-child {
+  max-width: 62ch;
+  margin: 2px 0 0;
+  color: var(--text-2);
+  font-size: 0.96875rem;
+}
+
+/* Roles: the areas of work, as picture tiles with a dark band across the middle */
+
+.tiles-band {
+  padding-bottom: clamp(48px, 7vw, 80px);
+  background: #1a2130;
+}
+
+.filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 24px;
+  padding: 22px 15px 0;
+  background: var(--bar);
+}
+
+.filter .tab {
+  margin: 0 6px 0 0;
+  border: 0;
+  border-radius: 3px 3px 0 0;
+  background: #1b2332;
+}
+
+.filter .tab:hover {
+  background: #263146;
+}
+
+.filter .tab[aria-pressed="true"] {
+  background: #8d7439;
+  color: var(--white);
+}
+
+.filter-count {
+  display: flex;
+  align-items: center;
+  max-width: none;
+  min-height: 46px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.96875rem;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
+  gap: 1px;
+  padding: 40px 15px 0;
+}
+
+.tile {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 356px;
+  overflow: hidden;
+  background: var(--deep);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.17);
+}
+
+.tile > .picture {
+  z-index: -2;
+  filter: brightness(1.14);
+  transition: transform 0.7s ease;
+}
+
+.tile:hover > .picture {
+  transform: scale(1.05);
+}
+
+.tile-later > .picture {
+  filter: saturate(0.62) brightness(1.14);
+}
+
+.tile-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgb(8 12 20 / 0.5), rgb(8 12 20 / 0) 30%, rgb(8 12 20 / 0) 62%, rgb(8 12 20 / 0.78));
+}
+
+.tile-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  max-width: none;
+  margin: 0;
+  padding: 14px;
+}
+
+.tile-band {
+  padding: 18px 16px 22px;
+  background: rgb(6 9 16 / 0.8);
+  text-align: center;
+}
+
+.tile-domain {
+  max-width: none;
+  margin: 0;
+  color: #d6b367;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.tile-band h2 {
+  margin-top: 2px;
+  color: #eceef3;
+  font-size: clamp(1.7rem, 2.5vw, 2.1875rem);
+  font-weight: 700;
+  line-height: 1.15;
+  text-shadow: 0 2px 6px rgb(0 0 0 / 0.6);
+}
+
+.tile-band a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* The whole tile is the link. The picture's credit stays clickable above it. */
+.tile-band a::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  content: "";
+}
+
+.tile:has(a:hover) h2 {
+  color: var(--white);
+}
+
+.tile:has(a:focus-visible) {
+  outline: 2px solid var(--white);
+  outline-offset: -2px;
+}
+
+.tile-foot {
+  max-width: none;
+  min-height: 4.6em;
+  margin: 0;
+  padding: 12px 18px 34px;
+  color: #dfe4ec;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  text-align: center;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.9);
+}
+
+.tiles[data-show="command"] .tile:not([data-domain="command"]),
+.tiles[data-show="ship"] .tile:not([data-domain="ship"]),
+.tiles[data-show="flight"] .tile:not([data-domain="flight"]),
+.tiles[data-show="ground"] .tile:not([data-domain="ground"]),
+.tiles[data-show="support"] .tile:not([data-domain="support"]),
+.tiles[data-show="staff"] .tile:not([data-domain="staff"]) {
+  display: none;
+}
+
+.tiles-note {
+  max-width: calc(var(--wrap) + 2 * var(--gutter));
+  margin: 22px auto 0;
+  color: var(--text-2);
+  font-size: 0.96875rem;
+}
+
+/* The posts in one area, as cards */
+
+.role-group + .role-group {
+  margin-top: 30px;
+}
+
+.role-group-name {
+  margin-bottom: 14px;
+  padding-left: 12px;
+  border-left: 3px solid var(--gold);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.role-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(270px, 100%), 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.role-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--seam);
+  border-top: 2px solid var(--gold);
+  border-radius: 5px;
+  background: var(--panel);
+  transition: background-color 0.15s;
+}
+
+.role-card:has(a:hover) {
+  background: #1d283a;
+}
+
+.role-card-later {
+  border-top-color: var(--seam-2);
+  background: #121a27;
+}
+
+.band .role-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: none;
+  margin: 0 0 4px;
+}
+
+.role-card h3,
+.role-card h4 {
+  font-size: 1.3125rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.role-card h3 a,
+.role-card h4 a {
+  color: var(--white);
+  text-decoration: none;
+}
+
+.role-card h3 a::after,
+.role-card h4 a::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+}
+
+.band .role-card-where {
+  max-width: none;
+  margin: 0;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
+.role-card-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 22px;
+  margin: 8px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--seam);
+}
+
+.role-card-facts > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.role-card-facts dt {
+  color: var(--text-3);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.role-card-facts dd {
+  margin: 0;
+  color: var(--white);
+  font-weight: 600;
+}
+
+.band .after-facts {
+  max-width: 46rem;
+  margin: 16px 0 0;
+  font-size: 1rem;
+}
+
+.band .after-cards {
+  margin: 18px 0 0;
+}
+
+/* What to read: links into the manual, in two lists */
+
+.reading {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: 18px;
+}
+
+.reading > div {
+  padding: 18px 20px 12px;
+  border: 1px solid var(--seam);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.reading h3 {
+  margin-bottom: 8px;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.reading ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reading li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 16px;
+  padding: 9px 0;
+  border-top: 1px solid var(--seam);
+}
+
+.reading li a {
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.reading li span {
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+.band .reading-note {
+  margin: 16px 0 0;
+  font-size: 1rem;
+}
+
+/* A gold bar across the page that leads back up a level */
+
+.back-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 14px;
+  min-height: 76px;
+  padding: 12px 20px;
+  background: #8d7439;
+  color: var(--white);
+  text-align: center;
+  text-decoration: none;
+}
+
+.back-bar:hover {
+  background: #9c8141;
+  color: var(--white);
+}
+
+.back-bar strong {
+  font-size: 1.3125rem;
+}
+
+.back-bar span {
+  color: #f6ecd2;
+  font-size: 1rem;
+}
+
+@media (max-width: 760px) {
+  .columns > aside {
+    order: 2;
+    max-width: none;
+  }
+
+  .mark-words {
+    font-size: 1.7rem;
+  }
+
+  .filter .tab {
+    min-height: 44px;
+    margin-bottom: 6px;
+    padding: 0 14px;
+    border-radius: 3px;
+  }
+
+  .tiles {
+    padding: 24px 0 0;
+  }
+
+  .tile {
+    min-height: 300px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile > .picture {
+    transition: none;
+  }
+
+  .tile:hover > .picture {
+    transform: none;
+  }
+}

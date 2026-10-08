@@ -24,13 +24,18 @@ export type Member = {
 
 const SERVING: Status[] = ["recruit", "auxiliary", "member", "reserve"];
 
+/** Serving means inside the fleet: able to see the order of battle. The database's rule is the same. */
+export function isServing(member: Member): boolean {
+  return SERVING.includes(member.status);
+}
+
 /**
  * Whether to show someone the staff pages. A role only counts while its holder
  * is serving, which is the database's rule too. This only decides what the
  * site offers: the database decides what staff may read and change.
  */
 export function isStaff(member: Member): boolean {
-  return SERVING.includes(member.status) && member.roles.some((role) => role !== "instructor");
+  return isServing(member) && member.roles.some((role) => role !== "instructor");
 }
 
 export type Session =

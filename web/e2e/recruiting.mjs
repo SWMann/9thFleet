@@ -131,6 +131,147 @@ try {
     assert.match(await page.locator(".ladder-note").innerText(), /Opens at stage 5/);
   });
 
+  console.log("Roles");
+  // What the database gives someone who is not signed in.
+  const asVisitor = async (table) => {
+    const response = await fetch(`${supabase.origin}/rest/v1/${table}?select=*`, {
+      headers: { apikey: "sb_publishable_for_tests" },
+    });
+    const body = await response.json().catch(() => null);
+    return Array.isArray(body) ? body : [];
+  };
+  await check("a visitor can read every area of the fleet and filter them", async () => {
+    await context.clearCookies();
+    await page.goto(`${site}/roles`);
+    await headingIs("Roles in the fleet");
+    await page.locator(".tile").first().waitFor();
+    assert.equal(await page.locator(".tile").count(), 15);
+    const gunnery = await page.locator(".tile", { has: page.getByRole("link", { name: "Gunnery" }) }).innerText();
+    assert.match(gunnery, /Open now/i);
+    assert.match(gunnery, /17 posts/i);
+    const lift = await page.locator(".tile", { has: page.getByRole("link", { name: "Lift" }) }).innerText();
+    assert.match(lift, /Opens at stage 4/i);
+    assert.match(await page.locator(".filter-count").innerText(), /15 areas · 5 open now/);
+
+    await page.getByRole("button", { name: "Flight", exact: true }).click();
+    assert.equal(await page.locator(".tile:visible").count(), 2);
+    assert.match(await page.locator(".filter-count").innerText(), /2 areas · none open yet/);
+    await page.getByRole("button", { name: "All areas" }).click();
+    await shot("roles");
+  });
+  await check("an area lists its posts, their grades and when they open", async () => {
+    await page.getByRole("link", { name: "Gunnery" }).click();
+    await headingIs("Gunnery");
+    await page.locator(".role-card").first().waitFor();
+    assert.equal(await page.locator(".role-card").count(), 5);
+    const open = await page.locator(".role-group", { hasText: "Training Ship" }).innerText();
+    assert.match(open, /Open now/i);
+    assert.match(open, /4 posts/);
+    const turret = await page.locator(".role-card", { hasText: "Turret Gunner" }).innerText();
+    assert.match(turret, /Opens at stage 2/i);
+    assert.match(turret, /Entry post/i);
+    assert.match(turret, /E2 to E4/);
+    assert.match(turret, /7 posts/);
+    await shot("roles-area");
+  });
+  await check("a role card shows the grade, what it needs and where it sits", async () => {
+    await page.getByRole("link", { name: "Turret Gunner" }).click();
+    await headingIs("Turret Gunner");
+    const facts = await page.locator(".facts").innerText();
+    assert.match(facts, /E2 to E4\s*Starman to Jr\. Petty Officer/);
+    assert.match(facts, /UEE 9th Fleet › Task Force Jericho › UEES Nexus › Gunnery/);
+    assert.match(facts, /At stage 2/);
+    assert.match(facts, /Navy crew, Radio user/);
+    assert.match(await page.locator(".cards").innerText(), /assessed radio exchange/);
+    // What to read leads into the manual.
+    await page.getByRole("link", { name: "Navy squadron" }).click();
+    await headingIs("Navy squadron");
+    await shot("roles-card");
+  });
+  await check("a duty is shown as a duty, with no rank", async () => {
+    await page.goto(`${site}/roles/staff-duties/fleet-staff-recruiter`);
+    await headingIs("Recruiter");
+    const facts = await page.locator(".facts").innerText();
+    assert.match(facts, /Secondary duty/);
+    assert.match(facts, /E4\s+and above/);
+    assert.doesNotMatch(await page.locator("main").innerText(), /Rank follows the post/);
+  });
+  await check("an area that opens later says so, and an unknown area is not found", async () => {
+    await page.goto(`${site}/roles/boarding`);
+    await headingIs("Boarding");
+    await page.getByText("It opens at stage 6").waitFor();
+    await page.goto(`${site}/roles/nothing-here`);
+    await headingIs("Nothing heard.");
+    await page.goto(`${site}/roles/gunnery/nothing-here`);
+    await headingIs("Nothing heard.");
+  });
+  await check("the roles pages never name who holds a post", async () => {
+    // Ada Vance holds Fleet Commander. A visitor is shown the post and not the person.
+    await page.goto(`${site}/roles/command/fleet-command-fleet-commander`);
+    await headingIs("Fleet Commander");
+    await page.locator(".facts").waitFor();
+    assert.doesNotMatch(await page.locator("body").innerText(), /Ada|Vance|ada_on_discord/i);
+    assert.match(await page.locator(".facts").innerText(), /Shown to serving members/);
+  });
+  await check("the database gives a visitor the structure and nothing about people", async () => {
+    assert.ok((await asVisitor("units")).length > 0, "a visitor cannot read the units");
+    assert.ok((await asVisitor("positions")).length > 0, "a visitor cannot read the posts");
+    for (const table of [
+      "members",
+      "member_accounts",
+      "member_roles",
+      "roster",
+      "assignments",
+      "qualification_awards",
+      "applications",
+      "application_notes",
+      "audit_log",
+    ]) {
+      assert.deepEqual(await asVisitor(table), [], `a visitor can read ${table}`);
+    }
+  });
+
+  console.log("Fleet manual");
+  await check("the manual lists ten volumes and publishes only the reviewed ones", async () => {
+    await page.goto(`${site}/manual`);
+    await headingIs("Fleet manual");
+    assert.equal(await page.locator(".volume-card").count(), 10);
+    assert.equal(await page.locator(".volume-card a").count(), 3, "only written volumes have a page");
+    const figures = await page.locator(".figures").innerText();
+    assert.match(figures, /Published\s+2/i);
+    assert.match(figures, /In review\s+1/i);
+    await shot("manual");
+  });
+  await check("a section reads as the volume wrote it, with its tables", async () => {
+    await page.getByRole("navigation", { name: "Volumes" }).getByText("Organisation").click();
+    await page.getByRole("navigation", { name: "Volumes" }).getByRole("link", { name: "Navy squadron" }).click();
+    await headingIs("Navy squadron");
+    assert.match(await page.locator(".panel-lead").innerText(), /124 primary posts/);
+    const table = await page.locator(".manual-text table").first().innerText();
+    assert.match(table, /Turret Gunner\s+E2 to E4\s+7/);
+    await page.getByRole("link", { name: /Forward to\s*Patrol and support flotilla/ }).click();
+    await headingIs("Patrol and support flotilla");
+    await shot("manual-section");
+  });
+  await check("review notes are not published", async () => {
+    await page.goto(`${site}/manual/organisation/decisions-on-this-volume`);
+    await headingIs("Nothing heard.");
+    for (const path of ["/manual/organisation", "/manual/organisation/primary-posts-and-secondary-duties", "/manual/command/command-at-launch"]) {
+      const text = await (await fetch(`${site}${path}`)).text();
+      assert.doesNotMatch(text, /my proposal|Decisions on this volume|Tom Bombadil/, path);
+    }
+  });
+  await check("a volume still in review is named and shows none of its text", async () => {
+    await page.goto(`${site}/manual/communications`);
+    await headingIs("Communications");
+    await page.getByText("the Fleet Commander is reviewing it").waitFor();
+    assert.equal(await page.locator(".section-list").count(), 0);
+    for (const path of ["/manual/communications/voice-procedure", "/manual/communications/nets", "/manual/personnel"]) {
+      await page.goto(`${site}${path}`);
+      await headingIs("Nothing heard.");
+    }
+  });
+
   console.log("Before recruitment opens");
   await check("an applicant is told when recruitment opens, and sees no form", async () => {
     await signInAs(kit);
@@ -138,6 +279,11 @@ try {
     await headingIs("Apply to join");
     await leadIs(/Recruitment opens on 6 February 2027/);
     assert.equal(await page.getByRole("button", { name: "Send application" }).count(), 0);
+  });
+  await check("an applicant is not shown the order of battle, though anyone may read the structure", async () => {
+    await page.goto(`${site}/order-of-battle`);
+    await leadIs(/for the serving fleet/);
+    assert.equal(await page.locator(".posts").count(), 0);
   });
   await check("the staff pages are for staff", async () => {
     await page.goto(`${site}/staff/applications`);

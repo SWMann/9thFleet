@@ -63,11 +63,12 @@ test("claiming the founder's Discord ID in your own details gets you nothing", a
   assert.equal(await fleet.one("select 1 as found from public.members where id = $1", [forged]), undefined);
   assert.deepEqual(await rolesOf(fleet, forged), []);
 
-  // With no member row the account can see and do nothing.
+  // With no member row the account can see nobody and do nothing.
   await fleet.openRecruitment();
   const actor = fleet.as(forged);
   assert.deepEqual(await actor.rows("select id from public.members"), []);
-  assert.deepEqual(await actor.rows("select id from public.units"), []);
+  assert.deepEqual(await actor.rows("select member_id from public.roster"), []);
+  assert.deepEqual(await actor.rows("select member_id from public.assignments"), []);
   await assert.rejects(
     actor.query("insert into public.applications (member_id) values ($1)", [forged]),
     /row-level security/,

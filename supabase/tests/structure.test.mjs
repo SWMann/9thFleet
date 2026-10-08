@@ -19,7 +19,7 @@ test("every table has row-level security switched on", async () => {
   assert.deepEqual(open, []);
 });
 
-test("a visitor can read the settings, grades and ranks and nothing else", async () => {
+test("a visitor can read the settings, the grades and ranks and the structure, and nothing else", async () => {
   const grants = await fleet.rows(
     `select table_schema || '.' || table_name as name, privilege_type
      from information_schema.role_table_grants
@@ -29,7 +29,11 @@ test("a visitor can read the settings, grades and ranks and nothing else", async
   assert.deepEqual(grants, [
     { name: "public.fleet_settings", privilege_type: "SELECT" },
     { name: "public.grades", privilege_type: "SELECT" },
+    { name: "public.position_qualifications", privilege_type: "SELECT" },
+    { name: "public.positions", privilege_type: "SELECT" },
+    { name: "public.qualifications", privilege_type: "SELECT" },
     { name: "public.ranks", privilege_type: "SELECT" },
+    { name: "public.units", privilege_type: "SELECT" },
   ]);
 });
 
