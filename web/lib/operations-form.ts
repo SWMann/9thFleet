@@ -143,9 +143,17 @@ export function nextTitle(title: string): string {
   return next.length > 80 ? title : next;
 }
 
+export type Outcome = "achieved" | "partly" | "not_achieved";
+export const outcomeNames: Record<Outcome, string> = {
+  achieved: "Achieved",
+  partly: "Partly achieved",
+  not_achieved: "Not achieved",
+};
+
 /**
- * The parts of an event's plan that are lists of records: objectives, the
- * elements and their tasks, the timeline, the ships and the nets. One editor
+ * The parts of an event that are lists of records. Five are its plan:
+ * objectives, the elements and their tasks, the timeline, the ships and the
+ * nets. Two belong to its after-action report: losses and mentions. One editor
  * draws each from its list of fields, and one pair of actions saves them. To
  * let another column be written, add a field here. The database's own rules
  * still decide who may write.
@@ -153,18 +161,24 @@ export function nextTitle(title: string): string {
 export type PlanField = {
   key: string;
   label: string;
-  /** A time is entered as the time of day in UTC, and kept as minutes before or after the start. */
-  kind: "text" | "long" | "time";
+  /**
+   * A time is entered as the time of day in UTC, and kept as minutes before or after the start.
+   * A member is chosen from a list the page provides, and is set once.
+   */
+  kind: "text" | "long" | "time" | "number" | "member";
+  /** The longest a text can be, or the largest a number can be. */
   max: number;
   required?: boolean;
   hint?: string;
 };
 
-export type PlanPartKey = "objectives" | "elements" | "timings" | "ships" | "nets";
+export type PlanPartKey = "objectives" | "elements" | "timings" | "ships" | "nets" | "losses" | "mentions";
 
 export type PlanPart = {
   key: PlanPartKey;
-  table: "event_objectives" | "event_elements" | "event_timings" | "event_ships" | "event_nets";
+  table: "event_objectives" | "event_elements" | "event_timings" | "event_ships" | "event_nets" | "event_losses" | "event_mentions";
+  /** Written with the report, by whoever ran the event, and not with the plan. */
+  report?: boolean;
   /** What one record is called, and the heading over them all. */
   one: string;
   many: string;
@@ -239,6 +253,35 @@ export const planParts: PlanPart[] = [
       { key: "name", label: "Net", kind: "text", max: 60, required: true },
       { key: "purpose", label: "What it is for", kind: "text", max: 200 },
       { key: "controller", label: "Who controls it", kind: "text", max: 80, hint: "A callsign or a name." },
+    ],
+  },
+  {
+    key: "losses",
+    table: "event_losses",
+    report: true,
+    one: "loss",
+    many: "Losses",
+    about: "What the event cost: ships, vehicles, cargo. The fleet reads this with the report.",
+    titled: "item",
+    ordered: false,
+    fields: [
+      { key: "item", label: "What was lost", kind: "text", max: 120, required: true, hint: "Such as Gladius, or cargo." },
+      { key: "quantity", label: "How many", kind: "number", max: 999, required: true },
+      { key: "note", label: "Note", kind: "text", max: 200, hint: "How it was lost, in a few words." },
+    ],
+  },
+  {
+    key: "mentions",
+    table: "event_mentions",
+    report: true,
+    one: "mention",
+    many: "Mentions",
+    about: "A member named for something they did. It is shown with the report and on the member's own record, to the serving fleet.",
+    titled: "member_name",
+    ordered: false,
+    fields: [
+      { key: "member_id", label: "Member", kind: "member", max: 36, required: true },
+      { key: "citation", label: "For what", kind: "long", max: 300, required: true, hint: "One or two sentences on what they did." },
     ],
   },
 ];

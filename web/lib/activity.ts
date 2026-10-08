@@ -41,6 +41,7 @@ export const attemptNames = {
   "event.place": "move someone on or off the reserve list",
   "event.return": "make an attendance return",
   "event.report": "file an after-action report",
+  "event.sign-off": "sign off a qualification at an event",
   "structure.save": "change the fleet's structure",
   "structure.remove": "remove part of the fleet's structure",
   "structure.needs": "change what a role or post needs",

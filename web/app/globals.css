@@ -3752,6 +3752,125 @@ a.contents-name:hover {
   display: block;
 }
 
+/* On a member's record: the qualifications they hold and the times they were mentioned. */
+.earned {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: 18px;
+  max-width: 62rem;
+}
+
+.earned > div {
+  padding: 18px 20px 12px;
+  border: 1px solid var(--seam);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.earned h3 {
+  margin-bottom: 8px;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.earned ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.earned li {
+  padding: 10px 0;
+  border-top: 1px solid var(--seam);
+}
+
+.earned li strong {
+  display: block;
+  color: var(--white);
+  font-weight: 600;
+}
+
+.earned li span {
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
+.band .earned p {
+  max-width: none;
+  margin: 0 0 8px;
+  color: var(--text-2);
+  font-size: 1rem;
+}
+
+/* How each objective turned out: its outcome beside it, and a note under it. */
+.outcome-list .chip {
+  margin-left: 10px;
+  vertical-align: 0.08em;
+}
+
+.outcome-list small {
+  display: block;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
+.chip-outcome-achieved {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--white);
+}
+
+.chip-outcome-partly {
+  border-color: var(--amber);
+  background: var(--amber);
+  color: var(--white);
+}
+
+/* The form that answers each objective in turn. */
+.outcomes {
+  max-width: 46rem;
+}
+
+.outcomes ol {
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+  counter-reset: objective;
+}
+
+.outcomes li {
+  padding-block: 16px;
+  border-top: 1px solid var(--seam);
+  counter-increment: objective;
+}
+
+.band .outcomes-title {
+  max-width: none;
+  margin: 0 0 10px;
+  color: var(--white);
+  font-weight: 600;
+}
+
+.outcomes-title::before {
+  content: counter(objective) ". ";
+  color: var(--text-3);
+}
+
+.band .plan-part + .plan-part,
+.fields + .plan-part {
+  margin-top: 38px;
+  padding-top: 30px;
+  border-top: 1px solid var(--seam);
+}
+
+.picks label small {
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
 /* The reserve list is in the order replies arrived, so it is numbered. */
 .reserve-list {
   max-width: 34rem;

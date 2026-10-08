@@ -79,6 +79,7 @@ async function NewEvent() {
             minimumAttending: "",
             musterAt: "",
             area: "",
+            teachesQualification: "",
           }}
           types={result.mayCreate}
           people={result.people}

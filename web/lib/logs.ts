@@ -2,7 +2,7 @@ import "server-only";
 import { attemptNames, type Attempt } from "@/lib/activity";
 import { gate } from "@/lib/admin";
 import type { Role, Service, Status } from "@/lib/member";
-import { hLabel, returnedNames, type Returned } from "@/lib/operations-form";
+import { hLabel, outcomeNames, returnedNames, type Outcome, type Returned } from "@/lib/operations-form";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -86,12 +86,12 @@ const PAGE = 100;
 
 /** The tables whose history belongs to each kind of line. A table can feed more than one. */
 const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
-  personnel: ["members", "member_roles", "assignments", "qualification_awards"],
+  personnel: ["members", "member_roles", "assignments", "qualification_awards", "event_mentions"],
   recruiting: ["applications", "application_notes", "fleet_settings"],
   operations: [
     "events", "event_orders", "event_units", "event_key_posts", "event_posts", "event_objectives", "event_elements",
     "event_timings", "event_ships", "event_nets", "event_amendments", "event_acknowledgements", "attendance",
-    "attendance_returns", "after_action_reports",
+    "attendance_returns", "after_action_reports", "event_objective_outcomes", "event_losses",
   ],
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
@@ -134,6 +134,8 @@ type Names = {
   eventType: (key: unknown) => string;
   /** One of an event's own posts. */
   extraPost: (id: unknown) => string;
+  /** One of an event's objectives, as it was written. */
+  objective: (id: unknown) => string;
   /** Whether the second grade is above the first. Null when either is unknown. */
   higher: (from: unknown, to: unknown) => boolean | null;
   rank: (service: Service | null, grade: unknown) => string;
@@ -249,7 +251,7 @@ export async function readLog(filters: Filters): Promise<LogPage> {
 
 /** Everything a line needs to name the people and things it mentions. */
 async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>) {
-  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts] = await Promise.all([
+  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives] = await Promise.all([
     supabase.from("members").select("id, character_name, service"),
     supabase.from("member_accounts").select("member_id, discord_name"),
     supabase.from("positions").select("id, title, unit_id"),
@@ -262,8 +264,9 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     supabase.from("areas").select("id, name"),
     supabase.from("event_types").select("key, name"),
     supabase.from("event_posts").select("id, title"),
+    supabase.from("event_objectives").select("id, title"),
   ]);
-  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts]) {
+  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives]) {
     if (result.error) throw new Error(`The names for the log could not be read: ${result.error.message}`);
   }
 
@@ -286,6 +289,7 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
   const areaName = new Map((areas.data ?? []).map((row) => [row.id as string, row.name as string]));
   const typeName = new Map((eventTypes.data ?? []).map((row) => [row.key as string, row.name as string]));
   const extraPostTitle = new Map((eventPosts.data ?? []).map((row) => [row.id as string, row.title as string]));
+  const objectiveTitle = new Map((objectives.data ?? []).map((row) => [row.id as string, row.title as string]));
   const order = new Map((grades.data ?? []).map((row) => [row.code as string, row.sort_order as number]));
   const rankName = new Map((ranks.data ?? []).map((row) => [`${row.service}:${row.grade_code}`, row.name as string]));
 
@@ -298,6 +302,7 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     event: (id) => (typeof id === "string" ? (eventTitle.get(id) ?? "an event that is gone") : "an event"),
     eventType: (key) => (typeof key === "string" ? (typeName.get(key) ?? key) : "no type"),
     extraPost: (id) => (typeof id === "string" ? (extraPostTitle.get(id) ?? "a post that is gone") : "a post"),
+    objective: (id) => (typeof id === "string" ? (objectiveTitle.get(id) ?? "an objective that is gone") : "an objective"),
     role: (id) => (typeof id === "string" ? (roleName.get(id) ?? "a role that is gone") : "no role"),
     area: (id) => (typeof id === "string" ? (areaName.get(id) ?? "an area that is gone") : "no area"),
     higher: (from, to) => {
@@ -348,7 +353,8 @@ function shown(key: string, value: unknown, names: Names, table: string): string
     if (PEOPLE.has(key)) return names.member(value);
     if (key === "position_id" || key === "stand_in_position_id") return names.post(value);
     if (key === "unit_id" || key === "parent_id") return names.unit(value);
-    if (key === "qualification_id" || key === "requires_qualification_id") return names.qualification(value);
+    if (key === "qualification_id" || key === "requires_qualification_id" || key === "teaches_qualification_id") return names.qualification(value);
+    if (key === "objective_id") return names.objective(value);
     if (key === "event_post_id") return names.extraPost(value);
     if (key === "role_id" || key === "next_role_id") return names.role(value);
     if (key === "area_id") return names.area(value);
@@ -454,7 +460,15 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
 
     case "qualification_awards": {
       const qualification = names.qualification(any.qualification_id);
-      if (row.action === "insert") return line("personnel", `${actor} awarded ${subject} the ${qualification} qualification`);
+      if (row.action === "insert") {
+        // Signed off at an event that teaches it, or awarded away from one.
+        return line(
+          "personnel",
+          now.event_id
+            ? `${actor} signed ${subject} off for the ${qualification} qualification at ${names.event(now.event_id)}`
+            : `${actor} awarded ${subject} the ${qualification} qualification`,
+        );
+      }
       if (row.action === "delete") return line("personnel", `${actor} took away ${whose} ${qualification} qualification`);
       return line("personnel", `${actor} changed ${whose} ${qualification} qualification`, changes(row, names));
     }
@@ -609,6 +623,29 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       const event = names.event(any.event_id);
       if (row.action === "delete") return line("operations", `${actor} removed ${whose} acknowledgement for ${event}`);
       return line("operations", `${subject} acknowledged amendment ${now.amendment_number} to the orders of ${event}`);
+    }
+
+    case "event_objective_outcomes": {
+      const event = names.event(any.event_id);
+      const objective = names.objective(any.objective_id);
+      if (row.action === "delete") return line("operations", `${actor} took back how "${objective}" turned out at ${event}`);
+      const outcome = (outcomeNames[now.outcome as Outcome] ?? String(now.outcome)).toLowerCase();
+      return line("operations", `${actor} recorded "${objective}" as ${outcome} at ${event}`, now.note ? String(now.note) : null);
+    }
+
+    case "event_losses": {
+      const event = names.event(any.event_id);
+      const lost = `${Number(any.quantity ?? 1) > 1 ? `${any.quantity} × ` : ""}${String(any.item ?? "a loss")}`;
+      if (row.action === "insert") return line("operations", `${actor} recorded the loss of ${lost} at ${event}`, now.note ? String(now.note) : null);
+      if (row.action === "delete") return line("operations", `${actor} removed the loss of ${lost} from the report of ${event}`);
+      return line("operations", `${actor} corrected the loss of ${lost} at ${event}`, changes(row, names));
+    }
+
+    case "event_mentions": {
+      const event = names.event(any.event_id);
+      if (row.action === "insert") return line("personnel", `${actor} mentioned ${subject} in the report of ${event}`, String(now.citation ?? ""));
+      if (row.action === "delete") return line("personnel", `${actor} withdrew ${whose} mention in the report of ${event}`);
+      return line("personnel", `${actor} corrected ${whose} mention in the report of ${event}`, String(now.citation ?? ""));
     }
 
     case "event_units": {

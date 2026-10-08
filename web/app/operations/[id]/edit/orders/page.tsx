@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { toFields, type PlanPartKey } from "@/lib/operations-form";
+import { toFields } from "@/lib/operations-form";
 import type { Plan } from "@/lib/operations";
 import { OrdersForm } from "../../../OpsForms";
 import { PlanEditor, ReadingForm, type PlanRow } from "../../../PlanForms";
@@ -22,7 +22,7 @@ export default function OrdersPage({ params }: Props) {
 }
 
 /** Each of the plan's lists as its editor takes it: every value as the text a form holds. */
-function rowsOf(plan: Plan): Record<PlanPartKey, PlanRow[]> {
+function rowsOf(plan: Plan): Record<keyof Plan, PlanRow[]> {
   return {
     objectives: plan.objectives.map((entry) => ({ id: entry.id, values: { title: entry.title } })),
     elements: plan.elements.map((entry) => ({ id: entry.id, values: { name: entry.name, callsign: entry.callsign, task: entry.task } })),

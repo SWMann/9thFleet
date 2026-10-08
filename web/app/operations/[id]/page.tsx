@@ -7,7 +7,17 @@ import { PageHead } from "@/components/PageHead";
 import { YourTime } from "@/components/YourTime";
 import { shortfall } from "@/lib/manning";
 import { getOperation, type FleetEvent, type Operation, type Person, type RollPost } from "@/lib/operations";
-import { formatWhen, hLabel, returnedNames, serviceNames, stateNames, weapons, weaponsName, type ParagraphKey } from "@/lib/operations-form";
+import {
+  formatWhen,
+  hLabel,
+  outcomeNames,
+  returnedNames,
+  serviceNames,
+  stateNames,
+  weapons,
+  weaponsName,
+  type ParagraphKey,
+} from "@/lib/operations-form";
 import {
   CopyButton,
   GivePlace,
@@ -20,7 +30,7 @@ import {
   StandInButton,
   ToReserve,
 } from "../OpsForms";
-import { AcknowledgeButton, AmendmentForm } from "../PlanForms";
+import { AcknowledgeButton, AmendmentForm, OutcomesForm, PlanEditor, SignOffForm } from "../PlanForms";
 
 export const metadata: Metadata = {
   title: "Event",
@@ -89,7 +99,9 @@ async function Event({ params }: { params: Props["params"] }) {
   if (result.state === "outside") return <Head title="Event" lead="Operations are for the serving fleet." />;
   if (result.state === "not-found") notFound();
 
-  const { event, orders, sections, runs, edits, report, manning, roll, plan, amendments } = result;
+  const { event, orders, sections, runs, edits, report, manning, roll, plan, amendments, records, passed, signOff } = result;
+  // What the report records beyond its words: enough to show it even before the words are written.
+  const recorded = Object.keys(records.outcomes).length > 0 || records.losses.length > 0 || records.mentions.length > 0;
   const open_to = openTo(event);
   const latest = amendments[0]?.number ?? null;
   // Everyone who said they are attending is asked to acknowledge the latest amendment.
@@ -212,6 +224,15 @@ async function Event({ params }: { params: Props["params"] }) {
             <div>
               <dt>Taking part</dt>
               <dd>{result.taking.names.join(", ")}</dd>
+            </div>
+          ) : null}
+          {event.teaches ? (
+            <div>
+              <dt>Teaches</dt>
+              <dd>
+                {event.teaches.name}
+                <span className="aside">An instructor signs off who passes</span>
+              </dd>
             </div>
           ) : null}
           {event.repeatsWeekly ? (
@@ -380,30 +401,135 @@ async function Event({ params }: { params: Props["params"] }) {
             </h2>
             <p className="intro">Due within 48 hours. The fleet reads it, and its lessons become changes to procedure.</p>
             <ReportForm id={event.id} report={report} />
+            {plan.objectives.length > 0 ? (
+              <div className="plan-part">
+                <h3 className="plan-part-title">How each objective turned out</h3>
+                <OutcomesForm id={event.id} objectives={plan.objectives} outcomes={records.outcomes} />
+              </div>
+            ) : null}
+            <PlanEditor
+              id={event.id}
+              part="losses"
+              rows={records.losses.map((loss) => ({ id: loss.id, values: { item: loss.item, quantity: String(loss.quantity), note: loss.note } }))}
+            />
+            <PlanEditor
+              id={event.id}
+              part="mentions"
+              rows={records.mentions.map((mention) => ({
+                id: mention.id,
+                values: { member_id: mention.person.id, member_name: named(mention.person, ""), citation: mention.citation },
+              }))}
+              members={result.present
+                .filter((person) => !records.mentions.some((mention) => mention.person.id === person.id))
+                .map((person) => ({ value: person.id, label: named(person, "") }))}
+            />
           </section>
         </>
       ) : null}
 
-      {report && !(runs && event.started) ? (
+      {event.teaches && event.started && event.state !== "cancelled" && (signOff || passed.length > 0) ? (
+        <section className="wrap band" aria-labelledby="sign-off">
+          <h2 id="sign-off">
+            Signed <strong>off</strong>
+          </h2>
+          <p className="intro">
+            This event teaches {event.teaches.name}.{" "}
+            {passed.length > 0
+              ? `Signed off here: ${passed.map((person) => named(person, "")).join(", ")}.`
+              : "Nobody has been signed off yet."}
+          </p>
+          {signOff ? (
+            signOff.candidates.length > 0 ? (
+              <SignOffForm id={event.id} qualification={signOff.qualification.name} candidates={signOff.candidates} />
+            ) : (
+              <p>Nobody else is down as having been there.</p>
+            )
+          ) : null}
+        </section>
+      ) : null}
+
+      {(report || recorded) && !(runs && event.started) ? (
         <section className="wrap band" aria-labelledby="report">
           <h2 id="report">
             After-action <strong>report</strong>
           </h2>
           <p className="intro">
-            Filed by {named(report.author, "a member who has left")} on {formatWhen(report.filedAt).day}.
+            {report
+              ? `Filed by ${named(report.author, "a member who has left")} on ${formatWhen(report.filedAt).day}.`
+              : "The report's words are not written yet."}
           </p>
           <div className="orders">
-            <div className="order">
-              <h3>What happened</h3>
-              <p className="order-text">{report.whatHappened}</p>
-            </div>
-            {report.toKeep ? (
+            {report ? (
+              <div className="order">
+                <h3>What happened</h3>
+                <p className="order-text">{report.whatHappened}</p>
+              </div>
+            ) : null}
+            {plan.objectives.some((objective) => records.outcomes[objective.id]) ? (
+              <div className="order">
+                <h3>Objectives</h3>
+                <ol className="plan-list outcome-list">
+                  {plan.objectives.map((objective) => {
+                    const outcome = records.outcomes[objective.id];
+                    return (
+                      <li key={objective.id}>
+                        {objective.title}
+                        <span className={outcome ? `chip chip-outcome-${outcome.outcome}` : "chip"}>
+                          {outcome ? outcomeNames[outcome.outcome] : "Not answered"}
+                        </span>
+                        {outcome?.note ? <small>{outcome.note}</small> : null}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            ) : null}
+            {records.losses.length > 0 ? (
+              <div className="order">
+                <h3>Losses</h3>
+                <table className="plan-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">What was lost</th>
+                      <th scope="col">How many</th>
+                      <th scope="col">Note</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {records.losses.map((loss) => (
+                      <tr key={loss.id}>
+                        <th scope="row">{loss.item}</th>
+                        <td>{loss.quantity}</td>
+                        <td>{loss.note}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            {records.mentions.length > 0 ? (
+              <div className="order">
+                <h3>Mentions</h3>
+                <dl className="plan-tasks">
+                  {records.mentions.map((mention) => (
+                    <div key={mention.id}>
+                      <dt>
+                        {named(mention.person, "")}
+                        {mention.person.id === result.member.id ? <span className="tag tag-you">You</span> : null}
+                      </dt>
+                      <dd className="order-text">{mention.citation}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ) : null}
+            {report?.toKeep ? (
               <div className="order">
                 <h3>What to keep</h3>
                 <p className="order-text">{report.toKeep}</p>
               </div>
             ) : null}
-            {report.toChange ? (
+            {report?.toChange ? (
               <div className="order">
                 <h3>What to change</h3>
                 <p className="order-text">{report.toChange}</p>

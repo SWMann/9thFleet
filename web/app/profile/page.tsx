@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { getSession, isStaff, type Member, type Role, type Service, type Status } from "@/lib/member";
+import { getSession, isServing, isStaff, type Member, type Role, type Service, type Status } from "@/lib/member";
+import { getServiceRecord } from "@/lib/service-record";
 import { site } from "@/lib/site";
 import { signOut } from "./actions";
 import { NamesForm } from "./NamesForm";
@@ -80,6 +81,9 @@ async function Record() {
 
   const { member, recruitmentOpen } = session;
   const status = statusNames[member.status];
+  // What a serving member has earned. Someone outside the fleet has neither.
+  const earned = isServing(member) ? await getServiceRecord(member.id) : { qualifications: [], mentions: [] };
+  const day = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
   return (
     <>
@@ -118,6 +122,53 @@ async function Record() {
           )}
         </dl>
       </section>
+
+      {isServing(member) ? (
+        <section className="wrap band" aria-labelledby="earned">
+          <h2 id="earned">What you have earned</h2>
+          <div className="earned">
+            <div>
+              <h3>Qualifications</h3>
+              {earned.qualifications.length > 0 ? (
+                <ul>
+                  {earned.qualifications.map((qualification) => (
+                    <li key={qualification.name}>
+                      <strong>{qualification.name}</strong>
+                      <span>
+                        {day.format(new Date(qualification.awardedOn))}
+                        {qualification.event ? (
+                          <>
+                            , at <Link href={`/operations/${qualification.event.id}`}>{qualification.event.title}</Link>
+                          </>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>None yet. An instructor signs each one off in training.</p>
+              )}
+            </div>
+            <div>
+              <h3>Mentions</h3>
+              {earned.mentions.length > 0 ? (
+                <ul>
+                  {earned.mentions.map((mention) => (
+                    <li key={mention.event.id}>
+                      <strong>{mention.citation}</strong>
+                      <span>
+                        <Link href={`/operations/${mention.event.id}`}>{mention.event.title}</Link>, {day.format(new Date(mention.mentionedAt))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>None yet. Whoever runs an event can name a member in its after-action report.</p>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="wrap band" aria-labelledby="names">
         <h2 id="names">Your names</h2>
