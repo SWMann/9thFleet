@@ -16,3 +16,12 @@ const subscribe = () => () => {};
 export function useSignedIn() {
   return useSyncExternalStore(subscribe, hasSignedInHint, () => false);
 }
+
+function hasAdminHint() {
+  return /(?:^|;\s*)nf_tier=(?:staff|command|admin)(?:;|$)/.test(document.cookie);
+}
+
+/** Whether to offer the admin pages. Also only a hint: the pages check for themselves. */
+export function useAdminHint() {
+  return useSyncExternalStore(subscribe, hasAdminHint, () => false);
+}

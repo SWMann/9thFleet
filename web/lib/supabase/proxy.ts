@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { SIGNED_IN_COOKIE, sessionCookieOptions, signedInCookieOptions } from "./cookies";
+import { SIGNED_IN_COOKIE, TIER_COOKIE, sessionCookieOptions, signedInCookieOptions, tierCookieOptions } from "./cookies";
 import { supabaseEnv } from "./env";
 
 /**
@@ -49,6 +49,19 @@ export async function updateSession(request: NextRequest) {
   if (signedIn && !hinted) response.cookies.set(SIGNED_IN_COOKIE, "1", signedInCookieOptions(secure));
   if (!signedIn && hinted) response.cookies.delete(SIGNED_IN_COOKIE);
 
+  // The same for the admin pages: which of them the menu offers. The roles are
+  // read again when the hint runs out, so a new role shows within ten minutes.
+  const tierHint = request.cookies.get(TIER_COOKIE)?.value;
+  if (!signedIn && tierHint) response.cookies.delete(TIER_COOKIE);
+  if (signedIn && !tierHint) {
+    const { data: roles, error } = await supabase.from("member_roles").select("role").eq("member_id", data!.claims.sub);
+    if (!error) {
+      const held = (roles ?? []).map((row) => row.role as string);
+      const tier = ["admin", "command", "staff"].find((role) => held.includes(role)) ?? "none";
+      response.cookies.set(TIER_COOKIE, tier, tierCookieOptions(secure));
+    }
+  }
+
   const { pathname } = request.nextUrl;
   if (!signedIn && MEMBER_PAGES.some((page) => pathname === page || pathname.startsWith(`${page}/`))) {
     return redirectKeepingCookies(request, response, "/sign-in");
@@ -60,7 +73,7 @@ export async function updateSession(request: NextRequest) {
 }
 
 /** Pages for signed-in people only. Keep the matcher in proxy.ts in step with this. */
-const MEMBER_PAGES = ["/profile", "/order-of-battle", "/operations", "/apply", "/staff"];
+const MEMBER_PAGES = ["/profile", "/order-of-battle", "/operations", "/apply", "/staff", "/admin"];
 
 function redirectKeepingCookies(request: NextRequest, from: NextResponse, pathname: string) {
   const url = request.nextUrl.clone();

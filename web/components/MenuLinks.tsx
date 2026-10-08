@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import type { MenuGroup } from "@/lib/menu";
-import { useSignedIn } from "./useSignedIn";
+import { useAdminHint, useSignedIn } from "./useSignedIn";
 
 /** One menu column's links. A column with member pages changes once you have signed in. */
 export function MenuLinks({ group }: { group: MenuGroup }) {
   const signedIn = useSignedIn();
   const forMember = signedIn && group.signedIn;
-  const links = forMember ? group.signedIn! : group.links;
+  const admin = useAdminHint() && forMember ? (group.admin ?? []) : [];
+  const links = forMember ? [...group.signedIn!, ...admin] : group.links;
   return (
     <>
       <ul>
