@@ -72,6 +72,7 @@ export type EventFields = {
   minimumAttending: string;
   musterAt: string;
   area: string;
+  teachesQualification: string;
 };
 
 /** A type's own line: who usually runs one, and an example. */
@@ -327,6 +328,29 @@ export function EventForm({
           autoComplete="off"
           aria-describedby="pve_fallback_hint"
         />
+      </div>
+
+      <div className="field">
+        <label htmlFor="teaches_qualification">
+          Qualification taught <span className="optional">Optional</span>
+        </label>
+        <p className="hint" id="teaches_qualification_hint">
+          For a training event that ends in a qualification. Once it has started, an instructor signs off who passed
+          from the event&apos;s page.
+        </p>
+        <select
+          id="teaches_qualification"
+          name="teaches_qualification"
+          defaultValue={held("teaches_qualification", event.teachesQualification)}
+          aria-describedby="teaches_qualification_hint"
+        >
+          <option value="">None</option>
+          {qualifications.map((qualification) => (
+            <option key={qualification.id} value={qualification.id}>
+              {qualification.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <fieldset className="field-set">

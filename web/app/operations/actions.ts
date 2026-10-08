@@ -8,11 +8,13 @@ import {
   aWeekOn,
   minutesFromStart,
   nextTitle,
+  outcomeNames,
   paragraphs,
   planPartOf,
   returnedNames,
   serviceNames,
   weapons,
+  type PlanPart,
 } from "@/lib/operations-form";
 import { explainRefusal } from "@/lib/refusals";
 import { createClient } from "@/lib/supabase/server";
@@ -149,6 +151,7 @@ function readEvent(formData: FormData): { fields: Record<string, string | number
       open_to_recruits: formData.get("open_to_recruits") === "on",
       open_to_service: typeof service === "string" && service in serviceNames ? service : null,
       requires_qualification_id: uuid(formData.get("requires_qualification")),
+      teaches_qualification_id: uuid(formData.get("teaches_qualification")),
       places,
       minimum_attending: minimum,
       muster_at: musterAt,
@@ -196,7 +199,7 @@ export async function copyEvent(_previous: OpsResult, formData: FormData): Promi
     session.supabase
       .from("events")
       .select(
-        "kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, open_to_recruits, open_to_service, requires_qualification_id, places, minimum_attending, muster_at, area, reading",
+        "kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, open_to_recruits, open_to_service, requires_qualification_id, places, minimum_attending, muster_at, area, reading, teaches_qualification_id",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -234,6 +237,7 @@ export async function copyEvent(_previous: OpsResult, formData: FormData): Promi
       muster_at: event.muster_at,
       area: event.area,
       reading: event.reading,
+      teaches_qualification_id: event.teaches_qualification_id,
       copied_from: id,
     })
     .select("id")
@@ -621,11 +625,16 @@ export async function fileReport(_previous: OpsResult, formData: FormData): Prom
 }
 
 const NOT_YOURS_TO_PLAN = "Only whoever runs the event writes its plan.";
+const NOT_YOURS_TO_REPORT = "Only whoever ran the event writes its report.";
+
+/** What a list belongs to: the plan, or the after-action report. Each has its own name in the log and its own words. */
+const listOf = (part: PlanPart): { attempt: Attempt; notYours: string } =>
+  part.report ? { attempt: "event.report", notYours: NOT_YOURS_TO_REPORT } : { attempt: "event.plan", notYours: NOT_YOURS_TO_PLAN };
 
 /**
- * Add a record to one of the plan's lists, or change one: an objective, an
- * element and its task, a timing, a ship or a net. The list's fields come from
- * `planParts`, so this never names a column of its own.
+ * Add a record to one of an event's lists, or change one: an objective, an
+ * element and its task, a timing, a ship, a net, a loss or a mention. The
+ * list's fields come from `planParts`, so this never names a column of its own.
  */
 export async function savePlanRow(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
   const session = await signedIn();
@@ -634,12 +643,29 @@ export async function savePlanRow(_previous: OpsResult, formData: FormData): Pro
   const id = uuid(formData.get("id"));
   const rowId = formData.get("row");
   const row = uuid(rowId);
-  if (!part || !id || (rowId !== null && rowId !== "" && !row)) return notThisPage(session, "event.plan");
+  if (!part || !id || (rowId !== null && rowId !== "" && !row)) return notThisPage(session, part?.report ? "event.report" : "event.plan");
+  const { attempt, notYours: notMine } = listOf(part);
   const again = { values: typedInto(formData), stamp: Date.now() };
 
   const record: Record<string, string | number> = {};
   for (const field of part.fields) {
     const text = typed(formData.get(field.key));
+    if (field.kind === "member") {
+      // Who a record is about is set when it is added, and not changed afterwards.
+      if (row) continue;
+      const member = uuid(text);
+      if (!member) return { ok: false, message: `Choose "${field.label}".`, ...again };
+      record[field.key] = member;
+      continue;
+    }
+    if (field.kind === "number") {
+      const value = Number(text);
+      if (text === "" || !Number.isInteger(value) || value < 1 || value > field.max) {
+        return { ok: false, message: `"${field.label}" is a whole number from 1 to ${field.max}.`, ...again };
+      }
+      record[field.key] = value;
+      continue;
+    }
     const value = field.kind === "long" ? text : text.replace(/\s+/g, " ");
     if (value === "" && field.required) return { ok: false, message: `Fill in "${field.label}".`, ...again };
     if (value.length > field.max) return { ok: false, message: `Keep "${field.label}" under ${field.max.toLocaleString("en-GB")} characters.`, ...again };
@@ -649,7 +675,7 @@ export async function savePlanRow(_previous: OpsResult, formData: FormData): Pro
     }
     // A time of day is kept as minutes before or after the event's start.
     const event = await session.supabase.from("events").select("starts_at").eq("id", id).maybeSingle();
-    if (event.error) return { ...(await failed(session, "event.plan", event.error, "The event could not be read. Try again.")), ...again };
+    if (event.error) return { ...(await failed(session, attempt, event.error, "The event could not be read. Try again.")), ...again };
     const offset = event.data ? minutesFromStart(event.data.starts_at as string, value) : null;
     if (offset === null) return { ok: false, message: "Give the time as hours and minutes, in UTC.", ...again };
     record.offset_minutes = offset;
@@ -657,39 +683,44 @@ export async function savePlanRow(_previous: OpsResult, formData: FormData): Pro
 
   if (row) {
     const { data, error } = await session.supabase.from(part.table).update(record).eq("id", row).eq("event_id", id).select("id");
-    if (error) return { ...(await failed(session, "event.plan", error, explainPlan(part.one, error))), ...again };
-    if (!data || data.length === 0) return { ...(await notYours(session, "event.plan", NOT_YOURS_TO_PLAN)), ...again };
+    if (error) return { ...(await failed(session, attempt, error, explainList(part, error, notMine))), ...again };
+    if (!data || data.length === 0) return { ...(await notYours(session, attempt, notMine)), ...again };
     refresh();
     return { ok: true, message: "Saved.", stamp: again.stamp };
   }
 
   if (part.ordered) {
     const current = await session.supabase.from(part.table).select("sort_order").eq("event_id", id);
-    if (current.error) return { ...(await failed(session, "event.plan", current.error, "The plan could not be read. Try again.")), ...again };
+    if (current.error) return { ...(await failed(session, attempt, current.error, "The list could not be read. Try again.")), ...again };
     record.sort_order = Math.max(0, ...(current.data ?? []).map((entry) => Number(entry.sort_order))) + 1;
   }
   const { error } = await session.supabase.from(part.table).insert({ event_id: id, ...record });
-  if (error) return { ...(await failed(session, "event.plan", error, explainPlan(part.one, error))), ...again };
+  if (error) return { ...(await failed(session, attempt, error, explainList(part, error, notMine))), ...again };
   refresh();
   return { ok: true, message: "Added.", stamp: again.stamp };
 }
 
-function explainPlan(one: string, error: { code?: string; message: string }): string {
-  if (error.code === "23505") return `The event already has ${/^[aeiou]/.test(one) ? "an" : "a"} ${one} with that name.`;
-  return explainRefusal(error, NOT_YOURS_TO_PLAN);
+function explainList(part: PlanPart, error: { code?: string; message: string }, otherwise: string): string {
+  if (error.code === "23505") {
+    return part.key === "mentions"
+      ? "That member is already mentioned for this event. Change the mention they have."
+      : `The event already has ${/^[aeiou]/.test(part.one) ? "an" : "a"} ${part.one} with that name.`;
+  }
+  return explainRefusal(error, otherwise);
 }
 
-/** Take a record out of one of the plan's lists. */
+/** Take a record out of one of an event's lists. */
 export async function removePlanRow(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
   const session = await signedIn();
   if (!session) return NOT_CONNECTED;
   const part = planPartOf(String(formData.get("part") ?? ""));
   const id = uuid(formData.get("id"));
   const row = uuid(formData.get("row"));
-  if (!part || !id || !row) return notThisPage(session, "event.plan");
+  if (!part || !id || !row) return notThisPage(session, part?.report ? "event.report" : "event.plan");
+  const { attempt, notYours: notMine } = listOf(part);
   const { data, error } = await session.supabase.from(part.table).delete().eq("id", row).eq("event_id", id).select("id");
-  if (error) return failed(session, "event.plan", error, explainRefusal(error, "That could not be removed. Try again."));
-  if (!data || data.length === 0) return notYours(session, "event.plan", NOT_YOURS_TO_PLAN);
+  if (error) return failed(session, attempt, error, explainRefusal(error, "That could not be removed. Try again."));
+  if (!data || data.length === 0) return notYours(session, attempt, notMine);
   refresh();
   return { ok: true, message: "Removed." };
 }
@@ -767,4 +798,95 @@ export async function acknowledgeAmendment(_previous: OpsResult, formData: FormD
   if (error) return failed(session, "event.acknowledge", error, explainRefusal(error, "That could not be saved. Try again."));
   refresh();
   return { ok: true, message: "Acknowledged." };
+}
+
+/**
+ * Sign off who passed at an event that teaches a qualification. Each pass is
+ * an award in the instructor's own name, pointing back at the event. The
+ * database decides who may award, and that the member was there.
+ */
+export async function signOff(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  if (!id) return notThisPage(session, "event.sign-off");
+  const passed = ticked(formData, "pass");
+  if (passed.length === 0) return { ok: false, message: "Tick who passed first." };
+
+  const event = await session.supabase.from("events").select("teaches_qualification_id").eq("id", id).maybeSingle();
+  if (event.error) return failed(session, "event.sign-off", event.error, "The event could not be read. Try again.");
+  const qualification = event.data?.teaches_qualification_id as string | null | undefined;
+  if (!qualification) return notThisPage(session, "event.sign-off");
+
+  let signed = 0;
+  for (const member of passed) {
+    const { error } = await session.supabase
+      .from("qualification_awards")
+      .insert({ member_id: member, qualification_id: qualification, awarded_by: session.id, event_id: id });
+    // Someone who already holds it has nothing to be signed off for.
+    if (error?.code === "23505") continue;
+    if (error) {
+      if (signed > 0) refresh();
+      const shown = explainRefusal(error, "That could not be signed off. Only an instructor signs off a qualification, and never their own.");
+      return failed(session, "event.sign-off", error, shown);
+    }
+    signed += 1;
+  }
+  refresh();
+  return {
+    ok: true,
+    message: signed === 0 ? "They already hold it." : signed === 1 ? "1 pass signed off." : `${signed} passes signed off.`,
+    stamp: Date.now(),
+  };
+}
+
+/** Say how each objective turned out. One left unanswered has its answer taken away. */
+export async function saveOutcomes(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  if (!id) return notThisPage(session, "event.report");
+
+  const wanted: { objective: string; outcome: string; note: string }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("outcome:")) continue;
+    const objective = uuid(key.slice("outcome:".length));
+    if (!objective || typeof value !== "string" || (value !== "" && !(value in outcomeNames))) return notThisPage(session, "event.report");
+    const note = typed(formData.get(`note:${objective}`)).replace(/\s+/g, " ");
+    if (note.length > 300) return { ok: false, message: "Keep each note under 300 characters." };
+    wanted.push({ objective, outcome: value, note });
+  }
+
+  const current = await session.supabase.from("event_objective_outcomes").select("objective_id, outcome, note").eq("event_id", id);
+  if (current.error) return failed(session, "event.report", current.error, "The outcomes could not be read. Try again.");
+  const have = new Map((current.data ?? []).map((row) => [row.objective_id as string, row]));
+
+  let changed = 0;
+  for (const entry of wanted) {
+    const held = have.get(entry.objective);
+    if (entry.outcome === "") {
+      if (!held) continue;
+      const { data, error } = await session.supabase.from("event_objective_outcomes").delete().eq("objective_id", entry.objective).select("objective_id");
+      if (error) return failed(session, "event.report", error, explainRefusal(error, NOT_YOURS_TO_REPORT));
+      if (!data || data.length === 0) return notYours(session, "event.report", NOT_YOURS_TO_REPORT);
+    } else if (!held) {
+      const { error } = await session.supabase
+        .from("event_objective_outcomes")
+        .insert({ objective_id: entry.objective, event_id: id, outcome: entry.outcome, note: entry.note });
+      if (error) return failed(session, "event.report", error, explainRefusal(error, NOT_YOURS_TO_REPORT));
+    } else if (held.outcome !== entry.outcome || held.note !== entry.note) {
+      const { data, error } = await session.supabase
+        .from("event_objective_outcomes")
+        .update({ outcome: entry.outcome, note: entry.note })
+        .eq("objective_id", entry.objective)
+        .select("objective_id");
+      if (error) return failed(session, "event.report", error, explainRefusal(error, NOT_YOURS_TO_REPORT));
+      if (!data || data.length === 0) return notYours(session, "event.report", NOT_YOURS_TO_REPORT);
+    } else {
+      continue;
+    }
+    changed += 1;
+  }
+  if (changed > 0) refresh();
+  return { ok: true, message: changed > 0 ? "Saved." : "Nothing was changed.", stamp: Date.now() };
 }

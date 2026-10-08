@@ -20,6 +20,7 @@ or let someone promote themselves.
 | `migrations/…_event_types.sql` | The types of event as records an admin keeps, copying an event into a new draft, and the weekly repeat |
 | `migrations/…_event_manning.sql` | Who takes part in an event: the units, extra posts for the night, posts that must be filled, who it is open to, and places with a reserve list |
 | `migrations/…_event_plan.sql` | Fuller orders: objectives, elements and their tasks, the timeline, ships, nets, where to muster, what to read, and amendments with their acknowledgement |
+| `migrations/…_event_report.sql` | Signing off a qualification at the event that teaches it, and the report's records: how each objective turned out, losses and mentions |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -107,6 +108,13 @@ Roles add up: an admin holds every role. Things the database decides for itself:
 - **An amendment is never rewritten.** Whoever runs an announced event issues one. The database
   numbers it, dates it and signs it. A member who is attending acknowledges the latest, for
   themselves. Who has acknowledged is for whoever runs the event, and each member for their own line.
+- **A pass is signed off at the event that teaches it.** An event can name the qualification it
+  teaches. Once it has started, an instructor awards it to someone who was there, in their own name,
+  and the award points back at the event. The attendance return has the last word on who was there.
+  Who may award at all has not changed: an instructor, and never to themselves.
+- **The report keeps records as well as words.** Whoever ran an event says how each objective turned
+  out, what was lost, and who is mentioned. A mention is written about someone else, one for each
+  member for each event, and is read by the serving fleet with the event and on the member's record.
 - **A weekly event drafts the next one.** When it is closed, or cancelled after it was announced,
   the database drafts next week's with the same details and orders, in the name of whoever closed
   it. A number at the end of the title goes up by one. The draft is never announced by itself.

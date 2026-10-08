@@ -57,6 +57,7 @@ async function EditEvent({ params }: { params: Props["params"] }) {
             minimumAttending: event.minimumAttending === null ? "" : String(event.minimumAttending),
             musterAt: event.musterAt,
             area: event.area,
+            teachesQualification: event.teaches?.id ?? "",
           }}
           // Someone changing an event they could not have drafted keeps its type on the list.
           types={types.filter((type) => type.key === event.kind || mayCreate.some((own) => own.key === type.key))}

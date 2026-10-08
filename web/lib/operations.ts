@@ -6,6 +6,7 @@ import {
   sectionsFrom,
   serviceNames,
   type EventState,
+  type Outcome,
   type EventType,
   type ParagraphKey,
   type Reply,
@@ -51,6 +52,7 @@ type EventRow = {
   muster_at: string;
   area: string;
   reading: string[] | null;
+  teaches_qualification_id: string | null;
 };
 type AttendanceRow = {
   event_id: string;
@@ -73,7 +75,7 @@ type ExtraPostRow = {
 type RosterRow = { member_id: string; character_name: string | null; rank_name: string | null; status: string };
 
 const EVENT =
-  "id, kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, state, created_by, announced_at, roll_closes_at, copied_from, repeats_weekly, open_to_recruits, open_to_service, requires_qualification_id, places, minimum_attending, muster_at, area, reading";
+  "id, kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, state, created_by, announced_at, roll_closes_at, copied_from, repeats_weekly, open_to_recruits, open_to_service, requires_qualification_id, places, minimum_attending, muster_at, area, reading, teaches_qualification_id";
 const ATTENDANCE = "event_id, member_id, reply, stand_in_position_id, event_post_id, place, replied_at";
 const EXTRA_POST = "id, event_id, title, role_id, must_fill, open_to_volunteers, sort_order";
 const SERVING = ["recruit", "auxiliary", "member", "reserve"];
@@ -112,6 +114,8 @@ export type FleetEvent = {
   area: string;
   /** Sections of the manual to read first, each as volume/section. */
   reading: string[];
+  /** The qualification it teaches, which an instructor signs off for those who pass. */
+  teaches: { id: string; name: string } | null;
 };
 
 /** One primary post on the night: who holds it, whether they are coming, and who stands in if not. */
@@ -291,6 +295,9 @@ function toEvent(
     musterAt: row.muster_at ?? "",
     area: row.area ?? "",
     reading: row.reading ?? [],
+    teaches: row.teaches_qualification_id
+      ? { id: row.teaches_qualification_id, name: qualifications.get(row.teaches_qualification_id) ?? "A qualification" }
+      : null,
   };
 }
 
@@ -552,6 +559,21 @@ export type Plan = {
 
 export type Amendment = { number: number; body: string; issuedBy: Person | null; issuedAt: string };
 
+/** What the after-action report records beyond its words. */
+export type ReportRecords = {
+  /** How each objective turned out, by the objective's id. One not answered yet is not in it. */
+  outcomes: Record<string, { outcome: Outcome; note: string }>;
+  losses: { id: string; item: string; quantity: number; note: string }[];
+  mentions: { id: string; person: Person; citation: string }[];
+};
+
+/** For an instructor, at an event that teaches a qualification: who can be signed off. */
+export type SignOff = {
+  qualification: { id: string; name: string };
+  /** Everyone who was there, by the return if this member can see it, and otherwise by the roll. */
+  candidates: { person: Person; holds: boolean }[];
+};
+
 export type Operation =
   | Outside
   | { state: "not-found" }
@@ -612,6 +634,13 @@ export type Operation =
        * Empty for everyone else, and when there is no amendment.
        */
       awaiting: Person[];
+      records: ReportRecords;
+      /** Who was signed off at this event, for everyone to read. */
+      passed: Person[];
+      /** Set for an instructor once the event has started, if it teaches a qualification. */
+      signOff: SignOff | null;
+      /** Everyone who was there, for whoever writes the report to mention. Empty for anyone else. */
+      present: Person[];
     };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -628,6 +657,7 @@ export async function getOperation(id: string): Promise<Operation> {
   const [
     found, orders, lines, marks, report, roster, units, keyPosts, extraPosts, awards, roleRows, areaRows,
     objectives, elements, timings, ships, nets, amendments, acknowledgements,
+    outcomes, losses, mentions, passes,
     battle, types, qualifications,
   ] = await Promise.all([
       supabase.from("events").select(EVENT).eq("id", id).maybeSingle(),
@@ -659,6 +689,10 @@ export async function getOperation(id: string): Promise<Operation> {
       supabase.from("event_amendments").select("number, body, issued_by, issued_at").eq("event_id", id),
       // The database returns this member's own line, or every line to whoever runs the event.
       supabase.from("event_acknowledgements").select("member_id, amendment_number").eq("event_id", id),
+      supabase.from("event_objective_outcomes").select("objective_id, outcome, note").eq("event_id", id),
+      supabase.from("event_losses").select("id, item, quantity, note, recorded_at").eq("event_id", id),
+      supabase.from("event_mentions").select("id, member_id, citation, mentioned_at").eq("event_id", id),
+      supabase.from("qualification_awards").select("member_id").eq("event_id", id),
       getOrderOfBattle(),
       readEventTypes(supabase),
       readQualifications(supabase),
@@ -666,6 +700,7 @@ export async function getOperation(id: string): Promise<Operation> {
   for (const result of [
     found, orders, lines, marks, report, roster, units, keyPosts, extraPosts, awards, roleRows, areaRows,
     objectives, elements, timings, ships, nets, amendments, acknowledgements,
+    outcomes, losses, mentions, passes,
   ]) {
     if (result.error) throw new Error(`The event could not be read: ${result.error.message}`);
   }
@@ -783,6 +818,48 @@ export async function getOperation(id: string): Promise<Operation> {
           .map((line) => nameOf(people.get(line.memberId), line.memberId)!)
           .sort((a, b) => a.name.localeCompare(b.name))
       : [];
+  // Who was there: by the attendance return where this member can see it, and otherwise by the roll.
+  const there = new Map<string, Person>();
+  for (const line of attendance) {
+    const mark = returned.get(line.memberId);
+    const person = nameOf(people.get(line.memberId), line.memberId);
+    if (person && (mark ? mark === "present" : line.place === "in")) there.set(person.id, person);
+  }
+  for (const [memberId, mark] of returned) {
+    const person = nameOf(people.get(memberId), memberId);
+    if (person && mark === "present") there.set(memberId, person);
+  }
+  const present = [...there.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  // An instructor signs off who passed, once the event has started. The database checks both again.
+  const mayAward = isServing(member) && (member.roles.includes("instructor") || member.roles.includes("admin"));
+  let signOff: SignOff | null = null;
+  if (mayAward && event.teaches && event.started && (row.state === "announced" || row.state === "done")) {
+    const holders = await supabase.from("qualification_awards").select("member_id").eq("qualification_id", event.teaches.id);
+    if (holders.error) throw new Error(`The event could not be read: ${holders.error.message}`);
+    const holds = new Set(((holders.data ?? []) as { member_id: string }[]).map((entry) => entry.member_id));
+    signOff = {
+      qualification: event.teaches,
+      // Nobody signs off their own qualification.
+      candidates: present.filter((person) => person.id !== member.id).map((person) => ({ person, holds: holds.has(person.id) })),
+    };
+  }
+
+  const records: ReportRecords = {
+    outcomes: Object.fromEntries(
+      ((outcomes.data ?? []) as { objective_id: string; outcome: Outcome; note: string }[]).map((entry) => [
+        entry.objective_id,
+        { outcome: entry.outcome, note: entry.note },
+      ]),
+    ),
+    losses: ((losses.data ?? []) as { id: string; item: string; quantity: number; note: string; recorded_at: string }[])
+      .sort((a, b) => a.recorded_at.localeCompare(b.recorded_at))
+      .map((entry) => ({ id: entry.id, item: entry.item, quantity: entry.quantity, note: entry.note })),
+    mentions: ((mentions.data ?? []) as { id: string; member_id: string; citation: string; mentioned_at: string }[])
+      .sort((a, b) => a.mentioned_at.localeCompare(b.mentioned_at))
+      .map((entry) => ({ id: entry.id, person: nameOf(people.get(entry.member_id), entry.member_id)!, citation: entry.citation })),
+  };
+
   return {
     state: "ready",
     member,
@@ -847,6 +924,13 @@ export async function getOperation(id: string): Promise<Operation> {
     amendments: issued,
     acknowledged: acknowledgedBy.get(member.id) ?? null,
     awaiting,
+    records,
+    passed: ((passes.data ?? []) as { member_id: string }[])
+      .map((entry) => nameOf(people.get(entry.member_id), entry.member_id)!)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    signOff,
+    // Whoever writes the report mentions someone who was there, and never themselves.
+    present: runs ? present.filter((person) => person.id !== member.id) : [],
   };
 }
 

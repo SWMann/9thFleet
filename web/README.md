@@ -46,9 +46,9 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/sign-in` | The button that sends you to Discord |
 | `/auth/discord` | Where the button posts. It answers with a redirect to Discord |
 | `/auth/callback` | Where Discord sends you back. It turns Discord's one-time code into a session |
-| `/profile` | Your record: status, service, rank, post, and your names |
+| `/profile` | Your record: status, service, rank, post, your names, and for a serving member the qualifications they hold and the times they were mentioned |
 | `/order-of-battle` | Every unit and post, who holds each, what is vacant and what opens later. For the serving fleet |
-| `/operations` | Training and operation nights: the orders, the roll, stand-ins, the attendance return and the after-action report. For the serving fleet. Command drafts events, and instructors draft the types open to them. An event can be copied, and can repeat weekly. It says which units take part, who it is open to, how many places it has and what it needs to go ahead. Its orders carry a plan: objectives, tasks, a timeline in the reader's own time, ships, a comms plan, reading, and numbered amendments that those attending acknowledge |
+| `/operations` | Training and operation nights: the orders, the roll, stand-ins, the attendance return and the after-action report. For the serving fleet. Command drafts events, and instructors draft the types open to them. An event can be copied, and can repeat weekly. It says which units take part, who it is open to, how many places it has and what it needs to go ahead. Its orders carry a plan: objectives, tasks, a timeline in the reader's own time, ships, a comms plan, reading, and numbered amendments that those attending acknowledge. An event can teach a qualification, which an instructor signs off for those who pass. Its report records how each objective turned out, losses and mentions |
 | `/apply` | The application form, and the state of your application once it is sent |
 | `/staff/applications` | For staff: the applications, their answers, interview notes and the decision. An admin opens and closes recruitment here |
 | `/admin` | For the people who run the fleet: its figures. See Admin pages below |
@@ -194,7 +194,7 @@ to be tracked.
 | The weapons states, Volume 2's names for the order's five sections, and the event cycle | `lib/operations-form.ts` |
 | The questions on the application form | `lib/application-form.ts` |
 | The application page and the staff pages | `app/apply/` and `app/staff/applications/` |
-| The member's record | `app/profile/page.tsx` |
+| The member's record | `app/profile/page.tsx`, and what a member has earned in `lib/service-record.ts` |
 | The admin pages | `app/admin/`, and the figures in `lib/admin.ts` |
 | Which role opens which admin page | `lib/admin.ts` and the list of tabs in `components/admin/AdminHead.tsx` |
 | How a line in the logs reads | `lib/logs.ts`, and the names of things people try in `lib/activity.ts` |

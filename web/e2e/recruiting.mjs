@@ -1948,6 +1948,159 @@ try {
     assert.match(text, /Kit Marlow acknowledged amendment 1 to the orders of Convoy 001\./);
   });
 
+  console.log("Training and the report");
+  const course = () => eventTitled("Radio course 001");
+  const openCourse = () => openEvent("Radio course 001");
+  const radioUser = async () => (await one("select id from public.qualifications where code = 'radio-user'")).id;
+  const reportText = async () => (await page.locator("section:visible", { has: page.locator("#report") }).innerText()).replace(/\s+/g, " ");
+
+  await check("a training event names the qualification it teaches", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/operations/new`);
+    await eventFormReady();
+    await page.getByLabel("Type").selectOption({ label: "Training evolution" });
+    await page.getByLabel("Title").fill("Radio course 001");
+    await page.getByLabel(/^Qualification taught/).selectOption({ label: "Radio user" });
+    await page.getByRole("button", { name: "Save as a draft" }).click();
+    await headingIs("Radio course 001");
+    assert.equal((await course()).teaches_qualification_id, await radioUser());
+    assert.match(await page.locator(".facts:visible").innerText(), /Teaches\s+Radio user/i);
+    assert.equal(await page.getByRole("heading", { name: "Signed off" }).count(), 0, "nobody is signed off before the event");
+
+    await page.getByRole("link", { name: "Change the details and orders" }).click();
+    await editPart("Orders and plan");
+    const adding = planPart("objectives").locator("details.record-new");
+    await adding.locator("summary").click();
+    await adding.getByLabel("Objective").fill("Everyone passes the radio check");
+    await adding.getByRole("button", { name: "Add the objective" }).click();
+    await told(adding, "Added.");
+    await openCourse();
+    await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).click();
+    await page.getByRole("button", { name: "Yes, announce it" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
+    for (const person of [kit, lee]) {
+      await signInAs(person);
+      await openCourse();
+      await page.getByRole("button", { name: "Attending", exact: true }).click();
+      await page.locator(".form-result:visible").filter({ hasText: "You are down as attending." }).waitFor();
+    }
+    await supabase.sql("update public.events set starts_at = now() - interval '1 hour', announced_at = now() - interval '3 days' where title = 'Radio course 001'");
+  });
+  await check("an instructor signs off who passed, in their own name", async () => {
+    // Jo is command, and not an instructor, so has nobody to sign off.
+    await signInAs(jo);
+    await openCourse();
+    await page.locator(".tally:visible").waitFor();
+    assert.equal(await page.getByRole("button", { name: "Sign off the passes" }).count(), 0);
+
+    await signInAs(kit);
+    await openCourse();
+    const form = page.locator("form.picks:visible", { hasText: "Who passed" });
+    // An instructor does not sign off their own pass, so Kit is not on the list.
+    assert.deepEqual((await form.locator("li").allInnerTexts()).map((text) => text.trim()), ["Private First Class Lee Tanaka"]);
+    await form.getByRole("button", { name: "Sign off the passes" }).click();
+    await told(form, "Tick who passed first.");
+    await form.getByLabel(/Lee Tanaka/).check();
+    await form.getByRole("button", { name: "Sign off the passes" }).click();
+    await page.getByText("Signed off here: Private First Class Lee Tanaka.").waitFor();
+    const award = await one("select * from public.qualification_awards where member_id = $1 and qualification_id = $2", [(await memberOf(lee)).id, await radioUser()]);
+    assert.equal(award.awarded_by, (await memberOf(kit)).id);
+    assert.equal(award.event_id, (await course()).id);
+    // Signed off once: the box is ticked and cannot be ticked again.
+    await page.locator("form.picks:visible li", { hasText: "Holds it already" }).waitFor();
+    assert.equal(await page.locator("form.picks:visible").getByLabel(/Lee Tanaka/).isDisabled(), true);
+    await shot("operation-sign-off");
+
+    // Everyone else reads who was signed off, and the member finds it on their own record.
+    await signInAs(jo);
+    await openCourse();
+    await page.getByText("Signed off here: Private First Class Lee Tanaka.").waitFor();
+    assert.equal(await page.getByRole("button", { name: "Sign off the passes" }).count(), 0);
+    await signInAs(lee);
+    await page.goto(`${site}/profile`);
+    await page.getByRole("heading", { name: "What you have earned" }).waitFor();
+    assert.match((await page.locator(".earned:visible").innerText()).replace(/\s+/g, " "), /Radio user .*, at Radio course 001/i);
+  });
+  await check("whoever ran the event answers each objective, and records losses and mentions", async () => {
+    await signInAs(founder);
+    await openCourse();
+    await page.getByLabel(/Ada Vance/).selectOption({ label: "Present" });
+    await page.getByRole("button", { name: "Make the return and close the event" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "The attendance return is made." }).waitFor();
+    await page.getByLabel("What happened").fill("Three sat the radio check. Two passed.");
+    await page.getByRole("button", { name: "File the report" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "The after-action report is filed." }).waitFor();
+
+    const outcomes = page.locator("form.outcomes:visible");
+    assert.match(await outcomes.innerText(), /Everyone passes the radio check/);
+    await outcomes.getByLabel("Outcome").selectOption({ label: "Partly achieved" });
+    await outcomes.getByLabel(/^Note/).fill("Two of three passed.");
+    await outcomes.getByRole("button", { name: "Save the outcomes" }).click();
+    await told(outcomes, "Saved.");
+
+    await told(await addToPlan("losses", { "What was lost": "Pisces", "How many": "2", Note: "Lost on approach to the pad." }, "Add the loss"), "Added.");
+    const mentioning = planPart("mentions").locator("details.record-new");
+    await mentioning.locator("summary").click();
+    // Whoever writes the report mentions someone who was there, and never themselves.
+    assert.deepEqual(
+      (await mentioning.getByLabel("Member").locator("option:not([disabled])").allInnerTexts()).map((text) => text.trim()),
+      ["Starman Recruit Kit Marlow", "Private First Class Lee Tanaka"],
+    );
+    await mentioning.getByLabel("Member").selectOption({ label: "Starman Recruit Kit Marlow" });
+    await mentioning.getByLabel("For what").fill("Kept the net clear for the whole course.");
+    await mentioning.getByRole("button", { name: "Add the mention" }).click();
+    await told(mentioning, "Added.");
+    // One mention for each member: Kit is no longer offered.
+    await planPart("mentions").locator("details.record:not(.record-new) summary strong", { hasText: "Kit Marlow" }).waitFor();
+    assert.equal(await mentioning.getByLabel("Member").locator("option", { hasText: "Kit Marlow" }).count(), 0);
+    await shot("operation-report-edit");
+
+    const id = (await course()).id;
+    const outcome = await one("select outcome, note, set_by from public.event_objective_outcomes where event_id = $1", [id]);
+    assert.deepEqual(outcome, { outcome: "partly", note: "Two of three passed.", set_by: (await memberOf(founder)).id });
+    assert.deepEqual(await supabase.sql("select item, quantity, note from public.event_losses where event_id = $1", [id]), [
+      { item: "Pisces", quantity: 2, note: "Lost on approach to the pad." },
+    ]);
+    const mention = await one("select member_id, mentioned_by, citation from public.event_mentions where event_id = $1", [id]);
+    assert.deepEqual(mention, {
+      member_id: (await memberOf(kit)).id,
+      mentioned_by: (await memberOf(founder)).id,
+      citation: "Kept the net clear for the whole course.",
+    });
+  });
+  await check("the fleet reads the fuller report, and a mention is on the member's own record", async () => {
+    await signInAs(lee);
+    await openCourse();
+    const report = await reportText();
+    assert.match(report, /Filed by Lt\. Commander Ada Vance/);
+    assert.match(report, /Objectives Everyone passes the radio check ?Partly achieved ?Two of three passed\./i);
+    assert.match(report, /Losses .*Pisces 2 Lost on approach to the pad\./i);
+    assert.match(report, /Mentions Starman Recruit Kit Marlow Kept the net clear for the whole course\./i);
+    await shot("operation-report");
+
+    await signInAs(kit);
+    await openCourse();
+    assert.match(await reportText(), /Kit Marlow ?You Kept the net clear/i);
+    await page.goto(`${site}/profile`);
+    await page.getByRole("heading", { name: "What you have earned" }).waitFor();
+    const earned = (await page.locator(".earned:visible").innerText()).replace(/\s+/g, " ");
+    assert.match(earned, /Mentions Kept the net clear for the whole course\. Radio course 001,/i);
+    await shot("profile-earned");
+  });
+  await check("sign-off and the report's records are in the logs", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/admin/logs?show=personnel`);
+    await page.locator(".log:visible").first().waitFor();
+    const personnel = await logText();
+    assert.match(personnel, /Kit Marlow signed Lee Tanaka off for the Radio user qualification at Radio course 001\./);
+    assert.match(personnel, /Ada Vance mentioned Kit Marlow in the report of Radio course 001\.\s+Kept the net clear for the whole course\./);
+    await page.goto(`${site}/admin/logs?show=operations`);
+    await page.locator(".log:visible").first().waitFor();
+    const operations = await logText();
+    assert.match(operations, /Ada Vance recorded "Everyone passes the radio check" as partly achieved at Radio course 001\.\s+Two of three passed\./);
+    assert.match(operations, /Ada Vance recorded the loss of 2 × Pisces at Radio course 001\./);
+  });
+
   await check("no page raised a script error", async () => {
     assert.deepEqual(pageErrors, []);
   });
