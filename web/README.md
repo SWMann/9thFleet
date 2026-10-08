@@ -53,7 +53,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/staff/applications` | For staff: the applications, their answers, interview notes and the decision. An admin opens and closes recruitment here |
 | `/admin` | For the people who run the fleet: its figures. See Admin pages below |
 | `/ranks` | Every grade and its rank name in each service, read from the database. Open to everyone |
-| `/roles` | The areas of work, the posts in each and a card for each kind of post, read from the database. Open to everyone. It never shows who holds a post |
+| `/roles` | The areas of work, the roles in each, and a page for each role: what it is, what it does, what it needs, where it leads and the ships it is found on. Read from the database, where an admin keeps them. Open to everyone. It never shows who holds a post |
 | `/manual` | The fleet manual: the doctrine volumes that have been reviewed, section by section. Open to everyone |
 | `/credits` | Who took each picture on the site, and its licence |
 | `/privacy` | What the site records about visitors and members, who can read it and how to have it removed. Change it whenever the logging or the sign-in changes |
@@ -97,6 +97,7 @@ The figures of the fleet, for the people who run it. A role decides which pages 
 | `/admin/people` | Staff, command and admins | Everyone on the books, by status, service and grade, with qualifications. Command also sees attendance |
 | `/admin/recruiting` | Staff, command and admins | How far applications get, how long decisions take, and which are still open |
 | `/admin/operations` | Command and admins | Every event, turnout, late reports, and attendance member by member |
+| `/admin/structure` | Admins | The editors: areas, roles, units, posts, qualifications, and ranks and grades. See Editors below |
 | `/admin/logs` | Admins | Everything that has happened: changes to records, sign-ins and sign-outs, anything refused or failed, and how often each public page is read |
 
 An admin holds every role, so sees all of them. A role only counts while its holder is serving.
@@ -110,6 +111,34 @@ An admin holds every role, so sees all of them. A role only counts while its hol
   reads the same without its bars. Every bar of a chart is one blue, because gold is for things to
   press and green, amber and red are for states. The colours were checked for contrast and for
   colour-blind readers against the site's dark panels. Check any new colour the same way.
+
+## Editors
+
+An admin keeps the fleet's structure on the site, at `/admin/structure`. Nothing about a role, an
+area, a unit or a post is written in the code.
+
+| Editor | What it keeps |
+| --- | --- |
+| Areas | The areas of work on the roles pages: name, address, group, picture, description and what to read |
+| Roles | What each kind of work is: its summary, what it does, what it needs, what to read and the role it leads to |
+| Units | The formations, ships and departments, each under the one above |
+| Posts | The places in each unit: title, role, grades, whether a new member can be given it, and what it needs on top of its role |
+| Qualifications | What members earn in training |
+| Ranks and grades | What each service calls a grade, and what a member at that grade usually does |
+
+- **A role is a record of its own.** Gunner is one role, on every ship. A post is one place for that
+  work and has a role, so the role's page lists the ships it is found on.
+- **Each editor is a sheet in `lib/structure.ts`:** a table and a list of fields. One editor,
+  `app/admin/structure/Editor.tsx`, draws every sheet from its list. To make another column
+  editable, add a field to its sheet. To make another kind of record editable, add a sheet, and a
+  migration for its table, its rules and its `app.audit()` trigger.
+- **Only the fields that changed are sent,** so the log shows what changed and a save that changes
+  nothing writes no line.
+- **The database has the last word.** Only an admin's changes get through. A post takes its kind
+  from its role. A role keeps its kind while it has posts, and its steps cannot run in a circle. A
+  post that someone has held cannot be removed. The 18 grades, their codes and their order are fixed.
+- **A picture is chosen from the ones the site has.** A new picture still has to be added to
+  `lib/pictures.ts` with its credit.
 
 ## Logging
 
@@ -146,9 +175,11 @@ to be tracked.
 | The fleet's name, flagship or the date recruitment opens | `lib/site.ts` |
 | The front page | `app/page.tsx` |
 | The standards page | `app/standards/page.tsx` |
-| The ranks page | `app/ranks/`, and what it reads in `lib/ranks.ts`. The rank names themselves are in the database |
-| The roles pages | `app/roles/`, and what they read in `lib/roles.ts`. The posts themselves are in the database |
-| Which area a post belongs to, and the areas' names, pictures and descriptions | `lib/areas.ts` |
+| The ranks page | `app/ranks/`, and what it reads in `lib/ranks.ts`. The rank names themselves are in the database: change them at `/admin/structure/ranks` |
+| A role's or an area's words, what a role needs and where it leads | On the site, at `/admin/structure` |
+| How the roles pages are laid out | `app/roles/`, and what they read in `lib/roles.ts` |
+| The groups the areas are filtered by, and what every member reads | `lib/areas.ts` |
+| What an admin can edit, and each field's label and hint | `lib/structure.ts` |
 | The fleet manual's words | The Markdown files in `content/manual/`. See Fleet manual below |
 | The list of volumes, their state and the latest changes | `lib/manual.ts` |
 | The joining page | `app/joining/page.tsx` |

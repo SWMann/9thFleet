@@ -89,7 +89,10 @@ const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
   personnel: ["members", "member_roles", "assignments", "qualification_awards"],
   recruiting: ["applications", "application_notes", "fleet_settings"],
   operations: ["events", "event_orders", "attendance", "attendance_returns", "after_action_reports"],
-  structure: ["units", "positions", "qualifications", "position_qualifications", "grades", "ranks", "fleet_settings"],
+  structure: [
+    "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
+    "grades", "ranks", "fleet_settings",
+  ],
   records: ["members"],
 };
 
@@ -120,6 +123,8 @@ type Names = {
   post: (id: unknown) => string;
   unit: (id: unknown) => string;
   qualification: (id: unknown) => string;
+  role: (id: unknown) => string;
+  area: (id: unknown) => string;
   event: (id: unknown) => string;
   /** Whether the second grade is above the first. Null when either is unknown. */
   higher: (from: unknown, to: unknown) => boolean | null;
@@ -236,7 +241,7 @@ export async function readLog(filters: Filters): Promise<LogPage> {
 
 /** Everything a line needs to name the people and things it mentions. */
 async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>) {
-  const [members, accounts, positions, units, qualifications, events, grades, ranks] = await Promise.all([
+  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas] = await Promise.all([
     supabase.from("members").select("id, character_name, service"),
     supabase.from("member_accounts").select("member_id, discord_name"),
     supabase.from("positions").select("id, title, unit_id"),
@@ -245,8 +250,10 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     supabase.from("events").select("id, title"),
     supabase.from("grades").select("code, sort_order"),
     supabase.from("ranks").select("service, grade_code, name"),
+    supabase.from("fleet_roles").select("id, name"),
+    supabase.from("areas").select("id, name"),
   ]);
-  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks]) {
+  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas]) {
     if (result.error) throw new Error(`The names for the log could not be read: ${result.error.message}`);
   }
 
@@ -265,6 +272,8 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
   );
   const qualificationName = new Map((qualifications.data ?? []).map((row) => [row.id as string, row.name as string]));
   const eventTitle = new Map((events.data ?? []).map((row) => [row.id as string, row.title as string]));
+  const roleName = new Map((roles.data ?? []).map((row) => [row.id as string, row.name as string]));
+  const areaName = new Map((areas.data ?? []).map((row) => [row.id as string, row.name as string]));
   const order = new Map((grades.data ?? []).map((row) => [row.code as string, row.sort_order as number]));
   const rankName = new Map((ranks.data ?? []).map((row) => [`${row.service}:${row.grade_code}`, row.name as string]));
 
@@ -275,6 +284,8 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     unit: (id) => (typeof id === "string" ? (unitName.get(id) ?? "a unit that is gone") : "no unit"),
     qualification: (id) => (typeof id === "string" ? (qualificationName.get(id) ?? "a qualification that is gone") : "a qualification"),
     event: (id) => (typeof id === "string" ? (eventTitle.get(id) ?? "an event that is gone") : "an event"),
+    role: (id) => (typeof id === "string" ? (roleName.get(id) ?? "a role that is gone") : "no role"),
+    area: (id) => (typeof id === "string" ? (areaName.get(id) ?? "an area that is gone") : "no area"),
     higher: (from, to) => {
       const was = order.get(String(from));
       const now = order.get(String(to));
@@ -324,6 +335,8 @@ function shown(key: string, value: unknown, names: Names): string {
     if (key === "position_id" || key === "stand_in_position_id") return names.post(value);
     if (key === "unit_id" || key === "parent_id") return names.unit(value);
     if (key === "qualification_id") return names.qualification(value);
+    if (key === "role_id" || key === "next_role_id") return names.role(value);
+    if (key === "area_id") return names.area(value);
     if (key === "event_id") return names.event(value);
     if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return `${moment.format(new Date(value))} UTC`;
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return date.format(new Date(value));
@@ -460,9 +473,19 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       return null;
     }
 
+    case "fleet_role_qualifications": {
+      const qualification = names.qualification(any.qualification_id);
+      const role = names.role(any.role_id);
+      if (row.action === "insert") return line("structure", `${actor} made the ${qualification} qualification a need of every ${role}`);
+      if (row.action === "delete") return line("structure", `${actor} stopped every ${role} needing the ${qualification} qualification`);
+      return line("structure", `${actor} changed how the ${role} role needs the ${qualification} qualification`, changes(row, names));
+    }
+
+    case "areas":
+    case "fleet_roles":
     case "units":
     case "qualifications": {
-      const thing = row.table_name === "units" ? "unit" : "qualification";
+      const thing = { areas: "area", fleet_roles: "role", units: "unit", qualifications: "qualification" }[row.table_name];
       const name = String(any.name ?? `a ${thing}`);
       if (row.action === "insert") return line("structure", `${actor} added the ${thing} ${name}`);
       if (row.action === "delete") return line("structure", `${actor} removed the ${thing} ${name}`);

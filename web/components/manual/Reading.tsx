@@ -1,15 +1,37 @@
 import Link from "next/link";
 import { commonReading } from "@/lib/areas";
-import { sectionLink } from "@/lib/manual";
+import { sectionLink, type SectionLink } from "@/lib/manual";
 
-/** The sections of the manual to read for an area, then the ones every member reads. */
-export function Reading({ area }: { area: [string, string][] }) {
-  const mine = area.map(([volume, section]) => sectionLink(volume, section));
-  const everyone = commonReading.map(([volume, section]) => sectionLink(volume, section));
+/**
+ * Links to sections of the manual, from addresses written as volume/section.
+ * The addresses come from records an admin keeps, so one that points at a
+ * section the manual does not have is left out, not allowed to break the page.
+ */
+function links(addresses: string[]): SectionLink[] {
+  const found: SectionLink[] = [];
+  for (const address of addresses) {
+    const [volume, section] = address.split("/");
+    if (!volume || !section) continue;
+    try {
+      const link = sectionLink(volume, section);
+      if (!found.some((entry) => entry.href === link.href)) found.push(link);
+    } catch {
+      // Not a section of the manual.
+    }
+  }
+  return found;
+}
+
+/** What to read: for this role, for its area, then what every member reads. */
+export function Reading({ role = [], area }: { role?: string[]; area: string[] }) {
+  const forRole = links(role);
+  const forArea = links(area).filter((link) => !forRole.some((entry) => entry.href === link.href));
+  const everyone = links(commonReading).filter((link) => ![...forRole, ...forArea].some((entry) => entry.href === link.href));
   return (
     <div className="reading">
       {[
-        { title: "For this area", links: mine },
+        { title: "For this role", links: forRole },
+        { title: "For this area", links: forArea },
         { title: "For every member", links: everyone },
       ]
         .filter((group) => group.links.length > 0)

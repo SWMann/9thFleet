@@ -16,6 +16,7 @@ or let someone promote themselves.
 | `migrations/…_public_structure.sql` | Lets anyone read the units, the positions and what each requires, for the site's roles pages |
 | `migrations/…_operations.sql` | Events, their orders, the roll with its stand-ins, the attendance return and after-action reports |
 | `migrations/…_logging.sql` | The activity log for sign-ins, sign-outs and anything refused or failed, and the page counts for public pages |
+| `migrations/…_fleet_roles.sql` | Areas and fleet roles as records an admin keeps, a role for every position, and the rules that let an admin rename ranks |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -28,19 +29,24 @@ you are moved.
 
 A **duty** is a part-time staff job, such as Recruiter, held as well as a position.
 
+A **fleet role** is a kind of work, such as Gunner. Every position has one, and a role belongs to an
+**area** of work, such as Gunnery. The role says what the work is, what it needs and where it leads.
+It is not a member's role on the site (instructor, staff, command or admin), which is kept in
+`member_roles`.
+
 ## The rules
 
 Staff look after people, command makes appointments, and the admin owns the structure.
 
 | Who | Can see | Can do |
 | --- | --- | --- |
-| Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: units, positions and the qualifications each requires. Never who holds one | Nothing |
+| Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: areas, roles, units, positions and the qualifications each requires. Never who holds one | Nothing |
 | Applicant | The same, and their own record and their own application | Set a character name and an RSI handle, apply while recruitment is open, withdraw |
 | Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position and qualification, and every announced event with its orders, roll and report | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. A full member can apply for the cadet course |
 | Instructor | The same | Award a qualification to someone else, in their own name. Draft a training event |
 | Staff | Everyone, every application and the interview notes | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
 | Command | The same as staff | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event |
-| Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, grant roles, open recruitment, open a service, move the fleet to a new stage |
+| Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, the areas and roles, the qualifications and the rank names. Grant roles on the site, open recruitment, open a service, move the fleet to a new stage |
 
 Roles add up: an admin holds every role. Things the database decides for itself:
 
@@ -49,6 +55,11 @@ Roles add up: an admin holds every role. Things the database decides for itself:
 - **An appointment has to fit.** The position and its unit must be open at the fleet's current
   stage. The member must be a full member of the right service, hold the qualifications the
   position asks for, and take a grade inside its band.
+- **A position has a role and takes its kind from it.** A primary position has a primary role, and a
+  duty has a duty's role. A role keeps its kind while it has positions.
+- **What a role needs, every position of that role needs.** An appointment checks the role's
+  qualifications and then the position's own.
+- **A role says where it leads.** The steps from role to role cannot run in a circle.
 - **Officer positions need a commission**, unless the appointment is acting. An acting rank ends
   with the appointment.
 - **Signing in creates an applicant.** Accepting their application makes them a recruit.
@@ -71,6 +82,8 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   has started. A member sees their own line, and staff and whoever ran the event see them all.
 - **A finished event is fixed.** Its details and orders cannot change, and it is cancelled, never
   deleted, once it has been announced.
+- **The grades are fixed.** Their codes, bands and order cannot be changed through the website. An
+  admin can change what each service calls a grade and what a member at that grade usually does.
 - **Names are unique inside the fleet.** Someone outside it cannot find out which are taken.
 - **Every change is logged** with who made it. Nobody can write to the log.
 - **What changes no record is logged too.** Sign-ins, sign-outs and anything refused or failed go in
@@ -104,7 +117,7 @@ tables and Supabase's own default privileges. It is only for the tests.
 
 The migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
 database is compared with the tested copy after each one is applied: its functions, rules, columns,
-grants, triggers, constraints and views. It matched after the latest, `logging`.
+grants, triggers, constraints and views. It matched after the latest, `fleet_roles`.
 
 Each file name starts with the version number Supabase recorded when it was applied, so this folder
 and the database's own migration history agree.
@@ -126,9 +139,9 @@ Three settings live in the Supabase dashboard, not in these files:
 
 ## Change it safely
 
-The admin will change the order of battle through the website. Until that page exists, add a
-migration. Copy the pattern in the launch order of battle: a unit, its positions with a grade band
-and the stage they open at, and any qualifications they require.
+The admin changes the order of battle through the website, at `/admin/structure`: areas, roles,
+units, positions and qualifications. Use a migration only to change the shape of the data, such as
+a new table or a new rule.
 
 When you add a migration:
 

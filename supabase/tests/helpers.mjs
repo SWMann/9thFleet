@@ -115,6 +115,13 @@ export class Fleet {
     return row.id;
   }
 
+  /** A fleet role's id, by its address on the site, such as "gunner". */
+  async roleId(slug) {
+    const row = await this.one("select id from public.fleet_roles where slug = $1", [slug]);
+    if (!row) throw new Error(`No role "${slug}"`);
+    return row.id;
+  }
+
   /** Award qualifications directly, for setting up a test. */
   async qualify(memberId, ...codes) {
     for (const code of codes) {
