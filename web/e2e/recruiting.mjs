@@ -168,8 +168,8 @@ try {
     await send();
     await page.getByText("Your application is with staff").waitFor();
     const text = await page.locator("main").innerText();
-    assert.match(text, /Service\s+Navy/);
-    assert.match(text, /Stage\s+Waiting to be read/);
+    assert.match(text, /Service\s+Navy/i);
+    assert.match(text, /Stage\s+Waiting to be read/i);
 
     const [stored] = await applicationsOf(kit);
     assert.equal(stored.stage, "submitted");
@@ -207,8 +207,8 @@ try {
     await openApplication("Kit Marlow");
     const text = await page.locator("main").innerText();
     assert.match(text, /Waiting to be read\. Sent on/);
-    assert.match(text, /Discord\s+kit_on_discord/);
-    assert.match(text, /Status now\s+Applicant/);
+    assert.match(text, /Discord\s+kit_on_discord/i);
+    assert.match(text, /Status now\s+Applicant/i);
     assert.match(text, /To crew a ship properly,\nwith people who turn up\./);
     assert.match(text, /I am 18 or over\./);
     assert.equal(

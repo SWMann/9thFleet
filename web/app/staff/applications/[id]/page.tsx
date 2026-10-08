@@ -6,6 +6,7 @@ import { formatDate, serviceNames, stageNames } from "@/lib/application-form";
 import { getApplication, type ApplicationDetail } from "@/lib/applications";
 import { deleteNote } from "../actions";
 import { DecisionForms, NoteForm } from "../StaffForms";
+import { PageHead } from "@/components/PageHead";
 
 export const metadata: Metadata = {
   title: "Application",
@@ -22,13 +23,17 @@ export default function ApplicationPage({ params }: PageProps<"/staff/applicatio
 
 function Head({ title, lead }: { title: string; lead: string }) {
   return (
-    <div className="wrap page-head">
-      <p className="back">
-        <Link href="/staff/applications">All applications</Link>
-      </p>
-      <h1>{title}</h1>
-      <p className="lead">{lead}</p>
-    </div>
+    <PageHead
+      picture="staff"
+      slim
+      before={
+        <p className="back">
+          <Link href="/staff/applications">All applications</Link>
+        </p>
+      }
+      title={<strong>{title}</strong>}
+      lead={lead}
+    />
   );
 }
 
@@ -62,7 +67,7 @@ async function Application({ params }: { params: PageProps<"/staff/applications/
 
       <section className="wrap band" aria-labelledby="applicant">
         <h2 id="applicant">The applicant</h2>
-        <dl className="ledger ledger-tight">
+        <dl className="facts">
           <Line label="Character name" value={name} />
           <div>
             <dt>RSI handle</dt>

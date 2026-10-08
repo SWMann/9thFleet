@@ -50,6 +50,8 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/order-of-battle` | Every unit and post, who holds each, what is vacant and what opens later. For the serving fleet |
 | `/apply` | The application form, and the state of your application once it is sent |
 | `/staff/applications` | For staff: the applications, their answers, interview notes and the decision. An admin opens and closes recruitment here |
+| `/credits` | Who took each picture on the site, and its licence |
+| `/menu` | The menu as a page, for a browser that is not running scripts |
 
 How it is kept safe:
 
@@ -87,6 +89,8 @@ Two things are set in the Supabase dashboard, under Authentication:
 | The questions on the application form | `lib/application-form.ts` |
 | The application page and the staff pages | `app/apply/` and `app/staff/applications/` |
 | The member's record | `app/profile/page.tsx` |
+| The menu | `lib/menu.ts` |
+| The pictures | `lib/pictures.ts`. See Pictures below |
 | Colours and type | `app/globals.css` |
 
 ## Search engines
@@ -97,6 +101,28 @@ stay closed to search engines after that.
 
 ## Design
 
-The page is drawn as the side of a ship: weatherwork grey above the waterline, the fleet's
-number painted on the hull, a black boot-topping line, and red anti-fouling paint below it
-for the footer. The one typeface is Archivo, set narrow and heavy for headings.
+A dark Navy page with gold for the things that matter, led by pictures: a picture across the top of
+every page, with the words over it or beside it. The typeface is Titillium Web. The crest and the IX
+roundel are drawn as outlines in `components/Crest.tsx`, so they need no font.
+
+## Pictures
+
+Every picture is a Star Citizen screenshot whose author published it on Flickr under a Creative
+Commons licence. `lib/pictures.ts` lists each one with its author, the page it came from and its
+licence, and says which picture fills which place. The author is named in the corner of each
+picture, and `/credits` lists them all, as the licences ask.
+
+To add or change a picture:
+
+1. Put the file in `pictures/`, no wider than 1920 pixels.
+2. Add it to `shots` in `lib/pictures.ts` with its author, title, page and licence.
+3. Point a place in `pictures` at it. The credits page picks it up by itself.
+
+Three rules, which are Cloud Imperium's for fan sites and the licences' for the pictures:
+
+- **Only use a picture you may use.** That means your own screenshots, the RSI fan kit once you have
+  accepted its agreement, or a picture whose licence allows it. Do not copy pictures from the RSI
+  website or from other players without a licence.
+- **No commercial use.** The licences here bar it, and so does Cloud Imperium.
+- **Keep the notice in the footer and the link to the official site.** The wording is Cloud
+  Imperium's own.

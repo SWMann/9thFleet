@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import "@fontsource-variable/archivo/wdth.css";
+import "@fontsource/titillium-web/latin-300.css";
+import "@fontsource/titillium-web/latin-400.css";
+import "@fontsource/titillium-web/latin-600.css";
+import "@fontsource/titillium-web/latin-700.css";
 import "./globals.css";
-import { Keel } from "@/components/Keel";
-import { Masthead } from "@/components/Masthead";
+import { SiteFooter } from "@/components/SiteFooter";
+import { SiteHeader } from "@/components/SiteHeader";
 import { indexable, site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -19,9 +22,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <a className="skip" href="#content">
           Skip to the content
         </a>
-        <Masthead />
+        <SiteHeader />
         <main id="content">{children}</main>
-        <Keel />
+        <SiteFooter />
       </body>
     </html>
   );

@@ -9,10 +9,12 @@ export default function PageError({ error, retry }: { error: Error & { digest?: 
   }, [error]);
 
   return (
-    <div className="wrap page-head">
-      <h1>Unworkable.</h1>
+    <div className="wrap page-head page-plain">
+      <h1>
+        <strong>Unworkable.</strong>
+      </h1>
       <p className="lead">Something went wrong on our side and this page could not be shown.</p>
-      <p>
+      <p className="actions">
         <button className="button" type="button" onClick={() => retry()}>
           Try again
         </button>
