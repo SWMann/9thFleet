@@ -159,6 +159,10 @@ export function startMockSupabase(port) {
       if (url.pathname === `/rest/v1/${table}`) return send(200, serving ? orderOfBattle[table] : []);
     }
     if (url.pathname === "/rest/v1/assignments") return send(200, serving ? state.duties : []);
+    // What a member has earned, on their record. This member has earned nothing yet.
+    for (const table of ["qualification_awards", "qualifications", "event_mentions"]) {
+      if (url.pathname === `/rest/v1/${table}` && request.method === "GET") return send(200, []);
+    }
     if (url.pathname === "/rest/v1/member_accounts") {
       return rows(state.member ? [{ discord_name: "ada_on_discord" }] : []);
     }
