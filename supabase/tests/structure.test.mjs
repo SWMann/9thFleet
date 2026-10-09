@@ -90,8 +90,8 @@ test("signed-in users can run the rule helpers and nothing else", async () => {
   assert.deepEqual(
     allowed.map((row) => row.proname),
     [
-      "edits_event", "has_role", "holds_role", "is_serving", "is_staff", "is_trusted_context", "leads_opfor",
-      "may_apply", "may_draft", "member_grade", "my_status", "on_opfor", "runs_event",
+      "commands_unit", "edits_event", "has_role", "holds_role", "is_serving", "is_staff", "is_trusted_context", "leads_opfor",
+      "may_apply", "may_draft", "member_grade", "my_status", "on_opfor", "reads_unit_task", "runs_event",
     ],
   );
 });

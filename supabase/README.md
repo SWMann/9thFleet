@@ -22,6 +22,7 @@ or let someone promote themselves.
 | `migrations/…_event_plan.sql` | Fuller orders: objectives, elements and their tasks, the timeline, ships, nets, where to muster, what to read, and amendments with their acknowledgement |
 | `migrations/…_event_report.sql` | Signing off a qualification at the event that teaches it, and the report's records: how each objective turned out, losses and mentions |
 | `migrations/…_event_opfor.sql` | Command's approval for the types of event that need it, and the opposing force: its plan and who is on it, kept from the side being exercised |
+| `migrations/…_event_unit_tasks.sql` | A task for each unit of an event and who reads it, and which post commands each unit and which posts lead |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -126,6 +127,19 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   can write its plan. A member named to it comes off the event's roll and cannot reply to it. They
   read the event's orders like anyone else. A copy brings the opposing force with it only when
   command makes the copy.
+- **Each unit has a task, and a level says who reads it.** Everyone, the unit, the unit's leaders, or
+  its commander alone. The commanders of the units above always read it, and so do command and
+  whoever writes the event's orders. Everyone else who can read the event is shown that the unit has
+  a task, and none of its words. A new task starts as the unit's own.
+- **A task's words are kept apart from the task.** The task's own table cannot be asked for them.
+  They are copied to a second table, which returns a row only to someone the level allows.
+- **A unit's commander passes a task down, and does nothing else to it.** From the commander to the
+  leaders or the unit, and from the leaders to the unit. Never beyond the unit, and never back up.
+- **Standing in counts.** Someone standing in for a post reads what its holder would, for that event.
+  A member of the event's opposing force reads only what everyone reads, whatever post they hold.
+- **Every task opens when the event closes.** A copy brings only the tasks the person copying may read.
+- **The order of battle says who commands and who leads.** A unit names the post that commands it,
+  which may sit in a unit under it. A post can be marked as a leader's. An admin keeps both.
 - **A weekly event drafts the next one.** When it is closed, or cancelled after it was announced,
   the database drafts next week's with the same details and orders, in the name of whoever closed
   it. A number at the end of the title goes up by one. The draft is never announced by itself.

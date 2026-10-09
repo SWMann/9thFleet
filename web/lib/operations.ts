@@ -16,6 +16,7 @@ import {
   type WeaponsState,
 } from "@/lib/operations-form";
 import { getOrderOfBattle, type Unit } from "@/lib/order-of-battle";
+import { audienceOf, indexFleet, passableTo, readsLine, standingIn, taskLevels, unitsAbove, type TaskLevel } from "@/lib/tasks";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -567,6 +568,27 @@ export type Plan = {
 
 export type Amendment = { number: number; body: string; issuedBy: Person | null; issuedAt: string };
 
+/** A unit's task for an event, as this member is shown it. */
+export type UnitTask = {
+  id: string;
+  unit: { id: string; name: string; kind: string; path: string; nested: boolean };
+  callsign: string;
+  level: TaskLevel;
+  /** Its words. Null when they are withheld from this member. */
+  body: string | null;
+  /** Whether this member is in the unit, by their own post or for the night. */
+  mine: boolean;
+  /** The levels this member may pass it down to, as the unit's commander. */
+  passTo: TaskLevel[];
+  /** Whether its unit still takes part in the event. */
+  takingPart: boolean;
+  /** For whoever writes the orders: who reads it at each level, in words. */
+  reads: Record<TaskLevel, string> | null;
+};
+
+/** A unit taking part that has no task yet, for whoever writes the orders. */
+export type TaskUnit = { id: string; label: string; reads: Record<TaskLevel, string> };
+
 /** What the after-action report records beyond its words. */
 export type ReportRecords = {
   /** How each objective turned out, by the objective's id. One not answered yet is not in it. */
@@ -666,6 +688,10 @@ export type Operation =
       signOff: SignOff | null;
       /** Everyone who was there, for whoever writes the report to mention. Empty for anyone else. */
       present: Person[];
+      /** Each unit's task, in the order of battle's own order. */
+      tasks: UnitTask[];
+      /** The units taking part that have no task yet. Empty for anyone who does not write the orders. */
+      taskUnits: TaskUnit[];
       /** The opposing force, if this member may see it. Command sees an empty one, to set it up. */
       opfor: Opfor | null;
       /** Whether this member is command, who approves drafts. */
@@ -686,7 +712,7 @@ export async function getOperation(id: string): Promise<Operation> {
   const [
     found, orders, lines, marks, report, roster, units, keyPosts, extraPosts, awards, roleRows, areaRows,
     objectives, elements, timings, ships, nets, amendments, acknowledgements,
-    outcomes, losses, mentions, passes, opforPlan, opforMembers,
+    outcomes, losses, mentions, passes, opforPlan, opforMembers, unitTasks, taskTexts,
     battle, types, qualifications,
   ] = await Promise.all([
       supabase.from("events").select(EVENT).eq("id", id).maybeSingle(),
@@ -725,6 +751,9 @@ export async function getOperation(id: string): Promise<Operation> {
       // The database returns these to command and to the members of the opposing force, and to nobody else.
       supabase.from("event_opfor").select("plan").eq("event_id", id).maybeSingle(),
       supabase.from("event_opfor_members").select("member_id, leads").eq("event_id", id),
+      // That a unit has a task is read with the event. Its words come back only for those its level allows.
+      supabase.from("event_unit_tasks").select("id, unit_id, callsign, level").eq("event_id", id),
+      supabase.from("event_unit_task_texts").select("task_id, body").eq("event_id", id),
       getOrderOfBattle(),
       readEventTypes(supabase),
       readQualifications(supabase),
@@ -732,7 +761,7 @@ export async function getOperation(id: string): Promise<Operation> {
   for (const result of [
     found, orders, lines, marks, report, roster, units, keyPosts, extraPosts, awards, roleRows, areaRows,
     objectives, elements, timings, ships, nets, amendments, acknowledgements,
-    outcomes, losses, mentions, passes, opforPlan, opforMembers,
+    outcomes, losses, mentions, passes, opforPlan, opforMembers, unitTasks, taskTexts,
   ]) {
     if (result.error) throw new Error(`The event could not be read: ${result.error.message}`);
   }
@@ -906,6 +935,49 @@ export async function getOperation(id: string): Promise<Operation> {
         }
       : null;
 
+  // Each unit's task. The posts this member fills are the ones they hold and, for this event, one they stand in for.
+  const index = battle.state === "ready" ? indexFleet(battle.fleet) : null;
+  const filled = new Set<string>();
+  if (index) for (const [postId, entry] of index.posts) if (entry.post.holders.some((holder) => holder.you)) filled.add(postId);
+  if (myLine?.standInFor) filled.add(myLine.standInFor);
+  const takingPart = unitsTakingPart(allUnits, named);
+  const words = new Map(((taskTexts.data ?? []) as { task_id: string; body: string }[]).map((entry) => [entry.task_id, entry.body]));
+  const readsAt = (unitId: string, name: string): Record<TaskLevel, string> => {
+    const audience = audienceOf(index!, unitId);
+    return Object.fromEntries(taskLevels.map((level) => [level.key, readsLine(name, level.key, audience)])) as Record<TaskLevel, string>;
+  };
+  const stillOpen = row.state === "draft" || row.state === "announced";
+  const tasks: UnitTask[] = index
+    ? ((unitTasks.data ?? []) as { id: string; unit_id: string; callsign: string; level: TaskLevel }[])
+        .filter((entry) => index.units.has(entry.unit_id))
+        .sort((a, b) => index.order.indexOf(a.unit_id) - index.order.indexOf(b.unit_id))
+        .map((entry): UnitTask => {
+          const at = index.units.get(entry.unit_id)!;
+          const standing = standingIn(index, entry.unit_id, filled);
+          // A task under another unit that has one is shown beneath it.
+          const nested = unitsAbove(index, entry.unit_id).some((above) => (unitTasks.data ?? []).some((other) => other.unit_id === above));
+          return {
+            id: entry.id,
+            unit: { id: entry.unit_id, name: at.unit.name, kind: at.unit.kind, path: at.path, nested },
+            callsign: entry.callsign,
+            level: entry.level,
+            body: words.get(entry.id) ?? null,
+            mine: !myPlace && (standing.inUnit || standing.commands),
+            // Whoever writes the orders sets the level in the editor. A unit's commander passes it down from here.
+            passTo: stillOpen && !edits && !myPlace && standing.commands ? passableTo(entry.level) : [],
+            takingPart: takingPart === null || takingPart.has(entry.unit_id),
+            reads: edits ? readsAt(entry.unit_id, at.unit.name) : null,
+          };
+        })
+    : [];
+  const taskUnits: TaskUnit[] =
+    edits && index
+      ? allUnits
+          .filter((unit) => unit.open && unit.parentId !== null && (takingPart === null || takingPart.has(unit.id)))
+          .filter((unit) => !tasks.some((task) => task.unit.id === unit.id))
+          .map((unit) => ({ id: unit.id, label: unit.path, reads: readsAt(unit.id, unit.name) }))
+      : [];
+
   const records: ReportRecords = {
     outcomes: Object.fromEntries(
       ((outcomes.data ?? []) as { objective_id: string; outcome: Outcome; note: string }[]).map((entry) => [
@@ -992,6 +1064,8 @@ export async function getOperation(id: string): Promise<Operation> {
     signOff,
     // Whoever writes the report mentions someone who was there, and never themselves.
     present: runs ? present.filter((person) => person.id !== member.id) : [],
+    tasks,
+    taskUnits,
     opfor,
     isCommand: command,
   };

@@ -20,7 +20,7 @@ import { createClient } from "@/lib/supabase/server";
 export type Option = { value: string; label: string };
 
 /** Where a field's choices come from when they are other records. */
-type Source = "areas" | "roles" | "units";
+type Source = "areas" | "roles" | "units" | "posts";
 
 type Common = {
   key: string;
@@ -189,6 +189,13 @@ export const sheets: Sheet[] = [
       { key: "kind", label: "Kind", kind: "choice", required: true, options: unitKinds.map((kind) => ({ value: kind, label: kind[0].toUpperCase() + kind.slice(1) })) },
       { key: "service", label: "Service", kind: "choice", options: services, hint: "Its posts can only be held by members of this service. Leave it empty for a unit open to all." },
       stage("opens_at_stage", "Opens at stage", "Nothing in it can be filled before then."),
+      {
+        key: "commander_position_id",
+        label: "Commanded by",
+        kind: "record",
+        source: "posts",
+        hint: "The post that commands this unit. It can sit in a unit under it, as a ship's commanding officer sits on the bridge. Whoever holds it reads the tasks of every unit under this one.",
+      },
       order,
     ],
   },
@@ -212,6 +219,7 @@ export const sheets: Sheet[] = [
       { key: "min_grade", label: "Lowest grade", kind: "choice", options: grades, hint: "For a duty: the lowest grade that can take it on, if there is one." },
       { key: "max_grade", label: "Highest grade", kind: "choice", options: grades },
       { key: "is_entry", label: "An entry post, which a new member can be given", kind: "yes-no" },
+      { key: "is_leader", label: "A leader, who reads a task that is for leaders", kind: "yes-no" },
       stage("opens_at_stage", "Opens at stage", "It can also open no earlier than its unit."),
       order,
     ],
@@ -301,15 +309,16 @@ export async function loadSheet(sheet: Sheet): Promise<Loaded> {
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
 
-  const [rows, areas, roles, units, qualifications, needs] = await Promise.all([
+  const [rows, areas, roles, units, posts, qualifications, needs] = await Promise.all([
     supabase.from(sheet.table).select("*"),
     supabase.from("areas").select("id, name, sort_order"),
     supabase.from("fleet_roles").select("id, name, kind, area_id, sort_order"),
     supabase.from("units").select("id, name, parent_id, sort_order"),
+    supabase.from("positions").select("id, title, unit_id, kind"),
     supabase.from("qualifications").select("id, name"),
     sheet.needs ? supabase.from(sheet.needs.table).select("*") : Promise.resolve({ data: [] as Row[], error: null }),
   ]);
-  for (const result of [rows, areas, roles, units, qualifications, needs]) {
+  for (const result of [rows, areas, roles, units, posts, qualifications, needs]) {
     if (result.error) throw new Error(`The ${sheet.many.toLowerCase()} could not be read: ${result.error.message}`);
   }
 
@@ -337,6 +346,11 @@ export async function loadSheet(sheet: Sheet): Promise<Loaded> {
     areas: areaRows.map((row) => ({ value: row.id as string, label: row.name as string })),
     roles: roleRows.map((row) => ({ value: row.id as string, label: `${row.name}${row.kind === "duty" ? " (duty)" : ""}` })),
     units: unitOptions,
+    // A post with its unit, since several units have a post of the same title. A duty commands nothing.
+    posts: ((posts.data ?? []) as Row[])
+      .filter((row) => row.kind === "primary")
+      .map((row) => ({ value: row.id as string, label: `${unitPath(row.unit_id)}: ${row.title}` }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
   };
   const fields: Field[] = sheet.fields.map((field) => (field.kind === "record" ? { ...field, options: options[field.source] } : field));
 

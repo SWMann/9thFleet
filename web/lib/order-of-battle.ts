@@ -22,6 +22,8 @@ export type Post = {
   /** For a duty: the lowest grade that can take it on, if it has one. */
   openTo: string | null;
   entry: boolean;
+  /** Marked as a leader in its unit. Whoever commands a unit leads it whether or not their post is marked. */
+  leader: boolean;
   opensAtStage: number;
   /** Whether it can be filled at the fleet's current stage. */
   open: boolean;
@@ -36,6 +38,8 @@ export type Unit = {
   service: Service | null;
   opensAtStage: number;
   open: boolean;
+  /** The post that commands this unit. It may sit in a unit under it, or anywhere else in the fleet. */
+  commanderPostId: string | null;
   posts: Post[];
   units: Unit[];
 };
@@ -58,6 +62,7 @@ type UnitRow = {
   service: Service | null;
   opens_at_stage: number;
   sort_order: number;
+  commander_position_id: string | null;
 };
 type PositionRow = {
   id: string;
@@ -67,6 +72,7 @@ type PositionRow = {
   min_grade: string | null;
   max_grade: string | null;
   is_entry: boolean;
+  is_leader: boolean;
   opens_at_stage: number;
   sort_order: number;
 };
@@ -96,10 +102,10 @@ export async function getOrderOfBattle(): Promise<OrderOfBattle> {
 
   const [settings, units, positions, needs, qualifications, ranks, roster, duties] = await Promise.all([
     supabase.from("fleet_settings").select("current_stage").maybeSingle(),
-    supabase.from("units").select("id, parent_id, name, kind, service, opens_at_stage, sort_order"),
+    supabase.from("units").select("id, parent_id, name, kind, service, opens_at_stage, sort_order, commander_position_id"),
     supabase
       .from("positions")
-      .select("id, unit_id, title, kind, min_grade, max_grade, is_entry, opens_at_stage, sort_order"),
+      .select("id, unit_id, title, kind, min_grade, max_grade, is_entry, is_leader, opens_at_stage, sort_order"),
     supabase.from("position_qualifications").select("position_id, qualification_id, waived_when_acting"),
     supabase.from("qualifications").select("id, name"),
     supabase.from("ranks").select("service, grade_code, name"),
@@ -199,6 +205,7 @@ export async function getOrderOfBattle(): Promise<OrderOfBattle> {
             : null,
         openTo: post.kind === "duty" ? post.min_grade : null,
         entry: post.is_entry,
+        leader: post.is_leader === true,
         opensAtStage: postOpensAt,
         open,
         requirements: (requirements.get(post.id) ?? []).sort((a, b) => a.name.localeCompare(b.name)),
@@ -215,6 +222,7 @@ export async function getOrderOfBattle(): Promise<OrderOfBattle> {
       service: row.service,
       opensAtStage: opensAt,
       open: opensAt <= stage,
+      commanderPostId: row.commander_position_id ?? null,
       posts,
       units: below.sort(bySortOrder((unit) => unit.name)).map((child) => build(child, opensAt, seen)),
     };
@@ -228,7 +236,7 @@ export async function getOrderOfBattle(): Promise<OrderOfBattle> {
   const fleet: Unit =
     built.length === 1
       ? built[0]
-      : { id: "all", name: "The fleet", kind: "fleet", service: null, opensAtStage: 1, open: true, posts: [], units: built };
+      : { id: "all", name: "The fleet", kind: "fleet", service: null, opensAtStage: 1, open: true, commanderPostId: null, posts: [], units: built };
 
   return { state: "ready", fleet, tally };
 }

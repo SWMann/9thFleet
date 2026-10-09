@@ -37,6 +37,8 @@ export const attemptNames = {
   "event.approval": "ask for, give or take back approval of an event",
   "event.discord": "post an announcement to Discord",
   "event.opfor": "change an event's opposing force",
+  "event.task": "give a unit its task for an event",
+  "event.task-level": "pass a unit's task down",
   "event.delete": "delete a draft event",
   "event.reply": "reply to an event",
   "event.stand-in": "set a stand-in",

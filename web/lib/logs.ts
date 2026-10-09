@@ -92,7 +92,7 @@ const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
     "events", "event_orders", "event_units", "event_key_posts", "event_posts", "event_objectives", "event_elements",
     "event_timings", "event_ships", "event_nets", "event_amendments", "event_acknowledgements", "attendance",
     "attendance_returns", "after_action_reports", "event_objective_outcomes", "event_losses", "event_opfor",
-    "event_opfor_members",
+    "event_opfor_members", "event_unit_tasks",
   ],
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
@@ -100,6 +100,14 @@ const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
   ],
   records: ["members"],
 };
+
+/** Who reads a task at each level, as a log line says it. */
+const levelWords = {
+  everyone: "everyone",
+  unit: "the unit",
+  leaders: "the unit's leaders",
+  commander: "the unit's commander",
+} as const;
 
 type Row = Record<string, unknown>;
 type AuditRow = {
@@ -668,6 +676,19 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       }
       if (row.action === "delete") return line("operations", `${actor} took ${subject} off the opposing force of ${event}`);
       return line("operations", now.leads === true ? `${actor} made ${subject} lead the opposing force of ${event}` : `${actor} said ${subject} no longer leads the opposing force of ${event}`);
+    }
+
+    case "event_unit_tasks": {
+      const event = names.event(any.event_id);
+      const unit = names.unit(any.unit_id);
+      const reader = (level: unknown) => (typeof level === "string" && level in levelWords ? levelWords[level as keyof typeof levelWords] : "nobody");
+      // What a task says is not put in the log's sentence, since it may be withheld. The record itself holds it.
+      if (row.action === "delete") return line("operations", `${actor} took away the task of ${unit} for ${event}`);
+      if (row.action === "insert") return line("operations", `${actor} gave ${unit} its task for ${event}`, `Read by ${reader(now.level)}.`);
+      if (now.level !== was.level) {
+        return line("operations", `${actor} changed who reads the task of ${unit} for ${event}`, `Now ${reader(now.level)}. Before, ${reader(was.level)}.`);
+      }
+      return line("operations", `${actor} changed the task of ${unit} for ${event}`);
     }
 
     case "event_units": {
