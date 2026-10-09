@@ -5,7 +5,8 @@ import { TabPanel, Tabs, type TabSpec } from "@/components/Tabs";
 import { toFields } from "@/lib/operations-form";
 import type { Plan } from "@/lib/operations";
 import { deleteDraft } from "../../actions";
-import { EventForm, ExtraPostForm, KeyPostsForm, OrdersForm, RemoveExtraPost, UnitsForm } from "../../OpsForms";
+import { ForceChart } from "../../ForceChart";
+import { EventForm, ExtraPostForm, KeyPostsForm, OrdersForm, RemoveExtraPost } from "../../OpsForms";
 import { PlanEditor, ReadingForm, type PlanRow } from "../../PlanForms";
 import { RemoveTask, TaskForm } from "../../TaskForms";
 import { EditHead, openForEdit } from "./frame";
@@ -112,10 +113,8 @@ async function EditEvent({ params }: { params: Props["params"] }) {
 
         <TabPanel id="forces">
           <div className="wrap band tab-band">
+            {choices.force ? <ForceChart id={event.id} fleet={choices.force} chosen={taking.units} /> : null}
             <Panes>
-              <Pane id="units" icon="ship" title="Which force to use">
-                <UnitsForm id={event.id} units={choices.units} chosen={taking.units} />
-              </Pane>
               <Pane id="key-posts" icon="star" title="Key posts">
                 <KeyPostsForm id={event.id} groups={choices.posts} chosen={taking.keyPosts} />
               </Pane>

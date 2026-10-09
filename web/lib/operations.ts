@@ -15,7 +15,9 @@ import {
   type Section,
   type WeaponsState,
 } from "@/lib/operations-form";
+import type { ForcePicture, ForceUnit } from "@/lib/force";
 import { getOrderOfBattle, type Unit } from "@/lib/order-of-battle";
+import { pictures, type PictureName } from "@/lib/pictures";
 import { audienceOf, indexFleet, passableTo, readsLine, standingIn, taskLevels, unitsAbove, type TaskLevel } from "@/lib/tasks";
 import { createClient } from "@/lib/supabase/server";
 
@@ -263,6 +265,41 @@ function openPosts(fleet: Unit, taking: Set<string> | null) {
   };
   walk(fleet, null);
   return groups;
+}
+
+/**
+ * A unit's picture, if it has been given one the site holds. A wallpaper from
+ * the fan kit is never offered: the chart crops a picture to fit, and a fan kit
+ * wallpaper may only be shown whole.
+ */
+function unitPicture(name: string | null): ForcePicture | null {
+  if (!name || !Object.hasOwn(pictures, name)) return null;
+  const { shot, focus } = pictures[name as PictureName];
+  if (shot.source === "fankit") return null;
+  return { src: shot.image.src, focus, author: shot.author.name, credit: `/credits#shot-${shot.id}` };
+}
+
+/** The order of battle as the force chart draws it. Only the posts the roll would list are counted. */
+function toForce(unit: Unit): ForceUnit {
+  return {
+    id: unit.id,
+    name: unit.name,
+    kind: unit.kind,
+    open: unit.open,
+    opensAtStage: unit.opensAtStage,
+    posts: unit.posts
+      .filter((post) => post.kind === "primary" && post.open)
+      .map((post) => ({
+        id: post.id,
+        title: post.title,
+        holders: post.holders.map((holder) =>
+          [holder.rankName, holder.name ?? "A member with no name set", holder.acting ? "(acting)" : null].filter(Boolean).join(" "),
+        ),
+      })),
+    brings: unit.brings,
+    picture: unitPicture(unit.picture),
+    units: unit.units.map(toForce),
+  };
 }
 
 function toEvent(
@@ -548,8 +585,8 @@ export type ReturnLine = { person: Person; reply: Reply | null; returned: Return
 
 /** What someone who may change an event can choose from. */
 export type Choices = {
-  /** The open units, each with the ones above it in its name. */
-  units: { id: string; label: string }[];
+  /** The order of battle as the force chart draws it: each unit with its posts, who fills them and what it brings. */
+  force: ForceUnit | null;
   /** The open primary posts of the units taking part, for saying which must be filled. */
   posts: { unit: string; posts: { id: string; title: string }[] }[];
   roles: { id: string; name: string }[];
@@ -1046,13 +1083,12 @@ export async function getOperation(id: string): Promise<Operation> {
     types,
     choices: edits
       ? {
-          // The fleet itself is every unit, which is what naming none already means.
-          units: allUnits.filter((unit) => unit.open && unit.parentId !== null).map((unit) => ({ id: unit.id, label: unit.path })),
+          force: battle.state === "ready" ? toForce(battle.fleet) : null,
           posts: groups.map((group) => ({ unit: group.unit, posts: group.posts.map((post) => ({ id: post.id, title: post.title })) })),
           roles: [...roles.entries()].map(([roleId, role]) => ({ id: roleId, name: role.name })).sort((a, b) => a.name.localeCompare(b.name)),
           qualifications,
         }
-      : { units: [], posts: [], roles: [], qualifications: [] },
+      : { force: null, posts: [], roles: [], qualifications: [] },
     plan,
     amendments: issued,
     acknowledged: acknowledgedBy.get(member.id) ?? null,

@@ -23,6 +23,7 @@ or let someone promote themselves.
 | `migrations/…_event_report.sql` | Signing off a qualification at the event that teaches it, and the report's records: how each objective turned out, losses and mentions |
 | `migrations/…_event_opfor.sql` | Command's approval for the types of event that need it, and the opposing force: its plan and who is on it, kept from the side being exercised |
 | `migrations/…_event_unit_tasks.sql` | A task for each unit of an event and who reads it, and which post commands each unit and which posts lead |
+| `migrations/…_unit_brings.sql` | What each unit brings to an event, a short list an admin keeps, and a picture for it |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
