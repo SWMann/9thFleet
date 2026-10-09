@@ -197,7 +197,7 @@ export function RichEditor({ fieldId, plain, initial, label, rows, maxLength, re
     if (!element || !editor) return;
     const focus = (event: MouseEvent) => {
       event.preventDefault();
-      editor.commands.focus();
+      focusNow(editor);
     };
     element.addEventListener("click", focus);
     return () => element.removeEventListener("click", focus);
@@ -227,7 +227,7 @@ export function RichEditor({ fieldId, plain, initial, label, rows, maxLength, re
       event.preventDefault();
       event.stopPropagation();
       setProblem(wrong);
-      if (first) editor.commands.focus();
+      if (first) focusNow(editor);
     };
     const restore = () => {
       // The plain field is put back first, so read it once that has happened.
@@ -270,6 +270,19 @@ export function RichEditor({ fieldId, plain, initial, label, rows, maxLength, re
       ) : null}
     </div>
   );
+}
+
+/**
+ * Put the cursor back in the words, now.
+ *
+ * The editor's own way of doing this waits for the page's next frame. On a slow machine that is long enough for
+ * something typed in between to go nowhere, or for the cursor to be put back on top of a choice made since. So where
+ * the cursor comes back from outside the words (a button, the link row, a form that was stopped) it is done at once.
+ */
+function focusNow(editor: Editor) {
+  if (editor.isDestroyed || editor.view.hasFocus()) return;
+  editor.view.focus();
+  editor.commands.scrollIntoView();
 }
 
 const boxIcons: Record<CalloutKind, IconName> = { warning: "warning", note: "info", codeword: "radio" };
@@ -325,15 +338,23 @@ function Bar({ editor, line, canName, controls }: { editor: Editor; line: boolea
       setRefused(true);
       return;
     }
-    const chain = editor.chain().focus().extendMarkRange("link");
+    focusNow(editor);
+    const chain = editor.chain().extendMarkRange("link");
     if (editor.state.selection.empty && !editor.isActive("link")) {
-      // With nothing chosen, the address itself is put in as the link's words.
-      chain.insertContent([{ type: "text", text: href.replace(/^mailto:/, ""), marks: [{ type: "link", attrs: { href } }] }]).run();
+      // With nothing chosen, the address itself is put in as the link's words. What is typed next is not part of it.
+      chain
+        .insertContent([{ type: "text", text: href.replace(/^mailto:/, ""), marks: [{ type: "link", attrs: { href } }] }])
+        .command(({ tr }) => {
+          tr.removeStoredMark(editor.schema.marks.link);
+          return true;
+        })
+        .run();
     } else chain.setLink({ href }).run();
     setLinking(false);
   };
   const removeLink = () => {
-    editor.chain().focus().extendMarkRange("link").unsetLink().run();
+    focusNow(editor);
+    editor.chain().extendMarkRange("link").unsetLink().run();
     setLinking(false);
   };
   /** Type a character that opens a menu, with a space before it if it would otherwise join a word. */
@@ -362,7 +383,11 @@ function Bar({ editor, line, canName, controls }: { editor: Editor; line: boolea
       aria-pressed={pressed ?? undefined}
       disabled={more.disabled}
       onMouseDown={(event) => event.preventDefault()}
-      onClick={run}
+      onClick={() => {
+        // A button reached with the keyboard has the cursor on it. It goes back to the words before anything is done to them.
+        focusNow(editor);
+        run();
+      }}
     >
       {content}
     </button>
@@ -390,7 +415,7 @@ function Bar({ editor, line, canName, controls }: { editor: Editor; line: boolea
             } else if (event.key === "Escape") {
               event.preventDefault();
               setLinking(false);
-              editor.commands.focus();
+              focusNow(editor);
             }
           }}
         />
@@ -407,7 +432,7 @@ function Bar({ editor, line, canName, controls }: { editor: Editor; line: boolea
           className="rich-tool rich-tool-words"
           onClick={() => {
             setLinking(false);
-            editor.commands.focus();
+            focusNow(editor);
           }}
         >
           Cancel

@@ -2923,15 +2923,15 @@ try {
     await address.press("Enter");
     assert.equal(await field.locator("a").getAttribute("href"), "/manual/command/orders");
 
+    // The cursor is back in the words at once, and what is typed next is not part of the link.
     // The / menu links to a published section of the manual by its name.
-    await page.keyboard.press("End");
-    await page.keyboard.type(" and /succ");
+    await page.keyboard.type(", and /succ");
     await page.locator(".rich-menu:visible").getByRole("option", { name: /Succession and continuity/ }).waitFor();
     await page.keyboard.press("Enter");
     await page.getByRole("button", { name: "Save the orders" }).click();
     await page.locator(".orders-form:visible .form-result", { hasText: "Saved." }).waitFor();
     const support = (await ordersOf("Escort 002")).support;
-    assert.equal(support, "Read [/manual/command/orders](/manual/command/orders) and [Succession and continuity](/manual/command/succession-and-continuity)");
+    assert.equal(support, "Read [/manual/command/orders](/manual/command/orders), and [Succession and continuity](/manual/command/succession-and-continuity)");
   });
   await check("a field that must be filled says so, and one that holds too much says by how much", async () => {
     await openEvent("Escort 002");

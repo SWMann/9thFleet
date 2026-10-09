@@ -77,6 +77,16 @@ export async function openBrowser() {
   const context = await browser.newContext({ viewport: { width, height: 900 }, userAgent });
   // E2E_TIMEOUT, in milliseconds, shortens how long a step waits. It is for finding failures quickly, not for the real run.
   if (Number(process.env.E2E_TIMEOUT) > 0) context.setDefaultTimeout(Number(process.env.E2E_TIMEOUT));
+  // E2E_SLOW_FRAMES, in milliseconds, holds back everything a page asks to do "on the next frame" by that long. The
+  // machine that checks a pull request draws frames far more slowly than a desk does, and this finds the steps that
+  // only fail there: something typed, or chosen, before the page has caught up.
+  const held = Number(process.env.E2E_SLOW_FRAMES);
+  if (held > 0) {
+    await context.addInitScript((wait) => {
+      const frame = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = (run) => frame(() => setTimeout(() => frame(run), wait));
+    }, held);
+  }
   const page = await context.newPage();
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(String(error)));
