@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { AdminHead, AdminShut } from "@/components/admin/AdminHead";
 import { Columns, Panel, Scroll, Stats } from "@/components/admin/Charts";
-import { gateLogs, kindNames, periods, readLog, readVisitors, shows, type Filters, type LogLine, type Period, type Show } from "@/lib/logs";
+import { Icon, type IconName } from "@/components/Icon";
+import { gateLogs, kindNames, periods, readLog, readVisitors, shows, type Filters, type LogKind, type LogLine, type Period, type Show } from "@/lib/logs";
 
 export const metadata: Metadata = {
   title: "Logs",
@@ -12,6 +13,23 @@ export const metadata: Metadata = {
 };
 
 const title = <strong>Logs</strong>;
+
+/**
+ * Each type of line has a picture and a colour of its own, and its name is
+ * always written beside them. A line that failed is told from one that was refused.
+ */
+type Look = LogKind | "failed";
+const lookIcons: Record<Look, IconName> = {
+  personnel: "people",
+  recruiting: "inbox",
+  operations: "calendar",
+  structure: "layers",
+  records: "person",
+  "sign-ins": "signIn",
+  refused: "ban",
+  failed: "warning",
+};
+const showIcons: Record<Show, IconName> = { ...lookIcons, all: "list", visitors: "eye" };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Search = Promise<Record<string, string | string[] | undefined>>;
@@ -60,7 +78,7 @@ async function Logs({ searchParams }: { searchParams: Search }) {
           <h2 id="visitors">
             <strong>Visitors</strong>
           </h2>
-          <FilterForm asked={asked} members={[]} />
+          <ShowLinks asked={asked} />
           <Stats
             items={[
               { label: "Page views today", value: visitors.today.views, note: `${visitors.today.landings} visits` },
@@ -131,15 +149,7 @@ async function Logs({ searchParams }: { searchParams: Search }) {
 
   const days = groupByDay(page.lines);
   const later = asked.before.audit !== null || asked.before.activity !== null;
-  const address = (extra: Record<string, string>) => {
-    const query = new URLSearchParams();
-    if (asked.show !== "all") query.set("show", asked.show);
-    if (asked.period !== "all") query.set("period", asked.period);
-    if (asked.who) query.set("who", asked.who);
-    for (const [key, value] of Object.entries(extra)) query.set(key, value);
-    const text = query.toString();
-    return text ? `/admin/logs?${text}` : "/admin/logs";
-  };
+  const address = (extra: Record<string, string>) => addressOf(asked, asked.show, extra);
 
   return (
     <>
@@ -149,6 +159,7 @@ async function Logs({ searchParams }: { searchParams: Search }) {
           {later ? "Older " : "The latest "}
           <strong>lines</strong>
         </h2>
+        <ShowLinks asked={asked} />
         <FilterForm asked={asked} members={page.members} />
 
         {days.length === 0 ? (
@@ -158,15 +169,25 @@ async function Logs({ searchParams }: { searchParams: Search }) {
             <section className="log-day" key={day.label} aria-label={day.label}>
               <h3>{day.label}</h3>
               <ol className="log">
-                {day.lines.map((line) => (
-                  <li key={line.key} className={line.tone ? `log-line log-${line.tone}` : "log-line"}>
-                    <time dateTime={line.at}>{timeOf(line.at)}</time>
-                    <span className={line.tone === "failed" ? "chip chip-amber" : "chip"}>{line.tone === "failed" ? "Failed" : kindNames[line.kind]}</span>
-                    <p>
-                      {line.text}.{line.detail ? <small>{line.detail}</small> : null}
-                    </p>
-                  </li>
-                ))}
+                {day.lines.map((line) => {
+                  const look: Look = line.tone === "failed" ? "failed" : line.kind;
+                  return (
+                    <li key={line.key} className={`log-line log-kind-${look}${line.tone ? ` log-${line.tone}` : ""}`}>
+                      <span className="log-tile">
+                        <Icon name={lookIcons[look]} size={20} />
+                      </span>
+                      <div className="log-body">
+                        <p className="log-head">
+                          <span className="log-type">{look === "failed" ? "Failed" : kindNames[line.kind]}</span>
+                          <time dateTime={line.at}>{timeOf(line.at)}</time>
+                        </p>
+                        <p>
+                          {line.text}.{line.detail ? <small>{line.detail}</small> : null}
+                        </p>
+                      </div>
+                    </li>
+                  );
+                })}
               </ol>
             </section>
           ))
@@ -195,54 +216,71 @@ async function Logs({ searchParams }: { searchParams: Search }) {
   );
 }
 
-/** The filters, as a plain form: it works without scripts and its choices live in the address. */
-function FilterForm({
-  asked,
-  members,
-}: {
-  asked: { show: Show; period: Period; who: string | null };
-  members: { id: string; name: string }[];
-}) {
-  const visitors = asked.show === "visitors";
+type Asked = { show: Show; period: Period; who: string | null };
+
+/** The address of the logs with these choices. Whoever and whenever were chosen stay chosen. */
+function addressOf(asked: Asked, show: Show, extra: Record<string, string> = {}) {
+  const query = new URLSearchParams();
+  if (show !== "all") query.set("show", show);
+  // The visitor counts are not about anyone, and have their own periods.
+  if (show !== "visitors") {
+    if (asked.period !== "all") query.set("period", asked.period);
+    if (asked.who) query.set("who", asked.who);
+  }
+  for (const [key, value] of Object.entries(extra)) query.set(key, value);
+  const text = query.toString();
+  return text ? `/admin/logs?${text}` : "/admin/logs";
+}
+
+/** What to show, as a row of links: each type with its picture, in its colour. */
+function ShowLinks({ asked }: { asked: Asked }) {
+  return (
+    <nav className="log-shows" aria-label="Show">
+      <span className="log-shows-label" aria-hidden="true">
+        Show
+      </span>
+      <ul>
+        {shows.map((entry) => (
+          <li key={entry.key}>
+            <Link className={`log-show log-kind-${entry.key}`} href={addressOf(asked, entry.key)} aria-current={entry.key === asked.show ? "true" : undefined}>
+              <Icon name={showIcons[entry.key]} size={18} />
+              {entry.name}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+/** Whose lines and from when, as a plain form: it works without scripts and its choices live in the address. */
+function FilterForm({ asked, members }: { asked: Asked; members: { id: string; name: string }[] }) {
   return (
     <form className="filters" method="get" action="/admin/logs">
+      {asked.show === "all" ? null : <input type="hidden" name="show" value={asked.show} />}
       <label>
-        <span>Show</span>
-        <select name="show" defaultValue={asked.show}>
-          {shows.map((entry) => (
+        <span>Who</span>
+        <select name="who" defaultValue={asked.who ?? ""}>
+          <option value="">Anyone</option>
+          {members.map((member) => (
+            <option value={member.id} key={member.id}>
+              {member.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>When</span>
+        <select name="period" defaultValue={asked.period}>
+          {periods.map((entry) => (
             <option value={entry.key} key={entry.key}>
               {entry.name}
             </option>
           ))}
         </select>
       </label>
-      {visitors ? null : (
-        <>
-          <label>
-            <span>Who</span>
-            <select name="who" defaultValue={asked.who ?? ""}>
-              <option value="">Anyone</option>
-              {members.map((member) => (
-                <option value={member.id} key={member.id}>
-                  {member.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>When</span>
-            <select name="period" defaultValue={asked.period}>
-              {periods.map((entry) => (
-                <option value={entry.key} key={entry.key}>
-                  {entry.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </>
-      )}
       <button className="button button-small" type="submit">
-        Show
+        Apply
       </button>
     </form>
   );

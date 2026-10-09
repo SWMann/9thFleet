@@ -162,23 +162,35 @@ async function Event({ params }: { params: Props["params"] }) {
         </p>
         <ul className="head-facts">
           <li>
-            <span>When</span>
+            <span className="with-icon">
+              <Icon name="calendar" size={14} />
+              When
+            </span>
             <strong>
               {when.day}, {when.utc}
             </strong>
           </li>
           {event.musterAt ? (
             <li>
-              <span>Muster</span>
+              <span className="with-icon">
+                <Icon name="pin" size={14} />
+                Muster
+              </span>
               <strong>{event.musterAt}</strong>
             </li>
           ) : null}
           <li>
-            <span>Commander</span>
+            <span className="with-icon">
+              <Icon name="star" size={14} />
+              Commander
+            </span>
             <strong>{named(event.commander, "Not named")}</strong>
           </li>
           <li>
-            <span>Roll</span>
+            <span className="with-icon">
+              <Icon name="people" size={14} />
+              Roll
+            </span>
             <strong>{rollLine(event)}</strong>
           </li>
         </ul>

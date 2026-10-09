@@ -1520,7 +1520,24 @@ button.button:disabled {
   color: #ffd9d4;
 }
 
+/* Something that went wrong has a warning sign in front of its words, as well as its colour and its rule. */
+.form-result-bad::before {
+  content: "";
+  display: inline-block;
+  width: 1.05em;
+  height: 1.05em;
+  margin-right: 8px;
+  background: currentColor;
+  vertical-align: -0.16em;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4l9 16H3L12 4zM12 10v4M12 17v.5'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4l9 16H3L12 4zM12 10v4M12 17v.5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
 .form-result:empty {
+  display: none;
+}
+
+.form-result-bad:empty::before {
   display: none;
 }
 
@@ -1642,6 +1659,13 @@ button.button:disabled {
 .band-title {
   font-size: clamp(1.5rem, 2.6vw, 2rem);
   font-weight: 700;
+}
+
+/* A unit's name with the symbol for its kind in front. The symbol sits in the line, so the rule under a heading stays under it. */
+.with-symbol .unit-symbol {
+  margin-right: 0.4em;
+  color: var(--gold-text);
+  vertical-align: -0.14em;
 }
 
 .band-note {
@@ -2253,6 +2277,18 @@ a.post-title {
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
+}
+
+/* A status with a small picture in front of its words. */
+.chip-icon {
+  gap: 6px;
+}
+
+/* A label with a small picture in front of it. */
+.with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .chip-on {
@@ -4928,17 +4964,105 @@ a.contents-name:hover {
   list-style: none;
 }
 
+/*
+ * Each type of line has a colour and a picture. Neither stands alone: the
+ * type's name is written beside them, on the line and on the link that shows
+ * only that type.
+ */
+.log-kind-all,
+.log-kind-visitors,
+.log-kind-records {
+  --kind: #c3cad6;
+  --kind-tile: rgb(255 255 255 / 0.1);
+}
+
+.log-kind-personnel {
+  --kind: #d8b872;
+  --kind-tile: rgb(200 164 90 / 0.18);
+}
+
+.log-kind-recruiting {
+  --kind: #9be28f;
+  --kind-tile: rgb(40 140 60 / 0.3);
+}
+
+.log-kind-operations {
+  --kind: #6fd3e0;
+  --kind-tile: rgb(40 130 150 / 0.3);
+}
+
+.log-kind-structure {
+  --kind: #c9b3f5;
+  --kind-tile: rgb(110 90 180 / 0.3);
+}
+
+.log-kind-sign-ins {
+  --kind: #86b8f2;
+  --kind-tile: rgb(60 110 170 / 0.26);
+}
+
+.log-kind-refused {
+  --kind: #f79a94;
+  --kind-tile: rgb(163 38 28 / 0.34);
+}
+
+.log-kind-failed {
+  --kind: #f7a04e;
+  --kind-tile: rgb(160 90 20 / 0.38);
+}
+
 .log-line {
-  display: grid;
-  grid-template-columns: 7.2em 7.6em minmax(0, 1fr);
-  align-items: baseline;
-  gap: 4px 14px;
-  padding: 10px 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 18px;
   border-top: 1px solid var(--seam);
 }
 
 .log-line:first-child {
   border-top: 0;
+}
+
+.log-tile {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 5px;
+  background: var(--kind-tile);
+  color: var(--kind);
+}
+
+.log-body {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.band .log-line p {
+  max-width: none;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.band .log-line .log-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+}
+
+.log-type {
+  color: var(--kind);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .log-line time {
@@ -4948,17 +5072,56 @@ a.contents-name:hover {
   white-space: nowrap;
 }
 
-.log-line .chip {
-  justify-self: start;
-  min-height: 24px;
-  font-size: 0.78125rem;
+/* What to show: a link for each type of line. */
+.log-shows {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 16px;
 }
 
-.band .log-line p {
-  max-width: none;
+.log-shows-label {
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.log-shows ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 0;
-  color: var(--text);
-  line-height: 1.45;
+  padding: 0;
+  list-style: none;
+}
+
+.log-show {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--seam-2);
+  border-radius: 22px;
+  color: var(--kind);
+  font-size: 0.90625rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.log-show:hover {
+  border-color: var(--kind);
+  color: var(--kind);
+}
+
+.log-show[aria-current] {
+  border-color: var(--gold-fill);
+  background: var(--gold-fill);
+  color: var(--ink);
 }
 
 .log-line small {
@@ -4969,10 +5132,10 @@ a.contents-name:hover {
   overflow-wrap: anywhere;
 }
 
-/* A refusal is marked by its label and a rule down the side, not by colour alone. */
+/* A refusal or a failure is marked by its label, its picture and a rule down the side, not by colour alone. */
 .log-refused,
 .log-failed {
-  box-shadow: inset 3px 0 0 var(--gold);
+  box-shadow: inset 3px 0 0 var(--kind);
 }
 
 .band .log-empty {
@@ -5175,12 +5338,8 @@ a.contents-name:hover {
   }
 
   .log-line {
-    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
     padding: 10px 14px;
-  }
-
-  .log-line p {
-    grid-column: 1 / -1;
   }
 }
 

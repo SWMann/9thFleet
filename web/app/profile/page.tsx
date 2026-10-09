@@ -7,6 +7,7 @@ import { getServiceRecord } from "@/lib/service-record";
 import { site } from "@/lib/site";
 import { signOut } from "./actions";
 import { NamesForm } from "./NamesForm";
+import { Icon, type IconName } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 
 export const metadata: Metadata = {
@@ -97,21 +98,25 @@ async function Record() {
       <section className="wrap band" aria-labelledby="standing">
         <h2 id="standing">Where you stand</h2>
         <dl className="facts">
-          <Line label="Status" value={status.name} />
-          <Line label="Service" value={member.service ? serviceNames[member.service] : "Not set"} />
+          <Line icon="person" label="Status" value={status.name} />
+          <Line icon="anchor" label="Service" value={member.service ? serviceNames[member.service] : "Not set"} />
           <Line
+            icon="chevrons"
             label="Rank"
             value={member.rankName ? `${member.acting ? "Acting " : ""}${member.rankName}` : "None"}
             note={member.gradeCode ?? undefined}
           />
-          <Line label="Post" value={member.postTitle ?? "None"} note={member.unitName ?? undefined} />
+          <Line icon="flag" label="Post" value={member.postTitle ?? "None"} note={member.unitName ?? undefined} />
           {member.roles.length > 0 ? (
-            <Line label="Roles on this site" value={member.roles.map((role) => roleNames[role]).join(", ")} />
+            <Line icon="shield" label="Roles on this site" value={member.roles.map((role) => roleNames[role]).join(", ")} />
           ) : null}
-          <Line label="Discord" value={member.discordName ?? "Unknown"} />
+          <Line icon="headset" label="Discord" value={member.discordName ?? "Unknown"} />
           {member.status === "applicant" || member.status === "discharged" ? null : (
             <div>
-              <dt>The fleet</dt>
+              <dt className="with-icon">
+                <Icon name="ship" size={14} />
+                The fleet
+              </dt>
               <dd>
                 <Link href="/order-of-battle">See the order of battle</Link>
                 <span className="aside">
@@ -128,7 +133,10 @@ async function Record() {
           <h2 id="earned">What you have earned</h2>
           <div className="earned">
             <div>
-              <h3>Qualifications</h3>
+              <h3 className="with-icon">
+                <Icon name="checks" size={16} />
+                Qualifications
+              </h3>
               {earned.qualifications.length > 0 ? (
                 <ul>
                   {earned.qualifications.map((qualification) => (
@@ -150,7 +158,10 @@ async function Record() {
               )}
             </div>
             <div>
-              <h3>Mentions</h3>
+              <h3 className="with-icon">
+                <Icon name="star" size={16} />
+                Mentions
+              </h3>
               {earned.mentions.length > 0 ? (
                 <ul>
                   {earned.mentions.map((mention) => (
@@ -236,10 +247,13 @@ function heading(member: Member): string {
   return `${member.acting ? "Acting " : ""}${member.rankName} ${member.characterName}`;
 }
 
-function Line({ label, value, note }: { label: string; value: string; note?: string }) {
+function Line({ icon, label, value, note }: { icon: IconName; label: string; value: string; note?: string }) {
   return (
     <div>
-      <dt>{label}</dt>
+      <dt className="with-icon">
+        <Icon name={icon} size={14} />
+        {label}
+      </dt>
       <dd>
         {value}
         {note ? <span className="aside">{note}</span> : null}

@@ -222,6 +222,9 @@ try {
     await save("Ada Vance", "ada vance");
     await result().filter({ hasText: "no spaces" }).waitFor();
     assert.equal(mock.state.member.rsi_handle, null, "nothing should have been saved");
+    // What was typed is still in the form, to be corrected.
+    assert.equal(await page.getByLabel("Character name").inputValue(), "Ada Vance");
+    assert.equal(await page.getByLabel("RSI handle").inputValue(), "ada vance");
   });
   await check("a name another member holds is refused", async () => {
     await page.locator("form.fields").evaluate((form) => form.setAttribute("novalidate", ""));

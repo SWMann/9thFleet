@@ -7,7 +7,14 @@ import { refused, signedOut, turnedDown } from "@/lib/activity";
 import { SIGNED_IN_COOKIE, TIER_COOKIE } from "@/lib/supabase/cookies";
 import { createClient } from "@/lib/supabase/server";
 
-export type NamesResult = { ok: boolean; message: string };
+export type NamesResult = {
+  ok: boolean;
+  message: string;
+  /** What was typed, given back when it was not saved, so that the form keeps it. */
+  values?: { character_name?: string; rsi_handle?: string };
+  /** Changes each time the form is given back, so that it is drawn afresh. */
+  stamp?: number;
+};
 
 const NAME_PATTERN = /^\p{L}[\p{L} .'-]*$/u;
 const HANDLE_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -20,6 +27,16 @@ const HANDLE_PATTERN = /^[A-Za-z0-9_-]+$/;
  * names unique inside the fleet.
  */
 export async function saveNames(_previous: NamesResult, formData: FormData): Promise<NamesResult> {
+  const result = await save(formData);
+  if (result.ok) return result;
+  const typed = (key: string) => {
+    const value = formData.get(key);
+    return typeof value === "string" ? value : undefined;
+  };
+  return { ...result, values: { character_name: typed("character_name"), rsi_handle: typed("rsi_handle") }, stamp: Date.now() };
+}
+
+async function save(formData: FormData): Promise<NamesResult> {
   const supabase = await createClient();
   if (!supabase) return { ok: false, message: "This site is not connected to the database yet." };
 

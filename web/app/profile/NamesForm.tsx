@@ -17,7 +17,7 @@ export function NamesForm({
   const [result, action, pending] = useActionState(saveNames, untouched);
 
   return (
-    <form action={action} className="fields">
+    <form action={action} className="fields" key={result.stamp ?? 0}>
       <div className="field">
         <label htmlFor="character_name">Character name</label>
         <p className="hint" id="character_name_hint">
@@ -29,7 +29,7 @@ export function NamesForm({
           id="character_name"
           name={nameIsFixed ? undefined : "character_name"}
           type="text"
-          defaultValue={characterName ?? ""}
+          defaultValue={result.values?.character_name ?? characterName ?? ""}
           readOnly={nameIsFixed}
           required={!nameIsFixed}
           minLength={2}
@@ -48,7 +48,7 @@ export function NamesForm({
           id="rsi_handle"
           name="rsi_handle"
           type="text"
-          defaultValue={rsiHandle ?? ""}
+          defaultValue={result.values?.rsi_handle ?? rsiHandle ?? ""}
           required
           minLength={3}
           maxLength={60}

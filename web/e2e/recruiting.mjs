@@ -936,13 +936,21 @@ try {
 
   console.log("Logs");
   const logText = async () => (await page.locator(".log:visible").allInnerTexts()).join("\n");
-  // The filters are a plain form: choosing and pressing Show loads the page again at a new address.
-  const showLog = async (choices, address) => {
-    const filters = page.locator(".filters:visible");
-    for (const [label, option] of Object.entries(choices)) await filters.getByLabel(label).selectOption({ label: option });
-    await filters.getByRole("button", { name: "Show" }).click();
+  // What to show is a row of links. Who and when are a plain form: choosing and pressing Apply loads the page again at a new address.
+  const showLog = async ({ Show, ...rest }, address) => {
+    if (Show) {
+      const shows = page.locator('nav[aria-label="Show"]:visible');
+      await shows.getByRole("link", { name: Show, exact: true }).click();
+      // The link is marked as the one in use once the lines it asks for have arrived.
+      await shows.locator("a[aria-current]", { hasText: Show }).waitFor();
+    }
+    if (Object.keys(rest).length > 0) {
+      const filters = page.locator(".filters:visible");
+      for (const [label, option] of Object.entries(rest)) await filters.getByLabel(label).selectOption({ label: option });
+      await filters.getByRole("button", { name: "Apply" }).click();
+    }
     await page.waitForURL(address);
-    await page.locator(".filters:visible").waitFor();
+    await page.locator('nav[aria-label="Show"]:visible').waitFor();
   };
   await check("the logs are for admins, and nobody else is shown a line", async () => {
     // Staff, then command. Both are left signed in by the checks above.
@@ -950,7 +958,7 @@ try {
       await signInAs(person);
       await page.goto(`${site}/admin/logs`);
       await leadIs(/This page is for admins\./);
-      assert.equal(await page.locator(".log:visible, .filters:visible").count(), 0);
+      assert.equal(await page.locator(".log:visible, .filters:visible, .log-shows:visible").count(), 0);
       assert.ok(!(await adminTabs()).includes("Logs"));
     }
     await page.goto(`${site}/profile`);
@@ -978,7 +986,11 @@ try {
     assert.match(text, /Jo Reyes signed out\./);
     assert.doesNotMatch(text, /Lee Tanaka signed out/, "a line from two days ago is in the last 24 hours");
     assert.doesNotMatch(text, /applied|status|Patrol/);
-    assert.match(await page.locator(".log-line:visible").first().innerText(), /^\d\d:\d\d:\d\d UTC\s+Sign-in\s+Ada Vance signed in\.$/);
+    // Each line names its type beside the type's picture, so the colour is never the only sign.
+    const first = page.locator(".log-line:visible").first();
+    assert.match(await first.innerText(), /^Sign-in\s+\d\d:\d\d:\d\d UTC\s+Ada Vance signed in\.$/i);
+    assert.match(await first.getAttribute("class"), /log-kind-sign-ins/);
+    assert.ok((await first.locator(".log-tile svg > *").count()) > 0, "a line's type has no picture");
   });
   await check("personnel actions read as sentences, and can be narrowed to one member", async () => {
     await showLog({ Show: "Personnel actions", Who: "Kit Marlow", When: "All time" }, /show=personnel/);
@@ -1002,7 +1014,7 @@ try {
     assert.ok(stored.every((line) => line.action && line.shown), "a refusal says what was tried and what was said");
   });
   await check("every kind of line is in one list, a page at a time", async () => {
-    await showLog({ Show: "Everything" }, /show=all/);
+    await showLog({ Show: "Everything" }, (url) => !url.searchParams.has("show"));
     const latest = await logText();
     assert.match(latest, /Ada Vance signed in\./);
     assert.match(latest, /The database gave Jo Reyes the Command role\./);
