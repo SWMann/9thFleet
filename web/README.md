@@ -211,6 +211,8 @@ to be tracked.
 | The admin pages | `app/admin/`, and the figures in `lib/admin.ts` |
 | Which role opens which admin page | `lib/admin.ts` and the list of tabs in `components/admin/AdminHead.tsx` |
 | How a line in the logs reads | `lib/logs.ts`, and the names of things people try in `lib/activity.ts` |
+| The picture and colour of each type of log line | `lookIcons` in `app/admin/logs/page.tsx`, and the `log-kind-` colours in `app/globals.css`. The type's name is always written beside them |
+| The site's icons, and the symbol for each kind of unit | `components/Icon.tsx` and `components/UnitSymbol.tsx`. An icon goes with words and never stands in for them |
 | What the site says it records | `app/privacy/page.tsx` |
 | The menu | `lib/menu.ts` |
 | The pictures | `lib/pictures.ts`. See Pictures below |

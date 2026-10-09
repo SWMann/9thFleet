@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { Icon, type IconName } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { getOperations, type Summary } from "@/lib/operations";
 import { cycle, formatWhen, stateNames, weaponsName } from "@/lib/operations-form";
@@ -101,6 +102,19 @@ async function Operations() {
   );
 }
 
+/** A picture for each state an event is listed in, beside the state's name. */
+const stateIcons: Record<Summary["state"], IconName> = { draft: "pen", announced: "flag", done: "check", cancelled: "ban" };
+
+/** A status: its words, with a small picture in front. */
+function Status({ tone, icon, children }: { tone?: string; icon: IconName; children: React.ReactNode }) {
+  return (
+    <span className={tone ? `chip chip-icon ${tone}` : "chip chip-icon"}>
+      <Icon name={icon} size={14} />
+      {children}
+    </span>
+  );
+}
+
 function Events({ events }: { events: Summary[] }) {
   return (
     <ul className="events">
@@ -115,7 +129,10 @@ function Events({ events }: { events: Summary[] }) {
             {event.summary ? <p className="event-summary">{event.summary}</p> : null}
             <dl className="event-facts">
               <div>
-                <dt>When</dt>
+                <dt className="with-icon">
+                  <Icon name="calendar" size={14} />
+                  When
+                </dt>
                 <dd>
                   {when.day}
                   <small>
@@ -124,34 +141,58 @@ function Events({ events }: { events: Summary[] }) {
                 </dd>
               </div>
               <div>
-                <dt>Roll</dt>
+                <dt className="with-icon">
+                  <Icon name="people" size={14} />
+                  Roll
+                </dt>
                 <dd>
                   {event.confirmed} of {event.posts}
                   <small>posts confirmed</small>
                 </dd>
               </div>
               <div>
-                <dt>Commander</dt>
+                <dt className="with-icon">
+                  <Icon name="star" size={14} />
+                  Commander
+                </dt>
                 <dd>{event.commander?.name ?? "Not named"}</dd>
               </div>
             </dl>
             <p className="event-chips">
-              {event.state !== "announced" ? <span className="chip chip-amber">{stateNames[event.state]}</span> : null}
+              {event.state !== "announced" ? (
+                <Status tone="chip-amber" icon={stateIcons[event.state]}>
+                  {stateNames[event.state]}
+                </Status>
+              ) : null}
               {event.weaponsState ? <span className="chip">{weaponsName(event.weaponsState)}</span> : null}
               {event.repeatsWeekly ? <span className="chip">Weekly</span> : null}
-              {event.manning?.state === "go" ? <span className="chip chip-on">Go</span> : null}
-              {event.manning?.state === "no-go" ? <span className="chip chip-amber">Below its minimum</span> : null}
+              {event.manning?.state === "go" ? (
+                <Status tone="chip-on" icon="check">
+                  Go
+                </Status>
+              ) : null}
+              {event.manning?.state === "no-go" ? (
+                <Status tone="chip-amber" icon="warning">
+                  Below its minimum
+                </Status>
+              ) : null}
               {event.state === "announced" ? (
                 event.myPlace === "reserve" ? (
-                  <span className="chip chip-gold">You are on the reserve list</span>
+                  <Status tone="chip-gold" icon="timer">
+                    You are on the reserve list
+                  </Status>
                 ) : event.myReply === "attending" ? (
-                  <span className="chip chip-on">You are attending</span>
+                  <Status tone="chip-on" icon="check">
+                    You are attending
+                  </Status>
                 ) : event.myReply === "not_attending" ? (
-                  <span className="chip">You are not attending</span>
+                  <Status icon="close">You are not attending</Status>
                 ) : event.rollOpen ? (
-                  <span className="chip chip-gold">Reply needed</span>
+                  <Status tone="chip-gold" icon="clock">
+                    Reply needed
+                  </Status>
                 ) : (
-                  <span className="chip">The roll has closed</span>
+                  <Status icon="lock">The roll has closed</Status>
                 )
               ) : null}
             </p>

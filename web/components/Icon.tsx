@@ -98,6 +98,24 @@ const paths = {
       <path d="M5 20c.6-3.6 3.4-5.6 7-5.6s6.4 2 7 5.6" />
     </>
   ),
+  check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  warning: <path d="M12 4l9 16H3L12 4zM12 10v4M12 17v.5" />,
+  ban: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M5.6 5.6l12.8 12.8" />
+    </>
+  ),
+  list: <path d="M5 6h14M5 12h14M5 18h9" />,
+  layers: <path d="M12 3l9 5-9 5-9-5 9-5zM3 12.5l9 5 9-5M3 17l9 5 9-5" />,
+  inbox: <path d="M4 13l2.5-8h11L20 13v6H4v-6zM4 13h5l1 2.5h4l1-2.5h5" />,
+  grid: <path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z" />,
+  pin: (
+    <>
+      <path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z" />
+      <circle cx="12" cy="10" r="2.3" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof paths;

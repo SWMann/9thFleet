@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getOrderOfBattle, postsWithin, type Holder, type Post, type Tally, type Unit } from "@/lib/order-of-battle";
 import { PageHead } from "@/components/PageHead";
+import { UnitSymbol } from "@/components/UnitSymbol";
 
 export const metadata: Metadata = {
   title: "Order of battle",
@@ -129,7 +130,8 @@ function Formation({ unit, level }: { unit: Unit; level: Level }) {
     <>
       <div className="formation">
         <div className="wrap">
-          <Title level={level} className="formation-name">
+          <Title level={level} className="formation-name with-symbol">
+            <UnitSymbol kind={unit.kind} size={20} />
             {unit.name}
           </Title>
           <p>{describe(unit)}</p>
@@ -169,7 +171,8 @@ function Band({ unit, level }: { unit: Unit; level: Level }) {
     <>
       <section className="wrap band" aria-labelledby={titleId}>
         <div>
-          <Title level={level} id={titleId} className="band-title">
+          <Title level={level} id={titleId} className="band-title with-symbol">
+            <UnitSymbol kind={unit.kind} />
             {unit.name}
           </Title>
           <p className="band-note">{describe(unit)}</p>
