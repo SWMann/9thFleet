@@ -1,6 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { refused, turnedDown, type Attempt } from "@/lib/activity";
 import { typed } from "@/lib/application-form";
@@ -16,6 +17,8 @@ import {
   weapons,
   type PlanPart,
 } from "@/lib/operations-form";
+import { announceOnDiscord } from "@/lib/discord";
+import { originOf } from "@/lib/origin";
 import { explainRefusal } from "@/lib/refusals";
 import { createClient } from "@/lib/supabase/server";
 
@@ -323,7 +326,122 @@ export async function moveEvent(_previous: OpsResult, formData: FormData): Promi
   if (error) return failed(session, "event.move", error, explainRefusal(error, "The event could not be changed. Try again."));
   if (!data || data.length === 0) return notYours(session, "event.move", "This event is not yours to change.");
   refresh();
-  return { ok: true, message: MOVES[state], link: state === "cancelled" ? await nextWeeks(session, id) : undefined };
+  if (state === "cancelled") return { ok: true, message: MOVES[state], link: await nextWeeks(session, id) };
+  return { ok: true, message: `${MOVES[state]}${await tellDiscord(session, id)}` };
+}
+
+/**
+ * Post the announcement to the fleet's Discord channel, if one is set up. It
+ * carries the type, the title, the time and a link, and none of the orders.
+ * Returns what to add to the answer the person is given.
+ */
+async function tellDiscord(session: Session, id: string): Promise<string> {
+  const [event, types] = await Promise.all([
+    session.supabase.from("events").select("kind, title, starts_at").eq("id", id).maybeSingle(),
+    session.supabase.from("event_types").select("key, name"),
+  ]);
+  const found = event.data;
+  if (!found) return "";
+  const type = (types.data ?? []).find((entry) => entry.key === found.kind)?.name as string | undefined;
+  const origin = originOf(await headers());
+  const posted = await announceOnDiscord({
+    type: type ?? "Event",
+    title: found.title as string,
+    startsAt: found.starts_at as string,
+    link: `${origin}/operations/${id}`,
+  });
+  if (posted === "off") return "";
+  if (posted === "posted") return " It has been posted to Discord.";
+  await turnedDown(session.supabase, "event.discord", { message: "The Discord webhook did not accept the post." }, "It could not be posted to Discord.");
+  return " It could not be posted to Discord, so tell the fleet yourself.";
+}
+
+const APPROVALS: Record<string, string> = {
+  asked: "Command has been asked to approve it.",
+  not_asked: "The request has been taken back.",
+  approved: "Approved. It can now be announced.",
+};
+
+/** Ask command to approve a draft, take the request back, or as command give the approval. */
+export async function setApproval(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  const approval = formData.get("approval");
+  if (!id || typeof approval !== "string" || !(approval in APPROVALS)) return notThisPage(session, "event.approval");
+
+  const { data, error } = await session.supabase.from("events").update({ approval }).eq("id", id).select("id");
+  if (error) return failed(session, "event.approval", error, explainRefusal(error, "That could not be done. Try again."));
+  if (!data || data.length === 0) return notYours(session, "event.approval", "This event is not yours to change.");
+  refresh();
+  return { ok: true, message: APPROVALS[approval] };
+}
+
+const OPFOR_IS_COMMANDS = "Only command sets up an opposing force.";
+
+/** Write the opposing force's plan. Command and whoever leads it can. */
+export async function saveOpforPlan(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  if (!id) return notThisPage(session, "event.opfor");
+  const again = { values: typedInto(formData), stamp: Date.now() };
+  const plan = typed(formData.get("plan"));
+  if (plan.length > 6000) return { ok: false, message: "Keep the plan under 6,000 characters.", ...again };
+
+  const existing = await session.supabase.from("event_opfor").select("event_id").eq("event_id", id).maybeSingle();
+  if (existing.error) return { ...(await failed(session, "event.opfor", existing.error, "The plan could not be read. Try again.")), ...again };
+  const shown = "The plan could not be saved. Command and whoever leads the opposing force write it.";
+  if (existing.data) {
+    const { data, error } = await session.supabase.from("event_opfor").update({ plan }).eq("event_id", id).select("event_id");
+    if (error) return { ...(await failed(session, "event.opfor", error, explainRefusal(error, shown))), ...again };
+    if (!data || data.length === 0) return { ...(await notYours(session, "event.opfor", shown)), ...again };
+  } else {
+    const { error } = await session.supabase.from("event_opfor").insert({ event_id: id, plan });
+    if (error) return { ...(await failed(session, "event.opfor", error, explainRefusal(error, shown))), ...again };
+  }
+  refresh();
+  return { ok: true, message: "Saved.", stamp: again.stamp };
+}
+
+/** Name a member to the opposing force. They come off the event's roll. */
+export async function addOpforMember(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  if (!id) return notThisPage(session, "event.opfor");
+  const member = uuid(formData.get("member"));
+  if (!member) return { ok: false, message: "Choose who to name." };
+
+  const { error } = await session.supabase
+    .from("event_opfor_members")
+    .insert({ event_id: id, member_id: member, leads: formData.get("leads") === "on" });
+  if (error) {
+    const shown = error.code === "23505" ? "They are already on the opposing force." : explainRefusal(error, OPFOR_IS_COMMANDS);
+    return failed(session, "event.opfor", error, shown);
+  }
+  refresh();
+  return { ok: true, message: "Named. They are off the event's roll.", stamp: Date.now() };
+}
+
+/** Take a member off the opposing force, or say whether they lead it. */
+export async function changeOpforMember(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  const member = uuid(formData.get("member"));
+  const change = formData.get("change");
+  if (!id || !member || (change !== "remove" && change !== "lead" && change !== "follow")) return notThisPage(session, "event.opfor");
+
+  const row = session.supabase.from("event_opfor_members");
+  const { data, error } =
+    change === "remove"
+      ? await row.delete().eq("event_id", id).eq("member_id", member).select("member_id")
+      : await row.update({ leads: change === "lead" }).eq("event_id", id).eq("member_id", member).select("member_id");
+  if (error) return failed(session, "event.opfor", error, explainRefusal(error, OPFOR_IS_COMMANDS));
+  if (!data || data.length === 0) return notYours(session, "event.opfor", OPFOR_IS_COMMANDS);
+  refresh();
+  return { ok: true, message: change === "remove" ? "Taken off. They can reply to the event again." : "Saved." };
 }
 
 /** Delete a draft that will not be used. */

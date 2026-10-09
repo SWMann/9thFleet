@@ -243,6 +243,7 @@ export const sheets: Sheet[] = [
       { key: "run_by", label: "Usually run by", kind: "text", max: 80, hint: "Shown to whoever drafts one: Training team." },
       { key: "example", label: "Such as", kind: "text", max: 200, hint: "An example, shown to whoever drafts one." },
       { key: "instructors_may_draft", label: "Instructors may draft it, as well as command", kind: "yes-no" },
+      { key: "needs_approval", label: "A draft by anyone but command needs command's approval before it is announced", kind: "yes-no" },
       {
         key: "default_duration_minutes",
         label: "Usual length, in minutes",

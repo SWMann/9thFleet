@@ -22,6 +22,9 @@ import {
   CopyButton,
   GivePlace,
   MoveForms,
+  OpforAddForm,
+  OpforMemberButtons,
+  OpforPlanForm,
   PlaceForm,
   RemoveStandIn,
   ReplyForm,
@@ -255,7 +258,17 @@ async function Event({ params }: { params: Props["params"] }) {
             </div>
           ) : null}
         </dl>
-        {mayCopy ? <CopyButton id={event.id} /> : null}
+        {event.state === "announced" || mayCopy ? (
+          <div className="glance-actions">
+            {/* A file, not a page: the browser saves it, so it is a plain link. A draft's date is not settled, so it has none. */}
+            {event.state === "announced" ? (
+              <a className="button button-quiet" href={`/operations/${event.id}/calendar`} download>
+                Add to calendar
+              </a>
+            ) : null}
+            {mayCopy ? <CopyButton id={event.id} /> : null}
+          </div>
+        ) : null}
       </section>
 
       {manning ? (
@@ -293,6 +306,9 @@ async function Event({ params }: { params: Props["params"] }) {
             title={event.title}
             editHref={edits ? `/operations/${event.id}/edit` : null}
             mayCancel={runs || event.state === "draft"}
+            approval={event.approval}
+            needsApproval={event.needsApproval}
+            isCommand={result.isCommand}
           />
           {runs && event.state === "announced" ? (
             <div className="amend">
@@ -308,6 +324,8 @@ async function Event({ params }: { params: Props["params"] }) {
           ) : null}
         </section>
       ) : null}
+
+      {result.opfor ? <OpposingForce result={result} open={open} /> : null}
 
       <section className="wrap band" aria-labelledby="orders">
         <h2 id="orders">
@@ -681,8 +699,86 @@ function PlanAfter({ section, result }: { section: ParagraphKey; result: Ready }
   return null;
 }
 
+/**
+ * The opposing force, for the only people who are shown it: command, and the
+ * members on it. Command names its members. Command and whoever leads it write its plan.
+ */
+function OpposingForce({ result, open }: { result: Ready; open: boolean }) {
+  const { event } = result;
+  const opfor = result.opfor!;
+  return (
+    <section className="wrap band" aria-labelledby="opfor">
+      <h2 id="opfor">
+        Opposing <strong>force</strong>
+      </h2>
+      <p className="intro">
+        {opfor.mine ? "You are on the opposing force for this event. " : ""}
+        Only command and the members of the opposing force can see this. The side being exercised sees neither the plan
+        nor who is on it, and that includes the event&apos;s commander.
+      </p>
+      <div className="unit-group">
+        <h3 className="unit-group-name">Who is on it</h3>
+        {opfor.members.length > 0 ? (
+          <ul className="opfor-roll">
+            {opfor.members.map((entry) => (
+              <li key={entry.person.id}>
+                <span>
+                  {named(entry.person, "")}
+                  {entry.leads ? <span className="chip chip-gold">Leads</span> : null}
+                  {entry.person.id === result.member.id ? <span className="tag tag-you">You</span> : null}
+                </span>
+                {opfor.names && open ? (
+                  <OpforMemberButtons id={event.id} member={entry.person.id} name={entry.person.name} leads={entry.leads} />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="roll-note">Nobody has been named yet.</p>
+        )}
+        {opfor.names && open ? (
+          <>
+            <p className="roll-note">
+              Naming a member takes them off this event&apos;s roll. Whoever leads the opposing force can write its plan.
+            </p>
+            <OpforAddForm id={event.id} candidates={opfor.candidates} />
+          </>
+        ) : null}
+      </div>
+      <div className="unit-group">
+        <h3 className="unit-group-name">Its plan</h3>
+        {opfor.writes && open ? (
+          <OpforPlanForm id={event.id} plan={opfor.plan} />
+        ) : opfor.plan ? (
+          <div className="orders">
+            <div className="order">
+              <p className="order-text">{opfor.plan}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="roll-note">No plan has been written yet.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function YourReply({ result }: { result: Ready }) {
   const { event, mine, roll } = result;
+  // Someone on the opposing force is not on the roll.
+  if (result.opfor?.mine) {
+    return (
+      <section className="wrap band" aria-labelledby="reply">
+        <h2 id="reply">
+          Your <strong>reply</strong>
+        </h2>
+        <p className="intro">
+          You are on the opposing force for this event, so you are not on its roll and have nothing to reply to. Whoever
+          makes the attendance return records that you were there.
+        </p>
+      </section>
+    );
+  }
   const closes = event.rollClosesAt ? formatWhen(event.rollClosesAt) : null;
   const standingIn =
     roll.groups.flatMap((group) => group.posts).find((post) => post.id === mine.standInFor) ??

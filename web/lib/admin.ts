@@ -153,6 +153,7 @@ export type Fleet = {
     commander_id: string | null;
     roll_closes_at: string | null;
     minimum_attending: number | null;
+    approval: "not_asked" | "asked" | "approved";
   }[];
   attendance: {
     event_id: string;
@@ -198,7 +199,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
         .order("submitted_at", { ascending: false }),
       supabase
         .from("events")
-        .select("id, kind, title, starts_at, state, commander_id, roll_closes_at, minimum_attending")
+        .select("id, kind, title, starts_at, state, commander_id, roll_closes_at, minimum_attending, approval")
         .order("starts_at", { ascending: true }),
       supabase.from("attendance").select("event_id, member_id, reply, stand_in_position_id, event_post_id, place, replied_at"),
       supabase.from("attendance_returns").select("event_id, member_id, returned"),
@@ -552,6 +553,8 @@ export type EventFigures = {
   report: "on time" | "late" | "overdue" | "not due" | null;
   /** Whether it has the people it needs. Null unless it is announced and sets a minimum or marks a post. */
   manning: Manning | null;
+  /** A draft whose author has asked command to approve it. */
+  awaitingApproval: boolean;
 };
 
 export function operations(fleet: Fleet) {
@@ -615,6 +618,7 @@ export function operations(fleet: Fleet) {
       notAttending: lines.filter((line) => line.reply === "not_attending").length,
       standIns: lines.filter((line) => line.stand_in_position_id || line.event_post_id).length,
       manning,
+      awaitingApproval: event.state === "draft" && event.approval === "asked",
       present: marks.filter((line) => line.returned === "present").length,
       absentWithNotice: marks.filter((line) => line.returned === "absent_with_notice").length,
       absentWithoutNotice: marks.filter((line) => line.returned === "absent_without_notice").length,
@@ -717,6 +721,13 @@ export function attention(fleet: Fleet, tier: Tier): Attention[] {
         list.push({
           what: `${event.title} has started and is not closed`,
           detail: "Whoever ran it makes the attendance return, which closes it.",
+          href: `/operations/${event.id}`,
+        });
+      }
+      if (event.awaitingApproval) {
+        list.push({
+          what: `${event.title} is waiting for command's approval`,
+          detail: "Its type needs approval before it is announced. Approve it from its page.",
           href: `/operations/${event.id}`,
         });
       }

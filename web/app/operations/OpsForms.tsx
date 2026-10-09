@@ -6,6 +6,7 @@ import {
   returnedNames,
   serviceNames,
   weapons,
+  type Approval,
   type EventType,
   type Reply,
   type Returned,
@@ -14,6 +15,8 @@ import {
 } from "@/lib/operations-form";
 import {
   addExtraPosts,
+  addOpforMember,
+  changeOpforMember,
   copyEvent,
   createEvent,
   fileReport,
@@ -22,8 +25,10 @@ import {
   removeExtraPost,
   replyToEvent,
   saveKeyPosts,
+  saveOpforPlan,
   saveOrders,
   saveUnits,
+  setApproval,
   setPlace,
   setStandIn,
   updateEvent,
@@ -544,6 +549,9 @@ export function MoveForms({
   title,
   editHref,
   mayCancel,
+  approval,
+  needsApproval,
+  isCommand,
 }: {
   id: string;
   state: "draft" | "announced";
@@ -551,8 +559,24 @@ export function MoveForms({
   /** The page for changing the details and orders, for someone who may. */
   editHref: string | null;
   mayCancel: boolean;
+  /** Where the draft stands with command, and whether its type asks for approval at all. */
+  approval: Approval;
+  needsApproval: boolean;
+  isCommand: boolean;
 }) {
   const [result, action, pending] = useActionState(moveEvent, untouched);
+  const [asked, ask, asking] = useActionState(setApproval, untouched);
+  // A type that needs approval is announced by command, or by anyone once command has approved the draft.
+  const waits = state === "draft" && needsApproval && approval !== "approved";
+  const approve = (value: Approval, words: string, quiet = true) => (
+    <form action={ask}>
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="approval" value={value} />
+      <button className={quiet ? "button button-quiet" : "button"} type="submit" disabled={asking}>
+        {words}
+      </button>
+    </form>
+  );
   return (
     <div className="decisions">
       {editHref ? (
@@ -560,7 +584,27 @@ export function MoveForms({
           Change the details and orders
         </Link>
       ) : null}
-      {state === "draft" ? (
+      {waits && !isCommand ? (
+        approval === "asked" ? (
+          <>
+            <p className="decisions-note">Waiting for command&apos;s approval. It can be announced once command has approved it.</p>
+            {approve("not_asked", "Take the request back")}
+          </>
+        ) : (
+          <>
+            <p className="decisions-note">This type of event needs command&apos;s approval before it is announced.</p>
+            {approve("asked", "Ask command to approve it", false)}
+          </>
+        )
+      ) : null}
+      {waits && isCommand ? approve("approved", "Approve it") : null}
+      {state === "draft" && needsApproval && approval === "approved" ? (
+        <>
+          <p className="decisions-note">Command has approved this draft.</p>
+          {isCommand ? approve("not_asked", "Take the approval back") : null}
+        </>
+      ) : null}
+      {state === "draft" && !(waits && !isCommand) ? (
         <details className="confirm">
           <summary className="button">Announce</summary>
           <form action={action} className="confirm-body">
@@ -587,7 +631,88 @@ export function MoveForms({
         </details>
       ) : null}
       <Result result={result} />
+      <Result result={asked} />
     </div>
+  );
+}
+
+/** The opposing force's plan, for command and whoever leads it. */
+export function OpforPlanForm({ id, plan }: { id: string; plan: string }) {
+  const [result, action, pending] = useActionState(saveOpforPlan, untouched);
+  return (
+    <form action={action} className="fields fields-wide" key={result.stamp ?? 0}>
+      <input type="hidden" name="id" value={id} />
+      <div className="field">
+        <label htmlFor="opfor_plan">The opposing force&apos;s plan</label>
+        <p className="hint" id="opfor_plan_hint">
+          What the opposing force is to do, where and when. Only command and its members can read it.
+        </p>
+        <textarea
+          id="opfor_plan"
+          name="plan"
+          rows={6}
+          maxLength={6000}
+          defaultValue={result.values?.plan ?? plan}
+          aria-describedby="opfor_plan_hint"
+        />
+      </div>
+      <div className="form-end">
+        <button className="button button-quiet" type="submit" disabled={pending}>
+          {pending ? "Saving" : "Save the plan"}
+        </button>
+        <Result result={result} />
+      </div>
+    </form>
+  );
+}
+
+/** For command: name a member to the opposing force. */
+export function OpforAddForm({ id, candidates }: { id: string; candidates: Named[] }) {
+  const [result, action, pending] = useActionState(addOpforMember, untouched);
+  return (
+    <form action={action} className="stand-in opfor-add" key={result.stamp ?? 0}>
+      <input type="hidden" name="id" value={id} />
+      <label className="visually-hidden" htmlFor="opfor_member">
+        Name to the opposing force
+      </label>
+      <select id="opfor_member" name="member" defaultValue="" required>
+        <option value="" disabled>
+          Choose a member
+        </option>
+        {candidates.map((person) => (
+          <option key={person.id} value={person.id}>
+            {label(person)}
+          </option>
+        ))}
+      </select>
+      <label className="opfor-leads">
+        <input type="checkbox" name="leads" />
+        <span>Leads it</span>
+      </label>
+      <button className="button button-small" type="submit" disabled={pending}>
+        Name to the opposing force
+      </button>
+      {result.message ? <Result result={result} /> : null}
+    </form>
+  );
+}
+
+/** For command: take a member off the opposing force, or say whether they lead it. */
+export function OpforMemberButtons({ id, member, name, leads }: { id: string; member: string; name: string; leads: boolean }) {
+  const [result, action, pending] = useActionState(changeOpforMember, untouched);
+  return (
+    <form action={action} className="stand-in">
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="member" value={member} />
+      <button className="link-button" type="submit" name="change" value={leads ? "follow" : "lead"} disabled={pending}>
+        {leads ? "No longer leads" : "Make lead"}
+        <span className="visually-hidden">: {name}</span>
+      </button>
+      <button className="link-button" type="submit" name="change" value="remove" disabled={pending}>
+        Take off<span className="visually-hidden"> {name}</span>
+      </button>
+      {result.message ? <Result result={result} /> : null}
+    </form>
   );
 }
 

@@ -5,6 +5,7 @@ import {
   offsetFrom,
   sectionsFrom,
   serviceNames,
+  type Approval,
   type EventState,
   type Outcome,
   type EventType,
@@ -53,6 +54,7 @@ type EventRow = {
   area: string;
   reading: string[] | null;
   teaches_qualification_id: string | null;
+  approval: Approval;
 };
 type AttendanceRow = {
   event_id: string;
@@ -75,7 +77,7 @@ type ExtraPostRow = {
 type RosterRow = { member_id: string; character_name: string | null; rank_name: string | null; status: string };
 
 const EVENT =
-  "id, kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, state, created_by, announced_at, roll_closes_at, copied_from, repeats_weekly, open_to_recruits, open_to_service, requires_qualification_id, places, minimum_attending, muster_at, area, reading, teaches_qualification_id";
+  "id, kind, title, summary, starts_at, duration_minutes, commander_id, second_id, observer_id, weapons_state, pve_fallback, state, created_by, announced_at, roll_closes_at, copied_from, repeats_weekly, open_to_recruits, open_to_service, requires_qualification_id, places, minimum_attending, muster_at, area, reading, teaches_qualification_id, approval";
 const ATTENDANCE = "event_id, member_id, reply, stand_in_position_id, event_post_id, place, replied_at";
 const EXTRA_POST = "id, event_id, title, role_id, must_fill, open_to_volunteers, sort_order";
 const SERVING = ["recruit", "auxiliary", "member", "reserve"];
@@ -116,6 +118,9 @@ export type FleetEvent = {
   reading: string[];
   /** The qualification it teaches, which an instructor signs off for those who pass. */
   teaches: { id: string; name: string } | null;
+  /** Where the draft stands with command, and whether its type asks for command's approval at all. */
+  approval: Approval;
+  needsApproval: boolean;
 };
 
 /** One primary post on the night: who holds it, whether they are coming, and who stands in if not. */
@@ -204,6 +209,7 @@ export async function readEventTypes(supabase: Client): Promise<EventType[]> {
       runBy: (row.run_by as string) ?? "",
       example: (row.example as string) ?? "",
       instructorsMayDraft: row.instructors_may_draft === true,
+      needsApproval: row.needs_approval === true,
       defaultDuration: Number(row.default_duration_minutes ?? 120),
       defaultWeaponsState: (row.default_weapons_state as WeaponsState | null) ?? null,
       sections: sectionsFrom((key, part) => row[`${key}_${part}`] as string | null),
@@ -298,6 +304,8 @@ function toEvent(
     teaches: row.teaches_qualification_id
       ? { id: row.teaches_qualification_id, name: qualifications.get(row.teaches_qualification_id) ?? "A qualification" }
       : null,
+    approval: row.approval ?? "not_asked",
+    needsApproval: types.find((type) => type.key === row.kind)?.needsApproval === true,
   };
 }
 
@@ -567,6 +575,23 @@ export type ReportRecords = {
   mentions: { id: string; person: Person; citation: string }[];
 };
 
+/**
+ * An event's opposing force, for the people allowed to see it: command, and
+ * the members on it. For everyone else there is nothing here at all.
+ */
+export type Opfor = {
+  plan: string;
+  members: { person: Person; leads: boolean }[];
+  /** This member is on it. */
+  mine: boolean;
+  /** This member may write its plan: command, or whoever leads it. */
+  writes: boolean;
+  /** This member says who is on it: command. */
+  names: boolean;
+  /** Serving members who could be named: not on it already, and not running the event. */
+  candidates: Person[];
+};
+
 /** For an instructor, at an event that teaches a qualification: who can be signed off. */
 export type SignOff = {
   qualification: { id: string; name: string };
@@ -641,6 +666,10 @@ export type Operation =
       signOff: SignOff | null;
       /** Everyone who was there, for whoever writes the report to mention. Empty for anyone else. */
       present: Person[];
+      /** The opposing force, if this member may see it. Command sees an empty one, to set it up. */
+      opfor: Opfor | null;
+      /** Whether this member is command, who approves drafts. */
+      isCommand: boolean;
     };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -657,7 +686,7 @@ export async function getOperation(id: string): Promise<Operation> {
   const [
     found, orders, lines, marks, report, roster, units, keyPosts, extraPosts, awards, roleRows, areaRows,
     objectives, elements, timings, ships, nets, amendments, acknowledgements,
-    outcomes, losses, mentions, passes,
+    outcomes, losses, mentions, passes, opforPlan, opforMembers,
     battle, types, qualifications,
   ] = await Promise.all([
       supabase.from("events").select(EVENT).eq("id", id).maybeSingle(),
@@ -693,6 +722,9 @@ export async function getOperation(id: string): Promise<Operation> {
       supabase.from("event_losses").select("id, item, quantity, note, recorded_at").eq("event_id", id),
       supabase.from("event_mentions").select("id, member_id, citation, mentioned_at").eq("event_id", id),
       supabase.from("qualification_awards").select("member_id").eq("event_id", id),
+      // The database returns these to command and to the members of the opposing force, and to nobody else.
+      supabase.from("event_opfor").select("plan").eq("event_id", id).maybeSingle(),
+      supabase.from("event_opfor_members").select("member_id, leads").eq("event_id", id),
       getOrderOfBattle(),
       readEventTypes(supabase),
       readQualifications(supabase),
@@ -700,7 +732,7 @@ export async function getOperation(id: string): Promise<Operation> {
   for (const result of [
     found, orders, lines, marks, report, roster, units, keyPosts, extraPosts, awards, roleRows, areaRows,
     objectives, elements, timings, ships, nets, amendments, acknowledgements,
-    outcomes, losses, mentions, passes,
+    outcomes, losses, mentions, passes, opforPlan, opforMembers,
   ]) {
     if (result.error) throw new Error(`The event could not be read: ${result.error.message}`);
   }
@@ -770,6 +802,11 @@ export async function getOperation(id: string): Promise<Operation> {
     for (const [memberId, value] of returned) {
       const person = nameOf(people.get(memberId), memberId);
       if (person && !toReturn.has(memberId)) toReturn.set(memberId, { person, reply: null, returned: value });
+    }
+    // The opposing force is not on the roll, and was there all the same. Only someone who may see it is given it.
+    for (const entry of (opforMembers.data ?? []) as { member_id: string }[]) {
+      const person = nameOf(people.get(entry.member_id), entry.member_id);
+      if (person && !toReturn.has(person.id)) toReturn.set(person.id, { person, reply: null, returned: returned.get(person.id) ?? null });
     }
   }
 
@@ -844,6 +881,30 @@ export async function getOperation(id: string): Promise<Operation> {
       candidates: present.filter((person) => person.id !== member.id).map((person) => ({ person, holds: holds.has(person.id) })),
     };
   }
+
+  // The opposing force. Command sets it up, so sees it even when it is empty. Its members see it once they are on it.
+  const command = isCommand(member);
+  const onIt = ((opforMembers.data ?? []) as { member_id: string; leads: boolean }[]).sort(
+    (a, b) => Number(b.leads) - Number(a.leads) || (people.get(a.member_id)?.character_name ?? "").localeCompare(people.get(b.member_id)?.character_name ?? ""),
+  );
+  const myPlace = onIt.find((entry) => entry.member_id === member.id);
+  const opfor: Opfor | null =
+    command || myPlace
+      ? {
+          plan: (opforPlan.data?.plan as string | undefined) ?? "",
+          members: onIt.map((entry) => ({ person: nameOf(people.get(entry.member_id), entry.member_id)!, leads: entry.leads })),
+          mine: Boolean(myPlace),
+          writes: command || myPlace?.leads === true,
+          names: command,
+          candidates: command
+            ? rosterRows
+                .filter((entry) => SERVING.includes(entry.status))
+                .filter((entry) => ![row.commander_id, row.second_id].includes(entry.member_id) && !onIt.some((on) => on.member_id === entry.member_id))
+                .map((entry) => nameOf(entry, entry.member_id)!)
+                .sort((a, b) => a.name.localeCompare(b.name))
+            : [],
+        }
+      : null;
 
   const records: ReportRecords = {
     outcomes: Object.fromEntries(
@@ -931,6 +992,8 @@ export async function getOperation(id: string): Promise<Operation> {
     signOff,
     // Whoever writes the report mentions someone who was there, and never themselves.
     present: runs ? present.filter((person) => person.id !== member.id) : [],
+    opfor,
+    isCommand: command,
   };
 }
 

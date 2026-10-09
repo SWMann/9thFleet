@@ -91,7 +91,8 @@ const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
   operations: [
     "events", "event_orders", "event_units", "event_key_posts", "event_posts", "event_objectives", "event_elements",
     "event_timings", "event_ships", "event_nets", "event_amendments", "event_acknowledgements", "attendance",
-    "attendance_returns", "after_action_reports", "event_objective_outcomes", "event_losses",
+    "attendance_returns", "after_action_reports", "event_objective_outcomes", "event_losses", "event_opfor",
+    "event_opfor_members",
   ],
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
@@ -578,6 +579,11 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
         if (now.state === "cancelled") return line("operations", `${actor} cancelled ${title}`);
         if (now.state === "done") return line("operations", `${actor} closed ${title}`);
       }
+      if (changed("approval")) {
+        if (now.approval === "approved") return line("operations", `${actor} approved ${title}`);
+        if (now.approval === "asked") return line("operations", `${actor} asked command to approve ${title}`);
+        return line("operations", was.approval === "approved" ? `${actor} took back the approval of ${title}` : `${actor} took back the request to approve ${title}`);
+      }
       if (changed("repeats_weekly") && Object.keys(now).filter((key) => changed(key) && !QUIET.has(key)).length === 1) {
         return line("operations", now.repeats_weekly === true ? `${actor} set ${title} to repeat weekly` : `${actor} stopped ${title} repeating weekly`);
       }
@@ -646,6 +652,22 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       if (row.action === "insert") return line("personnel", `${actor} mentioned ${subject} in the report of ${event}`, String(now.citation ?? ""));
       if (row.action === "delete") return line("personnel", `${actor} withdrew ${whose} mention in the report of ${event}`);
       return line("personnel", `${actor} corrected ${whose} mention in the report of ${event}`, String(now.citation ?? ""));
+    }
+
+    case "event_opfor": {
+      const event = names.event(any.event_id);
+      if (row.action === "delete") return line("operations", `${actor} removed the opposing force's plan for ${event}`);
+      // What the plan says is not put in the log's sentence. The record itself holds it.
+      return line("operations", `${actor} wrote the opposing force's plan for ${event}`);
+    }
+
+    case "event_opfor_members": {
+      const event = names.event(any.event_id);
+      if (row.action === "insert") {
+        return line("operations", `${actor} named ${subject} to the opposing force of ${event}${now.leads === true ? ", to lead it" : ""}`);
+      }
+      if (row.action === "delete") return line("operations", `${actor} took ${subject} off the opposing force of ${event}`);
+      return line("operations", now.leads === true ? `${actor} made ${subject} lead the opposing force of ${event}` : `${actor} said ${subject} no longer leads the opposing force of ${event}`);
     }
 
     case "event_units": {

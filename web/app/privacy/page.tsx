@@ -101,7 +101,10 @@ export default function PrivacyPage() {
           </div>
           <div>
             <dt>The serving fleet</dt>
-            <dd>Each other&apos;s names, ranks, posts and qualifications, the events, and who said they are attending.</dd>
+            <dd>
+              Each other&apos;s names, ranks, posts and qualifications, the events, who said they are attending, and who is
+              mentioned in an event&apos;s report.
+            </dd>
           </div>
           <div>
             <dt>Staff and command</dt>
@@ -112,7 +115,18 @@ export default function PrivacyPage() {
           </div>
           <div>
             <dt>Whoever ran an event</dt>
-            <dd>Who attended it and who was absent.</dd>
+            <dd>Who attended it and who was absent, and who has acknowledged a change to its orders.</dd>
+          </div>
+          <div>
+            <dt>Command and an opposing force</dt>
+            <dd>Who is on an exercise&apos;s opposing force, and its plan. Nobody else is shown either.</dd>
+          </div>
+          <div>
+            <dt>The fleet&apos;s Discord channel</dt>
+            <dd>
+              When an event is announced: its type, its title, when it starts and a link to it. Nobody&apos;s name is in the
+              post, and the orders stay on this site.
+            </dd>
           </div>
           <div>
             <dt>Admins</dt>
@@ -128,7 +142,7 @@ export default function PrivacyPage() {
         <div className="prose">
           <p>
             Ask the fleet&apos;s staff to delete your record. That removes your account details, applications, appointments,
-            qualifications, your lines on every roll and your lines in the activity log. The log of changes keeps a line saying that
+            qualifications, mentions, your lines on every roll and your lines in the activity log. The log of changes keeps a line saying that
             something changed and when, with what it held about you blanked.
           </p>
           <p>You can also ask to see what is held about you, or to have a mistake put right.</p>
