@@ -23,9 +23,10 @@ Then open http://localhost:3000.
 | `npm run typecheck` | Types |
 | `npm run lint` | Code style and common mistakes |
 | `npm run build` | That every page builds |
+| `npm test` | The format of formatted text, with no browser: what is written reads back the same, and nothing that could run is kept |
 | `npm run e2e` | The whole site in a real browser: signing in, the member pages, applying and the staff pages. Run `npm run build` first |
 
-GitHub runs all four on every push that touches `web/` or the database migrations.
+GitHub runs all five on every push that touches `web/` or the database migrations.
 
 The browser tests do not touch Discord or the live database. They need a browser:
 `npx playwright-core install chromium`. There are two, and they use different stand-ins for Supabase:
@@ -150,6 +151,45 @@ area, a unit or a post is written in the code.
 - **A picture is chosen from the ones the site has.** A new picture still has to be added to
   `lib/pictures.ts` with its credit.
 
+## Formatted text
+
+The long text fields take formatting: an event's orders, tasks, amendments, report and opposing-force
+plan, application answers, interview notes, and the short descriptions in the editors. A field's
+words are kept as Markdown in the same column that held plain text, so nothing written before had
+to change.
+
+- **The format** is in `lib/rich/format.ts`. It is a small Markdown with three things of the fleet's
+  own: a mention of a member, unit or post, a call-out box, and a time in UTC that each reader also
+  sees in their own time. It has no pictures, no HTML, no tables and no code blocks.
+- **Reading and writing it** is `lib/rich/markdown.ts`. Whatever is not part of the format is kept as
+  the words that were typed. An address that is not a page of this site, a web page or an email
+  address is never kept as a link.
+- **Reading never fails.** Text nested deeper than anyone writes by hand, or anything else the reader
+  stumbles on, is read as its plain words. Lists and quotes inside one another are kept to six deep.
+- **Showing it** is `components/rich/Rich.tsx`. Every element on the page is one that file chose to
+  draw. Nothing a writer typed is ever put on the page as HTML. Use `Rich` for a block of text and
+  `RichLine` for text that sits in a line of the page, such as a role's summary. Where formatting
+  cannot be shown, such as a log line or a page's description, use `plainText`.
+- **Editing it** is `components/rich/RichField.tsx`. It starts as the plain field, which works with
+  no scripts, and the editor takes its place once it has loaded. The plain field stays in the form
+  and is kept in step, so a form's action reads the same thing either way. Give it `line` for a
+  short description: bold, italic and links, and nothing that makes a block.
+- **The editor never costs a field its words.** If it cannot show every word the field held, or
+  fails, it steps aside and the plain field carries on. A field that is only looked at is left
+  exactly as it was stored. The conversion to and from the editor's own document is
+  `lib/rich/doc.ts`.
+- **What an editor offers on a page**, beyond formatting, comes from `RichSourcesProvider`: who can
+  be named with @, and what the / menu can drop in. A page with no provider offers formatting only.
+  Mentions are offered on members' pages and never on a page a visitor can read. Where a page
+  gives `Rich` the serving members, someone named is shown by the fleet's record of their name,
+  whatever was typed.
+
+A field kept as a list, one thing to a line, stays plain: a role's duties, what a unit brings, and
+what to read.
+
+To give another field formatting: use `RichField` in its form, show its text with `Rich` or
+`RichLine`, and add its column to `FORMATTED` in `lib/logs.ts`.
+
 ## Logging
 
 Everything that goes into the site is written down, and admins read it on one page, `/admin/logs`.
@@ -212,6 +252,7 @@ to be tracked.
 | Which role opens which admin page | `lib/admin.ts` and the list of tabs in `components/admin/AdminHead.tsx` |
 | How a line in the logs reads | `lib/logs.ts`, and the names of things people try in `lib/activity.ts` |
 | The picture and colour of each type of log line | `lookIcons` in `app/admin/logs/page.tsx`, and the `log-kind-` colours in `app/globals.css`. The type's name is always written beside them |
+| Formatted text: its format, how it is shown and how it is edited | `lib/rich/` and `components/rich/`. See Formatted text above |
 | The site's icons, and the symbol for each kind of unit | `components/Icon.tsx` and `components/UnitSymbol.tsx`. An icon goes with words and never stands in for them |
 | What the site says it records | `app/privacy/page.tsx` |
 | The menu | `lib/menu.ts` |

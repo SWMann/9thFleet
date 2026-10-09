@@ -170,6 +170,8 @@ export type PlanField = {
    * A member is chosen from a list the page provides, and is set once.
    */
   kind: "text" | "long" | "time" | "number" | "member";
+  /** For a long text that sits in a line of the page: bold, italic and links, and nothing that makes a block. */
+  line?: boolean;
   /** The longest a text can be, or the largest a number can be. */
   max: number;
   required?: boolean;
@@ -285,7 +287,7 @@ export const planParts: PlanPart[] = [
     ordered: false,
     fields: [
       { key: "member_id", label: "Member", kind: "member", max: 36, required: true },
-      { key: "citation", label: "For what", kind: "long", max: 300, required: true, hint: "One or two sentences on what they did." },
+      { key: "citation", label: "For what", kind: "long", line: true, max: 300, required: true, hint: "One or two sentences on what they did." },
     ],
   },
 ];

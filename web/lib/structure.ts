@@ -35,7 +35,8 @@ export type FieldSpec =
   | (Common & { kind: "text"; max: number })
   /** An address: lower-case words joined by hyphens. Up to 60 characters unless it says otherwise. */
   | (Common & { kind: "slug"; max?: number })
-  | (Common & { kind: "long"; max: number; rows: number })
+  /** Longer text. With `rich` it can have bold, italic and links, and is shown in a line of the page. A list kept one to a line stays plain. */
+  | (Common & { kind: "long"; max: number; rows: number; rich?: boolean })
   /** A list, one entry to a line. */
   | (Common & { kind: "lines"; most: number })
   | (Common & { kind: "number"; min: number; max: number })
@@ -74,6 +75,7 @@ const section = (key: string, number: number, name: string, holds: string): Fiel
     key: `${key}_holds`,
     label: `What section ${number} holds`,
     kind: "long",
+    rich: true,
     max: 300,
     rows: 2,
     hint: `Shown under the heading to whoever writes it. Leave it empty to keep Volume 2's: ${holds}`,
@@ -135,7 +137,7 @@ export const sheets: Sheet[] = [
         options: areaPictures.map((name) => ({ value: name, label: pictureNames[name] ?? name })),
         hint: "One of the pictures the site already has.",
       },
-      { key: "about", label: "About", kind: "long", max: 600, rows: 3, hint: "One or two sentences on what the area is." },
+      { key: "about", label: "About", kind: "long", rich: true, max: 600, rows: 3, hint: "One or two sentences on what the area is." },
       { key: "planned_stage", label: "Planned for stage", kind: "number", min: 1, max: 9, hint: "For an area with no posts yet: the stage it opens at." },
       { key: "planned_size", label: "Planned size", kind: "text", max: 60, hint: "For an area with no posts yet: \"12 posts\", or the service that mans it." },
       reading("Sections of the manual for this area, one to a line, as volume/section: organisation/navy-squadron."),
@@ -169,7 +171,7 @@ export const sheets: Sheet[] = [
         ],
         hint: "It cannot change while the role has posts.",
       },
-      { key: "summary", label: "Summary", kind: "long", max: 300, rows: 2, hint: "One or two sentences on what the role is. It heads the role's page." },
+      { key: "summary", label: "Summary", kind: "long", rich: true, max: 300, rows: 2, hint: "One or two sentences on what the role is. It heads the role's page." },
       { key: "duties", label: "What the role does", kind: "long", max: 4000, rows: 6, hint: "One duty to a line. Leave it empty until it is written." },
       reading("Sections of the manual for this role, on top of its area's. One to a line, as volume/section."),
       { key: "next_role_id", label: "Leads to", kind: "record", source: "roles", hint: "The role a holder moves on to. Leave it empty if there is none." },
@@ -249,7 +251,7 @@ export const sheets: Sheet[] = [
     fields: [
       { key: "name", label: "Name", kind: "text", max: 60, required: true },
       { key: "code", label: "Code", kind: "slug", required: true, onlyWhenNew: true, hint: "A short name for it that never changes: net-controller." },
-      { key: "description", label: "What it means", kind: "long", max: 400, rows: 2, hint: "One sentence on what its holder has shown they can do." },
+      { key: "description", label: "What it means", kind: "long", rich: true, max: 400, rows: 2, hint: "One sentence on what its holder has shown they can do." },
     ],
   },
   {

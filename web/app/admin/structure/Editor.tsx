@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { RichField } from "@/components/rich/RichField";
 import type { EditRecord, Field, Option } from "@/lib/structure";
 import { removeRecord, saveNeeds, saveRecord, type EditResult } from "./actions";
 
@@ -108,7 +109,18 @@ function RecordForm({ sheet, fields, record }: { sheet: SheetInfo; fields: Field
               {field.required ? null : <span className="optional"> (optional)</span>}
             </label>
             {hint}
-            {field.kind === "long" || field.kind === "lines" ? (
+            {field.kind === "long" && field.rich ? (
+              <RichField
+                id={name}
+                name={field.key}
+                rows={field.rows}
+                maxLength={field.max}
+                defaultValue={held(field.key)}
+                required={field.required}
+                line
+                describedBy={described}
+              />
+            ) : field.kind === "long" || field.kind === "lines" ? (
               <textarea
                 id={name}
                 name={field.key}

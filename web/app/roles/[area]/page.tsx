@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { RichLine } from "@/components/rich/Rich";
+import { plainText } from "@/lib/rich/markdown";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Icon } from "@/components/Icon";
@@ -23,7 +25,7 @@ async function find(params: Props["params"]) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const found = await find(params);
   if (found.state !== "ready") return { title: "Roles" };
-  return { title: `${found.area.name}: roles`, description: found.area.about };
+  return { title: `${found.area.name}: roles`, description: plainText(found.area.about) };
 }
 
 export default function AreaPage({ params }: Props) {
@@ -55,7 +57,7 @@ async function Area({ params }: { params: Props["params"] }) {
           </p>
         }
         title={<strong>{area.name}</strong>}
-        lead={area.about}
+        lead={<RichLine text={area.about} />}
       />
 
       <section className="wrap band" aria-labelledby="roles">
@@ -79,7 +81,11 @@ async function Area({ params }: { params: Props["params"] }) {
                 <h3>
                   <Link href={`/roles/${area.slug}/${role.slug}`}>{role.name}</Link>
                 </h3>
-                {role.summary ? <p className="role-card-summary">{role.summary}</p> : null}
+                {role.summary ? (
+                  <p className="role-card-summary">
+                    <RichLine text={role.summary} />
+                  </p>
+                ) : null}
                 <Facts role={role} />
               </li>
             ))}

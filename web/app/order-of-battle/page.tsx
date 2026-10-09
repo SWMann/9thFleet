@@ -130,7 +130,7 @@ function Formation({ unit, level }: { unit: Unit; level: Level }) {
     <>
       <div className="formation">
         <div className="wrap">
-          <Title level={level} className="formation-name with-symbol">
+          <Title level={level} id={`unit-${unit.id}`} className="formation-name with-symbol">
             <UnitSymbol kind={unit.kind} size={20} />
             {unit.name}
           </Title>
@@ -155,7 +155,7 @@ function Band({ unit, level }: { unit: Unit; level: Level }) {
       {unit.posts.length > 0 ? <Posts posts={unit.posts} showAll={!unit.open} /> : null}
       {departments.map((department) => (
         <div className="unit-group" key={department.id}>
-          <Title level={deeper(level)} className="unit-group-name">
+          <Title level={deeper(level)} id={`unit-${department.id}`} className="unit-group-name">
             {department.name}
             {unit.open && !department.open ? (
               <span className="aside">Opens at stage {department.opensAtStage}</span>
@@ -271,7 +271,7 @@ function Posts({ posts, showAll }: { posts: Post[]; showAll: boolean }) {
 function PostLine({ post }: { post: Post }) {
   const details = [terms(post), post.entry ? "Entry post" : null, needs(post)].filter(Boolean).join(". ");
   return (
-    <li className={post.open ? "post" : "post post-later"}>
+    <li className={post.open ? "post" : "post post-later"} id={`post-${post.id}`}>
       <span className="post-title">{post.title}</span>
       <div className="post-holder">
         <Holders post={post} />
@@ -307,7 +307,8 @@ function Holders({ post }: { post: Post }) {
   return (
     <ul className="holders">
       {post.holders.map((holder) => (
-        <li key={holder.memberId}>
+        // A mention of a member leads to the post they hold, which is one post at most.
+        <li key={holder.memberId} id={post.kind === "primary" ? `member-${holder.memberId}` : undefined}>
           {nameOf(holder)}
           {holder.you ? <span className="tag tag-you">You</span> : null}
         </li>

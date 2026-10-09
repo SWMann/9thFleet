@@ -6432,3 +6432,465 @@ fieldset.pane > legend + * {
     padding: 8px 12px 9px;
   }
 }
+
+/*
+ * Formatted text: what a long text field holds, as its reader sees it and as
+ * its writer edits it. The two share these rules, so the editor shows the
+ * words as they will be read.
+ */
+
+.rich {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.band .rich > *,
+.rich > * {
+  max-width: none;
+  margin: 0;
+}
+
+.band .rich > * + *,
+.rich > * + * {
+  margin-top: 0.7em;
+}
+
+.band .rich p,
+.band .rich li {
+  max-width: none;
+  color: inherit;
+}
+
+/* An answer or a note keeps its own softer colour. */
+.answers .rich,
+.rich.note-body {
+  color: var(--text-2);
+  white-space: normal;
+}
+
+.rich strong {
+  color: var(--white);
+  font-weight: 700;
+}
+
+.rich code {
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.09);
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.rich .rich-heading,
+.rich-input h2,
+.rich-input h3 {
+  color: var(--white);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.rich .rich-heading-1,
+.rich-input h2 {
+  font-size: 1.125rem;
+}
+
+.rich .rich-heading-2,
+.rich-input h3 {
+  color: var(--gold-text);
+  font-size: 0.875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rich * + .rich-heading,
+.rich-input * + h2,
+.rich-input * + h3 {
+  margin-top: 1.1em;
+}
+
+.rich ul,
+.rich ol {
+  padding-left: 1.4em;
+}
+
+.rich li + li,
+.rich li > ul,
+.rich li > ol {
+  margin-top: 0.25em;
+}
+
+.rich li > p {
+  margin: 0;
+}
+
+.rich li::marker {
+  color: var(--gold-text);
+}
+
+.rich blockquote {
+  padding: 0.1em 0 0.1em 0.9em;
+  border-left: 3px solid var(--seam-2);
+  color: var(--text-2);
+}
+
+.rich blockquote > * + *,
+.rich .callout > * + * {
+  margin-top: 0.5em;
+}
+
+.rich hr {
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--seam-2);
+}
+
+/* A box: a warning, a note or a codeword. Its kind is written at its head, beside a picture, so its colour is never the only sign. */
+.callout {
+  --box: #86b8f2;
+  --box-fill: rgb(60 110 170 / 0.16);
+  padding: 10px 14px 12px;
+  border: 1px solid var(--box);
+  border-left-width: 4px;
+  border-radius: 4px;
+  background: var(--box-fill);
+}
+
+.callout-warning {
+  --box: #f7a04e;
+  --box-fill: rgb(160 90 20 / 0.2);
+}
+
+.callout-codeword {
+  --box: #c9b3f5;
+  --box-fill: rgb(110 90 180 / 0.18);
+}
+
+.band .callout p,
+.callout p {
+  max-width: none;
+  margin: 0;
+}
+
+.band .callout .callout-label,
+.callout .callout-label,
+.rich-input .callout::before {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--box);
+  font-size: 0.78125rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* In the editor the label is drawn, not typed, so it cannot be changed by mistake. */
+.rich-input .callout::before {
+  content: attr(data-label);
+  margin-bottom: 0.4em;
+}
+
+/* A member, a unit or a post that is named. */
+.mention {
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  background: rgb(200 164 90 / 0.16);
+  color: var(--gold-bright);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+a.mention:hover {
+  background: rgb(200 164 90 / 0.3);
+  color: var(--white);
+}
+
+/* Whoever is reading, where they are named. */
+.mention-you {
+  background: var(--gold-fill);
+  color: var(--ink);
+}
+
+/* A time in UTC, and the reader's own time beside it. */
+.zulu {
+  border-bottom: 1px dotted var(--text-3);
+  white-space: nowrap;
+}
+
+.zulu-local {
+  color: var(--text-3);
+}
+
+/* Where a mention leads: the member, unit or post it names is picked out on the order of battle. */
+:target.post,
+.holders li:target,
+.unit-group-name:target,
+.formation-name:target,
+.band-title:target {
+  outline: 2px solid var(--gold);
+  outline-offset: 4px;
+}
+
+/* The field itself. Before the editor arrives it is the plain field it always was. */
+.rich-field textarea {
+  display: block;
+  width: 100%;
+  padding: 0.65em 0.8em;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 4px;
+  background: var(--deep);
+  color: var(--white);
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/* Once the editor has its place, the plain field stays in the form but is not shown. */
+.rich-field textarea[hidden],
+.field .rich-field textarea[hidden] {
+  display: none;
+}
+
+.rich-editor {
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 4px;
+  background: var(--deep);
+}
+
+.rich-editor:focus-within {
+  border-color: var(--gold);
+  outline: 2px solid var(--gold);
+  outline-offset: 0;
+}
+
+.rich-input {
+  padding: 0.65em 0.8em;
+  color: var(--white);
+  line-height: 1.5;
+  outline: none;
+}
+
+.rich-field-line .rich-input {
+  color: var(--white);
+}
+
+/* What an empty field says it can do, once it is the field in use. */
+.rich-input.ProseMirror-focused p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.rich-input a {
+  color: var(--gold-text);
+  cursor: text;
+}
+
+/* The bar of tools. It comes with the first use of a field, and steps back when the field is not the one in use. */
+.rich-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--seam-2);
+  border-radius: 4px 4px 0 0;
+  background: var(--panel-2);
+}
+
+.rich-editor:not(:focus-within) .rich-bar {
+  opacity: 0.55;
+}
+
+.rich-tools {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.rich-tools-end {
+  margin-left: auto;
+}
+
+.rich-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rich-tool:hover:not(:disabled) {
+  border-color: var(--seam-2);
+  background: rgb(255 255 255 / 0.07);
+  color: var(--white);
+}
+
+.rich-tool[aria-pressed="true"] {
+  border-color: var(--gold-fill);
+  background: var(--gold-fill);
+  color: var(--ink);
+}
+
+.rich-tool:disabled {
+  color: var(--text-3);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.rich-tool:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 1px;
+}
+
+.rich-tool-warning:not([aria-pressed="true"]) {
+  color: #f7a04e;
+}
+
+.rich-tool-note:not([aria-pressed="true"]) {
+  color: #86b8f2;
+}
+
+.rich-tool-codeword:not([aria-pressed="true"]) {
+  color: #c9b3f5;
+}
+
+.rich-tool-words {
+  padding: 0 12px;
+  border-color: var(--seam-2);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.rich-bar-link input,
+.field .rich-bar-link input {
+  flex: 1 1 14rem;
+  width: auto;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 4px;
+  background: var(--deep);
+  color: var(--white);
+  font: inherit;
+  font-size: 0.9375rem;
+}
+
+.band .rich-bar-note,
+.rich-bar-note {
+  flex-basis: 100%;
+  max-width: none;
+  margin: 0;
+  color: #ffd9d4;
+  font-size: 0.875rem;
+}
+
+.band .rich-count,
+.rich-count {
+  max-width: none;
+  margin: 0;
+  padding: 4px 10px 6px;
+  border-top: 1px solid var(--seam);
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  text-align: right;
+}
+
+.band .rich-count-over,
+.rich-count-over {
+  color: #ffd9d4;
+  font-weight: 600;
+}
+
+/* The list that opens under the cursor on @ or /. */
+.rich-menu {
+  z-index: 60;
+  width: min(22rem, calc(100vw - 24px));
+  max-height: min(20rem, 50vh);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--seam-2);
+  border-radius: 6px;
+  background: var(--panel-2);
+  box-shadow: 0 14px 40px rgb(0 0 0 / 0.55);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.9375rem;
+}
+
+.rich-menu p {
+  margin: 0;
+}
+
+.rich-menu-group {
+  padding: 8px 8px 4px;
+  color: var(--text-3);
+  font-size: 0.71875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.rich-menu-empty {
+  padding: 8px;
+  color: var(--text-3);
+}
+
+.rich-menu button {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rich-menu button[aria-selected="true"] {
+  background: var(--gold-fill);
+  color: var(--ink);
+}
+
+.rich-menu button .icon {
+  flex: none;
+  margin-top: 0.1em;
+}
+
+.rich-menu button span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.rich-menu small {
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.rich-menu button[aria-selected="true"] small {
+  color: var(--ink);
+}

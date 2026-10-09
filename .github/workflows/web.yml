@@ -33,6 +33,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm test
       - run: npm run build
       - name: Install a browser for the browser tests
         run: npx playwright-core install --with-deps chromium

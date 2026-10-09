@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { Icon } from "@/components/Icon";
+import { RichField } from "@/components/rich/RichField";
 import { levelIcons, levelName, taskLevels, type TaskLevel } from "@/lib/tasks";
 import { passTaskDown, removeUnitTask, saveUnitTask, type OpsResult } from "./actions";
 
@@ -78,14 +79,14 @@ export function TaskForm({
         <p className="hint" id={`task-${at}-body-hint`}>
           What the unit is to do, and in order to do what.
         </p>
-        <textarea
+        <RichField
           id={`task-${at}-body`}
           name="body"
           rows={4}
           maxLength={2000}
           required
           defaultValue={held("body", task?.body ?? "")}
-          aria-describedby={`task-${at}-body-hint`}
+          describedBy={`task-${at}-body-hint`}
         />
       </div>
 

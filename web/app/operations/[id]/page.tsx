@@ -5,6 +5,8 @@ import { Suspense } from "react";
 import { hasReading, ReadingList } from "@/components/manual/Reading";
 import { PageHead } from "@/components/PageHead";
 import { Pane, Panes } from "@/components/Pane";
+import { Rich, RichLine } from "@/components/rich/Rich";
+import { RichSourcesProvider } from "@/components/rich/RichSources";
 import { Icon } from "@/components/Icon";
 import { TabLink, TabPanel, Tabs, type TabSpec } from "@/components/Tabs";
 import { YourTime } from "@/components/YourTime";
@@ -129,6 +131,8 @@ async function Event({ params }: { params: Props["params"] }) {
   // Someone who may draft this type of event may draft another like it.
   const mayCopy = result.mayCreate.some((type) => type.key === event.kind);
   const when = formatWhen(event.startsAt);
+  // How formatted text is read here: a time in it is on the day of the event, and a mention of the reader stands out.
+  const shown = { day: event.startsAt, you: result.member.id, members: result.memberNames };
   const open = event.state === "draft" || event.state === "announced";
   const weaponsMeaning = weapons.find((entry) => entry.key === event.weaponsState)?.meaning;
   const begun = event.started && event.state !== "cancelled";
@@ -152,7 +156,7 @@ async function Event({ params }: { params: Props["params"] }) {
   ];
 
   return (
-    <>
+    <RichSourcesProvider value={result.sources}>
       <Head title={event.title} lead={event.summary || event.kindName}>
         <p className="chips">
           <span className="chip chip-gold">{event.kindName}</span>
@@ -242,7 +246,7 @@ async function Event({ params }: { params: Props["params"] }) {
                       {formatWhen(latest.issuedAt).day}, {formatWhen(latest.issuedAt).utc}
                     </span>
                   </p>
-                  <p className="order-text">{latest.body}</p>
+                  <Rich text={latest.body} {...shown} />
                   {toAcknowledge !== null ? (
                     <div className="standing-in">
                       <p>It changes the orders. Read it, then acknowledge it.</p>
@@ -263,7 +267,7 @@ async function Event({ params }: { params: Props["params"] }) {
                         <LevelChip level={task.level} />
                       </p>
                       {task.body !== null ? (
-                        <p className="order-text">{task.body}</p>
+                        <Rich text={task.body} {...shown} />
                       ) : (
                         <p className="unit-task-held">
                           <Icon name="lock" size={18} />
@@ -435,15 +439,17 @@ async function Event({ params }: { params: Props["params"] }) {
               <div className="orders-main">
                 <div className="order">
                   <h3>Warning order</h3>
-                  {orders.warning_order ? <p className="order-text">{orders.warning_order}</p> : <p className="order-none">Not written yet.</p>}
+                  {orders.warning_order ? <Rich text={orders.warning_order} {...shown} /> : <p className="order-none">Not written yet.</p>}
                 </div>
                 {sections.map((section) => (
                   <div className="order" key={section.key}>
                     <h3>{section.name}</h3>
                     {orders[section.key] ? (
-                      <p className="order-text">{orders[section.key]}</p>
+                      <Rich text={orders[section.key]} {...shown} />
                     ) : (
-                      <p className="order-none">Not written yet. {section.holds}</p>
+                      <p className="order-none">
+                        Not written yet. <RichLine text={section.holds} />
+                      </p>
                     )}
                   </div>
                 ))}
@@ -469,7 +475,7 @@ async function Event({ params }: { params: Props["params"] }) {
                             {issued.day}, {issued.utc}, by {named(amendment.issuedBy, "a member who has left")}
                           </span>
                         </p>
-                        <p className="order-text">{amendment.body}</p>
+                        <Rich text={amendment.body} {...shown} />
                       </li>
                     );
                   })}
@@ -505,7 +511,7 @@ async function Event({ params }: { params: Props["params"] }) {
                         <LevelChip level={task.level} />
                       </header>
                       {task.body !== null ? (
-                        <p className="order-text">{task.body}</p>
+                        <Rich text={task.body} {...shown} />
                       ) : (
                         <p className="unit-task-held">
                           <Icon name="lock" size={18} />
@@ -524,7 +530,7 @@ async function Event({ params }: { params: Props["params"] }) {
                         </h3>
                         <LevelChip level="everyone" />
                       </header>
-                      <p className={element.task ? "order-text" : "order-none"}>{element.task || "No task given yet."}</p>
+                      {element.task ? <Rich text={element.task} {...shown} /> : <p className="order-none">No task given yet.</p>}
                     </article>
                   ))}
                 </div>
@@ -638,7 +644,7 @@ async function Event({ params }: { params: Props["params"] }) {
                     {report ? (
                       <div className="order">
                         <h3>What happened</h3>
-                        <p className="order-text">{report.whatHappened}</p>
+                        <Rich text={report.whatHappened} {...shown} />
                       </div>
                     ) : null}
                     {plan.objectives.some((objective) => records.outcomes[objective.id]) ? (
@@ -693,7 +699,9 @@ async function Event({ params }: { params: Props["params"] }) {
                                 {named(mention.person, "")}
                                 {mention.person.id === result.member.id ? <span className="tag tag-you">You</span> : null}
                               </dt>
-                              <dd className="order-text">{mention.citation}</dd>
+                              <dd className="order-text">
+                                <RichLine text={mention.citation} />
+                              </dd>
                             </div>
                           ))}
                         </dl>
@@ -702,13 +710,13 @@ async function Event({ params }: { params: Props["params"] }) {
                     {report?.toKeep ? (
                       <div className="order">
                         <h3>What to keep</h3>
-                        <p className="order-text">{report.toKeep}</p>
+                        <Rich text={report.toKeep} {...shown} />
                       </div>
                     ) : null}
                     {report?.toChange ? (
                       <div className="order">
                         <h3>What to change</h3>
-                        <p className="order-text">{report.toChange}</p>
+                        <Rich text={report.toChange} {...shown} />
                       </div>
                     ) : null}
                   </div>
@@ -777,7 +785,7 @@ async function Event({ params }: { params: Props["params"] }) {
           </TabPanel>
         ) : null}
       </Tabs>
-    </>
+    </RichSourcesProvider>
   );
 }
 
@@ -905,6 +913,7 @@ function PlanBeside({ result }: { result: Ready }) {
  */
 function OpposingForce({ result, open }: { result: Ready; open: boolean }) {
   const { event } = result;
+  const shown = { day: event.startsAt, you: result.member.id, members: result.memberNames };
   const opfor = result.opfor!;
   return (
     <section aria-labelledby="opfor">
@@ -951,7 +960,7 @@ function OpposingForce({ result, open }: { result: Ready; open: boolean }) {
           ) : opfor.plan ? (
             <div className="orders">
               <div className="order">
-                <p className="order-text">{opfor.plan}</p>
+                <Rich text={opfor.plan} {...shown} />
               </div>
             </div>
           ) : (

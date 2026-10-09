@@ -7,7 +7,14 @@ import { confirmations, questions, typed } from "@/lib/application-form";
 import { explainRefusal } from "@/lib/refusals";
 import { createClient } from "@/lib/supabase/server";
 
-export type ApplyResult = { ok: boolean; message: string };
+export type ApplyResult = {
+  ok: boolean;
+  message: string;
+  /** What was typed and ticked, given back when the application was not sent, so that the form keeps it. */
+  values?: Record<string, string>;
+  /** Changes each time the form is given back, so that it is drawn afresh. */
+  stamp?: number;
+};
 
 const SERVICES = ["navy", "army", "marines"];
 
@@ -19,6 +26,16 @@ const SERVICES = ["navy", "army", "marines"];
  * the applicant needs their names set, and only one application can be open.
  */
 export async function submitApplication(_previous: ApplyResult, formData: FormData): Promise<ApplyResult> {
+  const result = await send(formData);
+  if (result.ok) return result;
+  const values: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (typeof value === "string" && !key.startsWith("$")) values[key] = value;
+  }
+  return { ...result, values, stamp: Date.now() };
+}
+
+async function send(formData: FormData): Promise<ApplyResult> {
   const supabase = await createClient();
   if (!supabase) return { ok: false, message: "This site is not connected to the database yet." };
 

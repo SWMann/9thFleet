@@ -292,19 +292,25 @@ export async function saveOrders(_previous: OpsResult, formData: FormData): Prom
   const id = uuid(formData.get("id"));
   if (!id) return notThisPage(session, "event.orders");
 
+  // Orders that are turned down are handed back as they were typed, so none of them is lost.
+  const again = { values: typedInto(formData), stamp: Date.now() };
   const orders: Record<string, string> = { warning_order: typed(formData.get("warning_order")) };
-  if (orders.warning_order.length > 4000) return { ok: false, message: "Keep the warning order under 4,000 characters." };
+  if (orders.warning_order.length > 4000) return { ok: false, message: "Keep the warning order under 4,000 characters.", ...again };
   for (const paragraph of paragraphs) {
     const text = typed(formData.get(paragraph.key));
     if (text.length > paragraph.max) {
-      return { ok: false, message: `One section of the orders is too long. It holds up to ${paragraph.max.toLocaleString("en-GB")} characters.` };
+      return {
+        ok: false,
+        message: `One section of the orders is too long. It holds up to ${paragraph.max.toLocaleString("en-GB")} characters.`,
+        ...again,
+      };
     }
     orders[paragraph.key] = text;
   }
 
   const { data, error } = await session.supabase.from("event_orders").update(orders).eq("event_id", id).select("event_id");
-  if (error) return failed(session, "event.orders", error, explainRefusal(error, "The orders could not be saved. Try again."));
-  if (!data || data.length === 0) return notYours(session, "event.orders", "These orders are not yours to write.");
+  if (error) return { ...(await failed(session, "event.orders", error, explainRefusal(error, "The orders could not be saved. Try again."))), ...again };
+  if (!data || data.length === 0) return { ...(await notYours(session, "event.orders", "These orders are not yours to write.")), ...again };
   refresh();
   return { ok: true, message: "Saved." };
 }
@@ -798,20 +804,22 @@ export async function fileReport(_previous: OpsResult, formData: FormData): Prom
     to_keep: typed(formData.get("to_keep")),
     to_change: typed(formData.get("to_change")),
   };
-  if (report.what_happened === "") return { ok: false, message: "Say what happened first." };
-  if (report.what_happened.length > 6000) return { ok: false, message: 'Keep "What happened" under 6,000 characters.' };
+  // A report that is turned down is handed back as it was typed.
+  const again = { values: typedInto(formData), stamp: Date.now() };
+  if (report.what_happened === "") return { ok: false, message: "Say what happened first.", ...again };
+  if (report.what_happened.length > 6000) return { ok: false, message: 'Keep "What happened" under 6,000 characters.', ...again };
   if (report.to_keep.length > 4000 || report.to_change.length > 4000) {
-    return { ok: false, message: "Keep each of the other answers under 4,000 characters." };
+    return { ok: false, message: "Keep each of the other answers under 4,000 characters.", ...again };
   }
 
   const existing = await session.supabase.from("after_action_reports").select("event_id").eq("event_id", id).maybeSingle();
-  if (existing.error) return failed(session, "event.report", existing.error, "The report could not be saved. Try again.");
+  if (existing.error) return { ...(await failed(session, "event.report", existing.error, "The report could not be saved. Try again.")), ...again };
   const { error } = existing.data
     ? await session.supabase.from("after_action_reports").update(report).eq("event_id", id)
     : await session.supabase.from("after_action_reports").insert({ event_id: id, ...report });
   if (error) {
     const shown = explainRefusal(error, "The report could not be saved. Only whoever ran the event files it.");
-    return failed(session, "event.report", error, shown);
+    return { ...(await failed(session, "event.report", error, shown)), ...again };
   }
   refresh();
   return { ok: true, message: "The after-action report is filed." };

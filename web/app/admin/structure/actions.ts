@@ -6,6 +6,7 @@ import { refused, turnedDown, type Attempt } from "@/lib/activity";
 import { explainRefusal } from "@/lib/refusals";
 import { GRADES, sheetOf, type FieldSpec, type Sheet } from "@/lib/structure";
 import { createClient } from "@/lib/supabase/server";
+import { withoutMentions } from "@/lib/rich/markdown";
 
 /**
  * What an admin can do to the fleet's structure. Nothing here decides who may
@@ -86,7 +87,9 @@ function read(field: FieldSpec, formData: FormData): { value: Value } | { proble
     case "long": {
       if (text === "") return field.required ? missing : { value: "" };
       if (text.length > field.max) return { problem: `Keep "${field.label}" under ${field.max.toLocaleString("en-GB")} characters.` };
-      return { value: text };
+      // These descriptions are on pages visitors read, and are kept where anyone can read them. A member
+      // who is named in one is kept as their name alone, not as a pointer to their record.
+      return { value: field.rich ? withoutMentions(text) : text };
     }
     case "lines": {
       const lines = text
