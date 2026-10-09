@@ -22,6 +22,7 @@ or let someone promote themselves.
 | `migrations/…_event_plan.sql` | Fuller orders: objectives, elements and their tasks, the timeline, ships, nets, where to muster, what to read, and amendments with their acknowledgement |
 | `migrations/…_event_report.sql` | Signing off a qualification at the event that teaches it, and the report's records: how each objective turned out, losses and mentions |
 | `migrations/…_event_opfor.sql` | Command's approval for the types of event that need it, and the opposing force: its plan and who is on it, kept from the side being exercised |
+| `migrations/…_event_cleanup.sql` | Removes the old fixed list of event kinds, which nothing had used since the types became records |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
