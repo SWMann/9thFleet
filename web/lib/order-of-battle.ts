@@ -40,6 +40,10 @@ export type Unit = {
   open: boolean;
   /** The post that commands this unit. It may sit in a unit under it, or anywhere else in the fleet. */
   commanderPostId: string | null;
+  /** What the unit brings to an event: a short list an admin keeps. */
+  brings: string[];
+  /** The name of one of the site's pictures, if an admin gave it one. Without, it is drawn with the symbol for its kind. */
+  picture: string | null;
   posts: Post[];
   units: Unit[];
 };
@@ -63,6 +67,8 @@ type UnitRow = {
   opens_at_stage: number;
   sort_order: number;
   commander_position_id: string | null;
+  brings: string | null;
+  picture: string | null;
 };
 type PositionRow = {
   id: string;
@@ -102,7 +108,7 @@ export async function getOrderOfBattle(): Promise<OrderOfBattle> {
 
   const [settings, units, positions, needs, qualifications, ranks, roster, duties] = await Promise.all([
     supabase.from("fleet_settings").select("current_stage").maybeSingle(),
-    supabase.from("units").select("id, parent_id, name, kind, service, opens_at_stage, sort_order, commander_position_id"),
+    supabase.from("units").select("id, parent_id, name, kind, service, opens_at_stage, sort_order, commander_position_id, brings, picture"),
     supabase
       .from("positions")
       .select("id, unit_id, title, kind, min_grade, max_grade, is_entry, is_leader, opens_at_stage, sort_order"),
@@ -223,6 +229,8 @@ export async function getOrderOfBattle(): Promise<OrderOfBattle> {
       opensAtStage: opensAt,
       open: opensAt <= stage,
       commanderPostId: row.commander_position_id ?? null,
+      brings: linesOf(row.brings),
+      picture: row.picture || null,
       posts,
       units: below.sort(bySortOrder((unit) => unit.name)).map((child) => build(child, opensAt, seen)),
     };
@@ -236,10 +244,17 @@ export async function getOrderOfBattle(): Promise<OrderOfBattle> {
   const fleet: Unit =
     built.length === 1
       ? built[0]
-      : { id: "all", name: "The fleet", kind: "fleet", service: null, opensAtStage: 1, open: true, commanderPostId: null, posts: [], units: built };
+      : { id: "all", name: "The fleet", kind: "fleet", service: null, opensAtStage: 1, open: true, commanderPostId: null, brings: [], picture: null, posts: [], units: built };
 
   return { state: "ready", fleet, tally };
 }
+
+/** A list kept as text, one thing to a line. */
+const linesOf = (text: string | null | undefined) =>
+  (text ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
 /** Every post in a unit and the units below it. */
 export function postsWithin(unit: Unit): Post[] {

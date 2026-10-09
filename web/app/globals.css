@@ -5775,6 +5775,487 @@ fieldset.pane > legend + * {
   color: var(--gold-text);
 }
 
+/*
+ * The force chart: the order of battle drawn as a tree, to choose an event's
+ * force from. The fleet is at the top, and each unit branches to the right
+ * into the units under it. On a narrow screen every branch runs downwards.
+ */
+
+.force {
+  --force-line: rgb(255 255 255 / 0.3);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 310px);
+  align-items: start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.force-sum {
+  position: sticky;
+  top: 16px;
+}
+
+.band .force .hint,
+.band .force .force-none {
+  max-width: none;
+  margin: 0;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
+.force-scroll {
+  overflow-x: auto;
+  padding: 4px 2px 8px;
+}
+
+.force-tree,
+.force-tree ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.force-branch {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+}
+
+/* The units under a unit, in a column to its right. */
+.force-branch > ul {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-left: 14px;
+  padding-left: 14px;
+}
+
+/*
+ * The line out of a unit, the line into each unit under it, and the line that
+ * joins those. Each meets its unit level with the unit's name, so the chart
+ * holds still when a unit's posts are opened beneath it.
+ */
+.force-branch > ul::before,
+.force-branch > ul > li::before {
+  content: "";
+  position: absolute;
+  top: 32px;
+  left: -14px;
+  width: 14px;
+  margin-top: -1px;
+  border-top: 2px solid var(--force-line);
+}
+
+.force-branch > ul > li::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  left: -14px;
+  border-left: 2px solid var(--force-line);
+}
+
+.force-branch > ul > li:first-child::after {
+  top: 31px;
+}
+
+.force-branch > ul > li:last-child::after {
+  bottom: auto;
+  height: 37px;
+}
+
+.force-branch > ul > li:first-child:last-child::after {
+  display: none;
+}
+
+/* The fleet sits above its units, with a trunk running down their left. */
+.force-tree > .force-branch {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.force-tree > .force-branch > ul {
+  margin: 10px 0 0;
+  padding-left: 28px;
+}
+
+.force-tree > .force-branch > ul::before {
+  display: none;
+}
+
+.force-tree > .force-branch > ul > li:first-child::after {
+  display: block;
+  top: -10px;
+  height: 42px;
+}
+
+.force-tree > .force-branch > ul > li:first-child:not(:last-child)::after {
+  bottom: -5px;
+  height: auto;
+}
+
+.force-node {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  width: 232px;
+  padding: 10px;
+  border: 1px solid var(--seam-2);
+  border-radius: 5px;
+  background: var(--band);
+}
+
+.force-node-root {
+  width: auto;
+  min-width: 232px;
+}
+
+/* A unit that is in the force. The words on its button say so too. */
+.force-node-on {
+  border-color: var(--gold);
+  background: #1f2a3d;
+}
+
+/* A unit that opens at a later stage, and cannot be added yet. */
+.force-node-later {
+  border-style: dashed;
+  background: transparent;
+}
+
+/* A department is one part of its ship, and is drawn smaller: its name beside its button, with no symbol. */
+.force-node-part {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(88px, auto);
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.force-node-part .force-symbol {
+  display: none;
+}
+
+.force-node-part .force-pick {
+  max-width: 108px;
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+}
+
+.force-node-part .force-more,
+.force-node-part .force-picture {
+  grid-column: 1 / -1;
+}
+
+.force-node-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.force-symbol {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--seam-2);
+  border-radius: 4px;
+  background: var(--deep);
+  color: var(--gold-text);
+}
+
+.unit-symbol {
+  stroke-width: 1.6;
+}
+
+.force-node-later .force-symbol {
+  color: var(--text-3);
+}
+
+.force-picture {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  margin: -10px -10px 0;
+  border-radius: 4px 4px 0 0;
+  background: var(--deep);
+}
+
+.force-picture img {
+  object-fit: cover;
+}
+
+.force-picture .credit {
+  right: 6px;
+  bottom: 2px;
+  font-size: 0.625rem;
+}
+
+.force-node-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.force-node-name b {
+  color: var(--white);
+  overflow-wrap: anywhere;
+}
+
+.force-node-name small {
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+/* Adding a unit is a tick box drawn as a button. The box itself stays for the keyboard and for screen readers. */
+.force-pick {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--seam-2);
+  border-radius: 5px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.force-pick:hover {
+  border-color: var(--gold);
+}
+
+.force-pick:has(input:checked) {
+  border-color: var(--gold-fill);
+  background: var(--gold-fill);
+  color: var(--ink);
+}
+
+.force-pick:has(input:disabled) {
+  border-color: var(--seam-2);
+  background: transparent;
+  color: var(--text-2);
+  cursor: default;
+}
+
+.force-pick input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.force-pick:has(input:focus-visible) {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+
+.force-more summary {
+  padding: 2px 0;
+  color: var(--gold-text);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.force-more summary:hover {
+  color: var(--gold-bright);
+}
+
+.force-more[open] summary {
+  margin-bottom: 6px;
+}
+
+.force-posts {
+  margin-top: 8px;
+  font-size: 0.875rem;
+}
+
+.force-tree .force-posts li {
+  display: flex;
+  flex-direction: column;
+  padding: 5px 0;
+  border-top: 1px solid var(--seam);
+  line-height: 1.35;
+}
+
+.force-posts span {
+  color: var(--text-3);
+}
+
+.force-posts b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.force-posts i {
+  color: var(--text-3);
+}
+
+/* What a unit brings, each thing as a label. */
+.force .force-brings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.force-brings li {
+  padding: 4px 9px;
+  border: 1px solid var(--seam-2);
+  border-radius: 4px;
+  background: rgb(9 13 22 / 0.8);
+  color: var(--text);
+  font-size: 0.84375rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.force-tally {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  border: 1px solid var(--seam);
+  background: var(--seam);
+}
+
+.force-tally div {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  padding: 10px 4px;
+  background: var(--band);
+}
+
+.force-tally dt {
+  color: var(--text-3);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.force-tally dd {
+  margin: 0;
+  color: var(--white);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.force-label {
+  margin: 4px 0 0;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.force .force-units {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.force-units li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+  padding: 7px 0;
+  border-top: 1px solid var(--seam);
+}
+
+.force-units b {
+  color: var(--white);
+}
+
+.force-units span {
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
+@media (max-width: 1000px) {
+  .force {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .force-sum {
+    position: static;
+  }
+}
+
+/* On a narrow screen every branch runs downwards, so nothing is off to the side. */
+@media (max-width: 760px) {
+  .force-branch {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .force-tree > .force-branch {
+    align-items: stretch;
+  }
+
+  .force-branch > ul,
+  .force-tree > .force-branch > ul {
+    margin: 10px 0 0;
+    padding-left: 24px;
+  }
+
+  .force-branch > ul::before {
+    display: none;
+  }
+
+  .force-branch > ul > li::before {
+    left: -12px;
+    width: 12px;
+  }
+
+  .force-branch > ul > li::after {
+    left: -12px;
+  }
+
+  /* The trunk starts at the unit above, and stops at the last unit under it. */
+  .force-branch > ul > li:first-child::after {
+    display: block;
+    top: -10px;
+    bottom: -5px;
+    height: auto;
+  }
+
+  .force-branch > ul > li:last-child::after,
+  .force-branch > ul > li:first-child:last-child::after {
+    display: block;
+    top: -10px;
+    bottom: auto;
+    height: 42px;
+  }
+
+  .force-node,
+  .force-node-root {
+    width: auto;
+    min-width: 0;
+  }
+}
+
 @media (max-width: 860px) {
   .orders-split,
   .tasks-split {

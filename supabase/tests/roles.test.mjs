@@ -279,3 +279,34 @@ test("every change to an area, a role or what a role needs is logged", async () 
   );
   assert.equal(summary.was, "Mans a ship's weapons, from a turret or a remote weapons station.");
 });
+
+test("a unit says what it brings and can have a picture, which anyone reads and only an admin sets", async () => {
+  const ship = (await fleet.one("select id from public.units where name = 'Training Ship'")).id;
+  // Every unit starts with nothing listed and the symbol for its kind.
+  assert.deepEqual(await fleet.one("select count(*)::int as n from public.units where brings <> '' or picture is not null"), { n: 0 });
+
+  for (const other of [who.command, who.staff, who.member]) {
+    assert.equal(await fleet.as(other).changed("update public.units set brings = 'Two turrets' where id = $1", [ship]), 0);
+    assert.equal(await fleet.as(other).changed("update public.units set picture = 'areaHelm' where id = $1", [ship]), 0);
+  }
+  await denied(fleet.visitor().query("update public.units set brings = 'Two turrets' where id = $1", [ship]));
+
+  const admin = fleet.as(who.admin);
+  assert.equal(await admin.changed("update public.units set brings = $2, picture = 'areaHelm' where id = $1", [ship, "Four turrets\nA medical bed"]), 1);
+  assert.deepEqual(await fleet.visitor().one("select brings, picture from public.units where id = $1", [ship]), {
+    brings: "Four turrets\nA medical bed",
+    picture: "areaHelm",
+  });
+
+  await assert.rejects(admin.query("update public.units set brings = $2 where id = $1", [ship, "x".repeat(601)]), /check constraint/);
+  await assert.rejects(admin.query("update public.units set picture = $2 where id = $1", [ship, "x".repeat(41)]), /check constraint/);
+  await assert.rejects(admin.query("update public.units set picture = '' where id = $1", [ship]), /check constraint/);
+  // Taking the picture away brings the symbol back.
+  assert.equal(await admin.changed("update public.units set picture = null, brings = '' where id = $1", [ship]), 1);
+
+  const logged = await fleet.rows(
+    "select new_row ->> 'brings' as brings from public.audit_log where table_name = 'units' and actor = $1 and new_row ->> 'id' = $2 order by id",
+    [who.admin, ship],
+  );
+  assert.deepEqual(logged.map((line) => line.brings), ["Four turrets\nA medical bed", ""]);
+});

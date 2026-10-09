@@ -28,7 +28,6 @@ import {
   saveKeyPosts,
   saveOpforPlan,
   saveOrders,
-  saveUnits,
   setApproval,
   setPlace,
   setStandIn,
@@ -875,39 +874,6 @@ export function ToReserve({ id, people }: { id: string; people: Named[] }) {
   );
 }
 
-/** Which units take part. With none ticked, every open unit does. */
-export function UnitsForm({ id, units, chosen }: { id: string; units: { id: string; label: string }[]; chosen: string[] }) {
-  const [result, action, pending] = useActionState(saveUnits, untouched);
-  return (
-    <form action={action} className="picks" key={result.stamp ?? 0}>
-      <input type="hidden" name="id" value={id} />
-      <fieldset>
-        <legend>Units taking part</legend>
-        <p className="hint">
-          Tick the ships and units this event is for, and the roll shows only their posts. A unit brings everything
-          under it. With none ticked, every open unit takes part.
-        </p>
-        <ul>
-          {units.map((unit) => (
-            <li key={unit.id}>
-              <label>
-                <input type="checkbox" name="unit" value={unit.id} defaultChecked={chosen.includes(unit.id)} />
-                <span>{unit.label}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      </fieldset>
-      <div className="form-end">
-        <button className="button button-quiet" type="submit" disabled={pending}>
-          {pending ? "Saving" : "Save the units"}
-        </button>
-        <Result result={result} />
-      </div>
-    </form>
-  );
-}
-
 /** Which posts must be filled for the event to go ahead. */
 export function KeyPostsForm({
   id,
@@ -926,7 +892,7 @@ export function KeyPostsForm({
         <legend>Posts that must be filled</legend>
         <p className="hint">
           The event is shown as below its minimum while any of these is empty. The list is the posts of the units taking
-          part, so save the units first.
+          part, so save the force first.
         </p>
         {groups.length === 0 ? <p>No post is open in the units taking part.</p> : null}
         {groups.map((group) => (

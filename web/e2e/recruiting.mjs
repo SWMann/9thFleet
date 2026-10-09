@@ -1596,9 +1596,9 @@ try {
   await check("whoever drafts an event names its units, the posts that must be filled and posts of its own", async () => {
     await page.getByRole("link", { name: "Change the details and orders" }).click();
     await editPart("Forces");
-    const units = page.locator("form.picks:visible", { hasText: "Units taking part" });
-    await units.getByLabel("Task Force Jericho › Training Ship").check();
-    await units.getByRole("button", { name: "Save the units" }).click();
+    const units = page.locator("form.force:visible");
+    await units.getByLabel("Training Ship", { exact: true }).check();
+    await units.getByRole("button", { name: "Save the force" }).click();
     await told(units, "Saved.");
 
     // The posts offered are the posts of the units taking part.
@@ -1798,7 +1798,7 @@ try {
     const copy = await eventTitled("Gunnery 002");
     assert.equal(copy.places, 2);
     assert.equal(copy.minimum_attending, 2);
-    assert.equal(await page.locator("form.picks:visible", { hasText: "Units taking part" }).getByLabel("Task Force Jericho › Training Ship").isChecked(), true);
+    assert.equal(await page.locator("form.force:visible").getByLabel("Training Ship", { exact: true }).isChecked(), true);
     assert.equal(await page.locator("form.picks:visible", { hasText: "Posts that must be filled" }).getByLabel("Helmsman").isChecked(), true);
     assert.deepEqual(
       (await supabase.sql("select title from public.event_posts where event_id = $1 order by sort_order", [copy.id])).map((row) => row.title),
@@ -2444,9 +2444,9 @@ try {
     await draftEvent("Patrol", "Escort 001");
     await page.getByRole("link", { name: "Change the details and orders" }).click();
     await editPart("Forces");
-    const units = page.locator("form.picks:visible", { hasText: "Units taking part" });
-    await units.getByLabel("Task Force Jericho › Training Ship").check();
-    await units.getByRole("button", { name: "Save the units" }).click();
+    const units = page.locator("form.force:visible");
+    await units.getByLabel("Training Ship", { exact: true }).check();
+    await units.getByRole("button", { name: "Save the force" }).click();
     await told(units, "Saved.");
 
     await editPart("Tasks");
@@ -2546,6 +2546,108 @@ try {
     assert.match(text, /Ada Vance gave Training Ship its task for Escort 001\.\s+Read by the unit's commander\./);
     assert.match(text, /Kit Marlow changed who reads the task of Training Ship for Escort 001\.\s+Now the unit\. Before, the unit's commander\./);
     assert.doesNotMatch(text, /until the convoy is through/);
+  });
+
+  console.log("The force chart");
+  const force = () => page.locator("form.force:visible");
+  const forceNode = (name) =>
+    force().locator(".force-node", { has: page.locator(".force-node-name b", { hasText: new RegExp(`^${name}`) }) });
+  const tally = async () =>
+    Object.fromEntries(
+      (await force().locator(".force-tally div").allInnerTexts()).map((text) => {
+        const [label, number] = text.trim().split(/\s+/);
+        return [label.toLowerCase(), Number(number)];
+      }),
+    );
+  await check("an admin says what a unit brings, and gives it one of the site's pictures", async () => {
+    await signInAs(founder);
+    await openEditor("Units");
+    const ship = await openRecord("Task Force Jericho › Training Ship");
+    assert.equal(await ship.getByLabel(/^What it brings/).inputValue(), "");
+    assert.equal(await ship.getByLabel(/^Picture/).inputValue(), "");
+    await ship.getByLabel(/^What it brings/).fill("Four turrets\nA medical bed");
+    await ship.getByLabel(/^Picture/).selectOption({ label: "Helm" });
+    await ship.getByRole("button", { name: "Save", exact: true }).click();
+    await told(ship, "Saved.");
+    assert.deepEqual(await one("select brings, picture from public.units where name = 'Training Ship'"), {
+      brings: "Four turrets\nA medical bed",
+      picture: "areaHelm",
+    });
+  });
+  await check("an event's force is chosen from a chart of the order of battle, which adds up what it brings", async () => {
+    await draftEvent("Patrol", "Escort 002");
+    await page.getByRole("link", { name: "Change the details and orders" }).click();
+    await editPart("Forces");
+    await force().waitFor();
+    const filled = async (where) =>
+      (
+        await one(
+          `select count(distinct p.id)::int as n from public.positions p
+           join public.units u on u.id = p.unit_id
+           join public.assignments a on a.position_id = p.id and a.ended_on is null
+           where p.kind = 'primary' and ${where}`,
+        )
+      ).n;
+    const aboard = await filled("u.name = 'Training Ship'");
+    const everyone = await filled("p.opens_at_stage <= 1 and u.opens_at_stage <= 1");
+    assert.equal(aboard, 2);
+
+    // With nothing added, the whole fleet takes part, and the sums are the fleet's.
+    assert.match(await force().locator(".force-sum").innerText(), /No unit is added, so the whole fleet takes part\./);
+    assert.deepEqual(await tally(), { posts: 7, filled: everyone, empty: 7 - everyone });
+    assert.match(await forceNode("UEE 9th Fleet").innerText(), /Fleet\. 7 posts/);
+    assert.equal(await forceNode("UEE 9th Fleet").getByRole("checkbox").count(), 0, "the fleet itself is not added: it is what none means");
+    // A unit that opens at a later stage is drawn, and cannot be added.
+    assert.match(await forceNode("UEES Nexus").innerText(), /Ship\. Opens at stage 2/);
+    assert.equal(await forceNode("UEES Nexus").getByRole("checkbox").count(), 0);
+    assert.equal(await forceNode("Gunnery").count(), 0, "what is under a unit that is not open yet is left off");
+
+    // A unit with a picture is drawn with it, and its author is named. One without has the symbol for its kind.
+    const ship = forceNode("Training Ship");
+    assert.match(await ship.innerText(), /Ship\. 6 posts, 2 filled/);
+    assert.equal(await ship.locator(".force-picture img").count(), 1);
+    assert.match(await ship.locator(".force-picture .credit").innerText(), /Picture: Jon-Rellim/i);
+    assert.equal(await ship.locator(".force-symbol").count(), 0);
+    assert.ok((await forceNode("Task Force Jericho").locator(".force-symbol svg > *").count()) > 0, "a unit with no picture has no symbol");
+
+    // Its posts, who fills them and what it brings open beneath it, before it is added.
+    await ship.locator("summary").click();
+    const more = (await ship.locator("details").innerText()).replace(/\s+/g, " ");
+    assert.match(more, /Four turrets A medical bed/);
+    assert.match(more, /Helmsman .*Kit Marlow/);
+    assert.match(more, /Gunner 2 Empty/);
+
+    await ship.getByLabel("Training Ship", { exact: true }).check();
+    assert.deepEqual(await tally(), { posts: 6, filled: 2, empty: 4 });
+    const sum = force().locator(".force-sum");
+    assert.match((await sum.locator(".force-units").innerText()).replace(/\s+/g, " "), /^Training Ship 6 posts, 2 filled$/);
+    assert.deepEqual(await sum.locator(".force-brings li").allInnerTexts(), ["Four turrets", "A medical bed"]);
+    await told(force(), "Not saved yet.");
+    await shot("operation-force");
+
+    // Adding the formation above brings the ship with it, and takes over from it.
+    await force().getByLabel("Task Force Jericho", { exact: true }).check();
+    const carried = ship.getByRole("checkbox");
+    assert.equal(await carried.isChecked(), true);
+    assert.equal(await carried.isDisabled(), true);
+    assert.match(await ship.locator(".force-pick").innerText(), /With Task Force Jericho/i);
+    assert.match((await sum.locator(".force-units").innerText()).replace(/\s+/g, " "), /^Task Force Jericho 6 posts, 2 filled$/);
+    await force().getByLabel("Task Force Jericho", { exact: true }).uncheck();
+    assert.equal(await carried.isChecked(), false);
+    assert.match(await sum.innerText(), /the whole fleet takes part/);
+
+    await ship.getByLabel("Training Ship", { exact: true }).check();
+    await force().getByRole("button", { name: "Save the force" }).click();
+    await told(force(), "Saved.");
+    const event = await eventTitled("Escort 002");
+    assert.deepEqual(
+      await supabase.sql("select u.name from public.event_units e join public.units u on u.id = e.unit_id where e.event_id = $1", [event.id]),
+      [{ name: "Training Ship" }],
+    );
+    // The posts that can be marked as key are now the ship's.
+    const key = page.locator("form.picks:visible", { hasText: "Posts that must be filled" });
+    await key.getByLabel("Helmsman").waitFor();
+    assert.equal(await key.getByRole("checkbox").count(), 6);
   });
 
   await check("no page raised a script error", async () => {
