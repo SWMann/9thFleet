@@ -5490,8 +5490,294 @@ fieldset.pane > legend + * {
   max-width: 50rem;
 }
 
+/*
+ * A unit's task, and who reads it. Each level has its own colour and its own
+ * picture, and is always named, so the colour is never the only sign.
+ */
+.level {
+  gap: 6px;
+}
+
+.level-everyone {
+  --level: #c3cad6;
+}
+
+.level-unit {
+  --level: #8fc0ee;
+}
+
+.level-leaders {
+  --level: var(--gold-text);
+}
+
+.level-commander {
+  --level: #f0a58a;
+}
+
+.chip.level {
+  border-color: var(--level);
+  color: var(--level);
+}
+
+.tasks-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.tasks-split .task-list {
+  max-width: none;
+}
+
+.unit-task {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px 18px;
+  border: 1px solid var(--seam);
+  border-top: 2px solid var(--gold);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.unit-task-nested {
+  margin-left: clamp(14px, 3vw, 32px);
+}
+
+/* A task whose words are withheld from the reader. */
+.unit-task-withheld {
+  border-style: dashed;
+  border-color: var(--seam-2);
+  background: var(--band);
+}
+
+.unit-task-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.unit-task-head h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.unit-task-head h3 .aside {
+  margin-left: 0.75em;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+  font-weight: 400;
+}
+
+.unit-task-head h3 .tag {
+  margin-left: 0.75em;
+}
+
+.band .unit-task p {
+  max-width: none;
+  margin: 0;
+  color: var(--text);
+}
+
+.band .unit-task-held,
+.band .pane .unit-task-held {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text-3);
+}
+
+.unit-task-held .icon {
+  flex: none;
+  margin-top: 0.25em;
+}
+
+.pass-down {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--seam);
+}
+
+.pass-down-label {
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pass-down .form-result {
+  flex-basis: 100%;
+}
+
+.task-key ul {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-key li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--seam);
+  color: var(--text-2);
+  font-size: 0.9375rem;
+}
+
+.task-key li .icon {
+  flex: none;
+  margin-top: 0.2em;
+  color: var(--level);
+}
+
+.task-key li strong {
+  display: block;
+  color: var(--level);
+  font-size: 1rem;
+}
+
+.band .task-key > p {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--seam);
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
+.your-task {
+  display: grid;
+  gap: 8px;
+}
+
+.your-task + .your-task {
+  padding-top: 12px;
+  border-top: 1px solid var(--seam);
+}
+
+.band .your-task p {
+  max-width: none;
+  margin: 0;
+  color: var(--text);
+}
+
+.your-task-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.your-task-head strong {
+  color: var(--white);
+}
+
+.band .pane .pane-more {
+  margin-top: auto;
+  font-weight: 600;
+}
+
+/* The form for a task: its level is one of four, shown side by side. */
+.task-form {
+  max-width: none;
+}
+
+.levels {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.levels legend {
+  padding: 0;
+  color: var(--white);
+  font-weight: 600;
+}
+
+.levels-row {
+  display: grid;
+  /* Four levels, two by two, so one is never left on a row of its own. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.levels-row label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--seam-2);
+  border-radius: 5px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.levels-row label:hover {
+  border-color: var(--gold);
+}
+
+.levels-row .levels-on {
+  border-color: var(--gold-fill);
+  background: var(--gold-fill);
+  color: var(--ink);
+}
+
+/* The choice is made on the label. The button itself stays for the keyboard and for screen readers. */
+.levels-row input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.levels-row label:has(input:focus-visible) {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+
+.band .levels-reads {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: none;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: var(--band);
+  color: var(--text);
+  font-size: 0.9375rem;
+}
+
+.levels-reads .icon {
+  flex: none;
+  margin-top: 0.15em;
+  color: var(--gold-text);
+}
+
 @media (max-width: 860px) {
-  .orders-split {
+  .orders-split,
+  .tasks-split {
     grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -54,7 +54,7 @@ export function Tabs({ label, tabs, children }: { label: string; tabs: TabSpec[]
             return (
               <a href={address} key={tab.id} aria-current={tab.id === shown ? "page" : undefined} onClick={(event) => change(event, address)}>
                 <Icon name={tab.icon} size={18} />
-                {tab.label}
+                <span className="subbar-label">{tab.label}</span>
                 {tab.badge ? <span className="subbar-badge">{tab.badge}</span> : null}
               </a>
             );
@@ -63,6 +63,28 @@ export function Tabs({ label, tabs, children }: { label: string; tabs: TabSpec[]
       </nav>
       {children}
     </Shown.Provider>
+  );
+}
+
+/** A link from inside one tab to another tab of the same page, which changes tab in place as the tabs themselves do. */
+export function TabLink({ to, className, children }: { to: string; className?: string; children: ReactNode }) {
+  const path = usePathname();
+  const params = useSearchParams();
+  const next = new URLSearchParams(params.toString());
+  next.set("tab", to);
+  const address = `${path}?${next.toString()}`;
+  return (
+    <a
+      className={className}
+      href={address}
+      onClick={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        window.history.pushState(null, "", address);
+      }}
+    >
+      {children}
+    </a>
   );
 }
 

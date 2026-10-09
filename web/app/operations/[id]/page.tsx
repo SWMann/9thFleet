@@ -5,10 +5,12 @@ import { Suspense } from "react";
 import { hasReading, ReadingList } from "@/components/manual/Reading";
 import { PageHead } from "@/components/PageHead";
 import { Pane, Panes } from "@/components/Pane";
-import { TabPanel, Tabs, type TabSpec } from "@/components/Tabs";
+import { Icon } from "@/components/Icon";
+import { TabLink, TabPanel, Tabs, type TabSpec } from "@/components/Tabs";
 import { YourTime } from "@/components/YourTime";
 import { shortfall } from "@/lib/manning";
-import { getOperation, type FleetEvent, type Operation, type Person, type RollPost } from "@/lib/operations";
+import { getOperation, type FleetEvent, type Operation, type Person, type RollPost, type UnitTask } from "@/lib/operations";
+import { levelIcons, taskLevels } from "@/lib/tasks";
 import { formatWhen, hLabel, outcomeNames, returnedNames, serviceNames, stateNames, weapons, weaponsName } from "@/lib/operations-form";
 import {
   CopyButton,
@@ -26,6 +28,7 @@ import {
   ToReserve,
 } from "../OpsForms";
 import { AcknowledgeButton, AmendmentForm, OutcomesForm, PlanEditor, SignOffForm } from "../PlanForms";
+import { LevelChip, PassDown } from "../TaskForms";
 
 export const metadata: Metadata = {
   title: "Event",
@@ -85,6 +88,13 @@ const manningWords = {
   "no-go": "Below its minimum",
 } as const;
 
+/** What someone is told about a task whose words are withheld from them. */
+function heldLine(task: UnitTask): string {
+  if (task.level === "commander") return `This task is held by the commander of ${task.unit.name}.`;
+  if (task.level === "leaders") return `This task is for the leaders of ${task.unit.name}.`;
+  return `This task is for ${task.unit.name} only.`;
+}
+
 /** When the roll closes, or that it has. */
 function rollLine(event: FleetEvent): string {
   if (event.state === "draft") return "Opens when the event is announced";
@@ -126,13 +136,15 @@ async function Event({ params }: { params: Props["params"] }) {
   const signingOff = Boolean(event.teaches) && begun && (signOff !== null || passed.length > 0);
   const reading = (report !== null || recorded) && !making;
   const running = (runs || edits) && open;
-  const callsigns = plan.elements.filter((element) => element.callsign);
-  const beside = plan.objectives.length > 0 || plan.timings.length > 0 || plan.ships.length > 0 || plan.nets.length > 0 || callsigns.length > 0;
+  const callsigns = plan.elements.some((element) => element.callsign) || result.tasks.some((task) => task.callsign);
+  const withheld = result.tasks.filter((task) => task.body === null).length;
+  const mine = result.tasks.filter((task) => task.mine);
+  const beside = plan.objectives.length > 0 || plan.timings.length > 0 || plan.ships.length > 0 || plan.nets.length > 0 || callsigns;
 
   const tabs: TabSpec[] = [
     { id: "overview", label: "Overview", icon: "target" },
     { id: "orders", label: "Orders", icon: "book" },
-    { id: "tasks", label: "Tasks", icon: "flag" },
+    { id: "tasks", label: "Tasks", icon: "flag", badge: withheld > 0 ? `${withheld} withheld` : undefined },
     ...(event.state !== "draft" ? [{ id: "roll", label: "Roll", icon: "people" } as const] : []),
     { id: "report", label: "Report", icon: "pen" },
     ...(result.opfor ? [{ id: "opfor", label: "Opposing force", icon: "shield" } as const] : []),
@@ -227,6 +239,30 @@ async function Event({ params }: { params: Props["params"] }) {
                   ) : result.acknowledged !== null && result.acknowledged === latest.number ? (
                     <p className="roll-note">You have acknowledged amendment {latest.number}.</p>
                   ) : null}
+                </Pane>
+              ) : null}
+
+              {mine.length > 0 ? (
+                <Pane id="your-task" icon="flag" title={mine.length === 1 ? "Your task" : "Your tasks"}>
+                  {mine.map((task) => (
+                    <div className="your-task" key={task.id}>
+                      <p className="your-task-head">
+                        <strong>{task.unit.name}</strong>
+                        <LevelChip level={task.level} />
+                      </p>
+                      {task.body !== null ? (
+                        <p className="order-text">{task.body}</p>
+                      ) : (
+                        <p className="unit-task-held">
+                          <Icon name="lock" size={18} />
+                          <span>{heldLine(task)}</span>
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  <p className="pane-more">
+                    <TabLink to="tasks">Every unit&apos;s task</TabLink>
+                  </p>
                 </Pane>
               ) : null}
 
@@ -436,20 +472,74 @@ async function Event({ params }: { params: Props["params"] }) {
             <h2 className="tab-title" id="tasks">
               Tasks
             </h2>
-            {plan.elements.length > 0 ? (
-              <div className="task-list">
-                {plan.elements.map((element) => (
-                  <div className="order" key={element.id}>
-                    <h3>
-                      {element.name}
-                      {element.callsign ? <span className="aside">Callsign {element.callsign}</span> : null}
-                    </h3>
-                    <p className={element.task ? "order-text" : "order-none"}>{element.task || "No task given yet."}</p>
-                  </div>
-                ))}
+            {result.tasks.length > 0 || plan.elements.length > 0 ? (
+              <div className="tasks-split">
+                <div className="task-list">
+                  {result.tasks.map((task) => (
+                    <article
+                      className={["unit-task", task.body === null ? "unit-task-withheld" : "", task.unit.nested ? "unit-task-nested" : ""].filter(Boolean).join(" ")}
+                      key={task.id}
+                    >
+                      <header className="unit-task-head">
+                        <h3>
+                          {task.unit.name}
+                          <span className="aside">
+                            {task.unit.kind[0]?.toUpperCase()}
+                            {task.unit.kind.slice(1)}
+                            {task.callsign ? `, callsign ${task.callsign}` : ""}
+                          </span>
+                          {task.mine ? <span className="tag tag-you">Yours</span> : null}
+                        </h3>
+                        <LevelChip level={task.level} />
+                      </header>
+                      {task.body !== null ? (
+                        <p className="order-text">{task.body}</p>
+                      ) : (
+                        <p className="unit-task-held">
+                          <Icon name="lock" size={18} />
+                          <span>{heldLine(task)}</span>
+                        </p>
+                      )}
+                      {task.passTo.length > 0 ? <PassDown id={event.id} task={task.id} unit={task.unit.name} to={task.passTo} /> : null}
+                    </article>
+                  ))}
+                  {plan.elements.map((element) => (
+                    <article className="unit-task" key={element.id}>
+                      <header className="unit-task-head">
+                        <h3>
+                          {element.name}
+                          {element.callsign ? <span className="aside">Callsign {element.callsign}</span> : null}
+                        </h3>
+                        <LevelChip level="everyone" />
+                      </header>
+                      <p className={element.task ? "order-text" : "order-none"}>{element.task || "No task given yet."}</p>
+                    </article>
+                  ))}
+                </div>
+                <aside className="pane task-key" aria-labelledby="task-key">
+                  <h3 className="pane-title" id="task-key">
+                    <Icon name="eye" size={18} />
+                    <span>Who reads a task</span>
+                  </h3>
+                  <ul>
+                    {taskLevels.map((level) => (
+                      <li key={level.key} className={`level-${level.key}`}>
+                        <Icon name={levelIcons[level.key]} size={18} />
+                        <span>
+                          <strong>{level.label}</strong>
+                          {level.about}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p>
+                    The commanders of the units above always read a task. So do command and whoever runs the event.
+                    {open ? " Every task opens to all once the event is closed." : ""}
+                  </p>
+                </aside>
               </div>
             ) : (
-              <p className="tab-none">No element has been given a task yet.</p>
+              <p className="tab-none">No unit has been given a task yet.</p>
             )}
           </div>
         </TabPanel>
@@ -685,7 +775,10 @@ async function Event({ params }: { params: Props["params"] }) {
  */
 function PlanBeside({ result }: { result: Ready }) {
   const { plan } = result;
-  const callsigns = plan.elements.filter((element) => element.callsign);
+  const callsigns = [
+    ...result.tasks.filter((task) => task.callsign).map((task) => ({ id: task.id, name: task.unit.name, callsign: task.callsign })),
+    ...plan.elements.filter((element) => element.callsign).map((element) => ({ id: element.id, name: element.name, callsign: element.callsign })),
+  ];
   return (
     <>
       {plan.objectives.length > 0 ? (
@@ -774,7 +867,7 @@ function PlanBeside({ result }: { result: Ready }) {
             <table className="plan-table">
               <thead>
                 <tr>
-                  <th scope="col">Element</th>
+                  <th scope="col">Unit or element</th>
                   <th scope="col">Callsign</th>
                 </tr>
               </thead>

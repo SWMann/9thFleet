@@ -35,7 +35,7 @@ export function Editor({
   return (
     <>
       <details className="record record-new">
-        <summary>Add {/^[aeiou]/.test(sheet.one) ? "an" : "a"} {sheet.one}</summary>
+        <summary>Add {/^([aeio]|u(?!ni))/.test(sheet.one) ? "an" : "a"} {sheet.one}</summary>
         <div className="record-body">
           <RecordForm sheet={sheet} fields={fields} record={null} />
         </div>

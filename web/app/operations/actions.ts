@@ -404,6 +404,81 @@ export async function saveOpforPlan(_previous: OpsResult, formData: FormData): P
   return { ok: true, message: "Saved.", stamp: again.stamp };
 }
 
+const TASK_LEVELS = ["everyone", "unit", "leaders", "commander"];
+const TASK_IS_THE_WRITERS = "The task could not be saved. Whoever writes the event's orders gives each unit its task.";
+
+/** Give a unit its task, or change the one it has: its words, its callsign and who reads it. */
+export async function saveUnitTask(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  const rowId = formData.get("task");
+  const task = uuid(rowId);
+  const unit = uuid(formData.get("unit"));
+  const level = String(formData.get("level") ?? "");
+  if (!id || (rowId !== null && rowId !== "" && !task) || !TASK_LEVELS.includes(level)) return notThisPage(session, "event.task");
+  const again = { values: typedInto(formData), stamp: Date.now() };
+  if (!task && !unit) return { ok: false, message: "Choose the unit.", ...again };
+
+  const body = typed(formData.get("body"));
+  if (body === "") return { ok: false, message: "Write the task.", ...again };
+  if (body.length > 2000) return { ok: false, message: "Keep the task under 2,000 characters.", ...again };
+  const callsign = typed(formData.get("callsign")).replace(/\s+/g, " ");
+  if (callsign.length > 40) return { ok: false, message: "Keep the callsign under 40 characters.", ...again };
+
+  if (task) {
+    // Asking for the id back says whether the change matched a task this person may change.
+    const { data, error } = await session.supabase
+      .from("event_unit_tasks")
+      .update({ body, callsign, level })
+      .eq("id", task)
+      .eq("event_id", id)
+      .select("id");
+    if (error) return { ...(await failed(session, "event.task", error, explainRefusal(error, TASK_IS_THE_WRITERS))), ...again };
+    if (!data || data.length === 0) return { ...(await notYours(session, "event.task", TASK_IS_THE_WRITERS)), ...again };
+    refresh();
+    return { ok: true, message: "Saved.", stamp: again.stamp };
+  }
+
+  const { error } = await session.supabase.from("event_unit_tasks").insert({ event_id: id, unit_id: unit, body, callsign, level });
+  if (error) {
+    const shown = error.code === "23505" ? "That unit already has a task. Change the one it has." : explainRefusal(error, TASK_IS_THE_WRITERS);
+    return { ...(await failed(session, "event.task", error, shown)), ...again };
+  }
+  refresh();
+  return { ok: true, message: "Added.", stamp: again.stamp };
+}
+
+/** Take a unit's task away. */
+export async function removeUnitTask(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  const task = uuid(formData.get("task"));
+  if (!id || !task) return notThisPage(session, "event.task");
+  const { data, error } = await session.supabase.from("event_unit_tasks").delete().eq("id", task).eq("event_id", id).select("id");
+  if (error) return failed(session, "event.task", error, explainRefusal(error, TASK_IS_THE_WRITERS));
+  if (!data || data.length === 0) return notYours(session, "event.task", TASK_IS_THE_WRITERS);
+  refresh();
+  return { ok: true, message: "Removed." };
+}
+
+/** As a unit's commander, open its task to the unit's leaders or to the whole unit. */
+export async function passTaskDown(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const id = uuid(formData.get("id"));
+  const task = uuid(formData.get("task"));
+  const level = String(formData.get("level") ?? "");
+  if (!id || !task || !["leaders", "unit"].includes(level)) return notThisPage(session, "event.task-level");
+  const shown = "The task could not be passed down. A unit's commander passes its task down inside the unit.";
+  const { data, error } = await session.supabase.from("event_unit_tasks").update({ level }).eq("id", task).eq("event_id", id).select("id");
+  if (error) return failed(session, "event.task-level", error, explainRefusal(error, shown));
+  if (!data || data.length === 0) return notYours(session, "event.task-level", shown);
+  refresh();
+  return { ok: true, message: level === "unit" ? "Your unit can now read it." : "Your leaders can now read it." };
+}
+
 /** Name a member to the opposing force. They come off the event's roll. */
 export async function addOpforMember(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
   const session = await signedIn();

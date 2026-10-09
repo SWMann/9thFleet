@@ -584,7 +584,8 @@ try {
   // can be worked on. Each has its own name, so asking for a tab also waits for the right page to arrive.
   const tabOf = (label) => async (name) => {
     const bar = page.locator(`nav[aria-label="${label}"]:visible`);
-    const link = bar.getByRole("link", { name, exact: true });
+    // A tab is found by its own label, since it may carry a note beside it, such as how many tasks are withheld.
+    const link = bar.locator("a", { has: page.locator(".subbar-label", { hasText: new RegExp(`^${name}$`) }) });
     if ((await link.getAttribute("aria-current")) !== "page") await link.click();
     await bar.locator('a[aria-current="page"]', { hasText: name }).waitFor();
   };
@@ -592,7 +593,7 @@ try {
   const editPart = tabOf("Parts of the editor");
   // Look at every tab of an event in turn, for something that must be on none of them.
   const everyTab = async (look) => {
-    const names = (await page.locator('nav[aria-label="Parts of this event"]:visible a').allInnerTexts()).map((label) => label.trim());
+    const names = (await page.locator('nav[aria-label="Parts of this event"]:visible .subbar-label').allInnerTexts()).map((label) => label.trim());
     for (const name of names) {
       await tab(name);
       await look(name);
@@ -1932,7 +1933,7 @@ try {
     // Each element's task is on the Tasks tab.
     await tab("Tasks");
     const tasks = (await page.locator(".task-list:visible").innerText()).replace(/\s+/g, " ");
-    assert.match(tasks, /UEES Nexus ?Callsign Anvil Screen the convoy from the sunward side\. A Flight ?Callsign Hornet Top cover for the Nexus\./i);
+    assert.match(tasks, /UEES Nexus ?Callsign Anvil Everyone Screen the convoy from the sunward side\. A Flight ?Callsign Hornet Everyone Top cover for the Nexus\./i);
 
     // Someone reading this in Sydney is shown their own clock beside UTC.
     const starts = (await convoy()).starts_at;
@@ -2399,6 +2400,152 @@ try {
     await page.goto(`${site}/admin/logs?show=refused`);
     await page.locator(".log:visible").first().waitFor();
     assert.match(await logText(), /Ada Vance tried to post an announcement to Discord, and it failed\./);
+  });
+
+  console.log("Unit tasks");
+  const escort = () => eventTitled("Escort 001");
+  const openEscort = () => openEvent("Escort 001");
+  const taskRow = async () => one("select * from public.event_unit_tasks where event_id = $1", [(await escort()).id]);
+  const taskCard = () => page.locator(".unit-task:visible", { has: page.locator("h3", { hasText: "Training Ship" }) });
+  // Kit takes the helm of the training ship and Lee a turret. Sam joins the fleet and holds no post.
+  for (const person of [kit, lee, sam]) {
+    const member = await memberOf(person);
+    await supabase.sql("update public.members set status = 'member', service = 'navy', character_name = coalesce(character_name, 'Sam Okoro') where id = $1", [member.id]);
+    await supabase.sql("insert into public.qualification_awards (member_id, qualification_id) select $1, id from public.qualifications on conflict do nothing", [member.id]);
+  }
+  for (const [person, title] of [[kit, "Helmsman"], [lee, "Gunner 1"]]) {
+    await supabase.sql(
+      `insert into public.assignments (member_id, position_id, kind)
+       select $1, p.id, 'primary' from public.positions p join public.units u on u.id = p.unit_id where u.name = 'Training Ship' and p.title = $2`,
+      [(await memberOf(person)).id, title],
+    );
+  }
+
+  await check("an admin says which post commands a unit, and which posts lead", async () => {
+    await signInAs(founder);
+    await openEditor("Units");
+    const ship = await openRecord("Task Force Jericho › Training Ship");
+    // A crew of entry posts starts with nobody to command it.
+    assert.equal(await ship.getByLabel("Commanded by").inputValue(), "");
+    await ship.getByLabel("Commanded by").selectOption({ label: "Task Force Jericho › Training Ship: Helmsman" });
+    await ship.getByRole("button", { name: "Save", exact: true }).click();
+    await told(ship, "Saved.");
+    const stored = await one(
+      "select p.title from public.units u join public.positions p on p.id = u.commander_position_id where u.name = 'Training Ship'",
+    );
+    assert.equal(stored.title, "Helmsman");
+    await openEditor("Posts");
+    const chief = await openRecord("Gunnery Chief");
+    assert.equal(await chief.getByLabel(/^A leader, who reads/).isChecked(), false, "a department's chief leads by commanding it");
+    const boat = await openRecord("Chief of the Boat");
+    assert.equal(await boat.getByLabel(/^A leader, who reads/).isChecked(), true);
+  });
+  await check("whoever writes the orders gives a unit its task, and is told who will read it", async () => {
+    await draftEvent("Patrol", "Escort 001");
+    await page.getByRole("link", { name: "Change the details and orders" }).click();
+    await editPart("Forces");
+    const units = page.locator("form.picks:visible", { hasText: "Units taking part" });
+    await units.getByLabel("Task Force Jericho › Training Ship").check();
+    await units.getByRole("button", { name: "Save the units" }).click();
+    await told(units, "Saved.");
+
+    await editPart("Tasks");
+    const giving = page.locator("form.task-form:visible", { has: page.getByRole("button", { name: "Give the task" }) });
+    // Only the units taking part are offered.
+    assert.deepEqual(
+      (await giving.getByLabel("Unit", { exact: true }).locator("option").allInnerTexts()).map((text) => text.trim()),
+      ["Task Force Jericho › Training Ship"],
+    );
+    await giving.getByLabel("Task", { exact: true }).fill("Hold the lane until the convoy is through.");
+    await giving.getByLabel(/^Callsign/).fill("Trainer");
+    // A new task starts as the unit's own.
+    assert.equal(await giving.getByLabel("The unit", { exact: true }).isChecked(), true);
+    const reads = giving.locator(".levels-reads");
+    assert.match(await reads.innerText(), /Read by everyone posted in Training Ship, which is 6 posts\. Above them: Fleet Commander\./);
+    await giving.getByLabel("Its commander").check();
+    assert.match(await reads.innerText(), /Read by Helmsman, Training Ship alone\. Above them: Fleet Commander\. Everyone else is shown that it is withheld\./);
+    await giving.getByRole("button", { name: "Give the task" }).click();
+    // It now has its own card, and no unit is left without a task.
+    await page.getByRole("heading", { name: "Task Force Jericho › Training Ship" }).waitFor();
+    await page.getByText("Every unit taking part has its task.").waitFor();
+    const stored = await taskRow();
+    assert.equal(stored.level, "commander");
+    assert.equal(stored.callsign, "Trainer");
+    assert.equal(stored.set_by, (await memberOf(founder)).id);
+    await shot("operation-task-edit");
+
+    await page.goto(`${site}/operations/${(await escort()).id}`);
+    await headingIs("Escort 001");
+    await announceNow();
+    await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
+    // Whoever runs the event reads it, and its callsign is in the comms plan.
+    await tab("Tasks");
+    assert.match(await taskCard().innerText(), /Its commander[\s\S]*Hold the lane until the convoy is through\./i);
+    await tab("Orders");
+    assert.match((await page.locator(".orders:visible").innerText()).replace(/\s+/g, " "), /Comms plan .*Training Ship Trainer/i);
+  });
+  await check("a withheld task is listed for everyone, and its words are for those it is for", async () => {
+    // Lee is in the unit, and the task is for its commander alone. Sam is not in it at all.
+    for (const person of [lee, sam]) {
+      await signInAs(person);
+      await openEscort();
+      await page.locator('nav[aria-label="Parts of this event"]:visible a', { hasText: "1 withheld" }).waitFor();
+      await tab("Tasks");
+      assert.match(await taskCard().innerText(), /Its commander[\s\S]*This task is held by the commander of Training Ship\./i);
+      await everyTab(async () => {
+        assert.doesNotMatch(await page.locator("main").innerText(), /until the convoy is through/);
+      });
+    }
+    await shot("operation-task-withheld");
+
+    // Kit holds the post that commands the ship: the task is theirs to read, and to pass down.
+    await signInAs(kit);
+    await openEscort();
+    const mine = page.locator("section:visible", { has: page.locator("#your-task") });
+    assert.match(await mine.innerText(), /Training Ship[\s\S]*Hold the lane until the convoy is through\./);
+    await mine.getByRole("link", { name: "Every unit's task" }).click();
+    await taskCard().waitFor();
+    assert.equal(await page.locator('nav[aria-label="Parts of this event"]:visible a', { hasText: "withheld" }).count(), 0);
+    // The key beside the tasks draws each level's picture.
+    assert.ok((await page.locator(".task-key:visible li svg > *").count()) >= 4, "a level in the key has no picture");
+    await shot("operation-task-commander");
+    await taskCard().getByRole("button", { name: /^Open to my unit/ }).click();
+    await taskCard().locator(".chip.level", { hasText: "The unit" }).waitFor();
+    assert.equal((await taskRow()).level, "unit");
+    // Once it is the unit's, there is nothing further down to pass it to.
+    assert.equal(await taskCard().getByRole("button", { name: /^Open to my/ }).count(), 0);
+
+    await signInAs(lee);
+    await openEscort();
+    await tab("Tasks");
+    assert.match(await taskCard().innerText(), /Yours[\s\S]*The unit[\s\S]*Hold the lane until the convoy is through\./i);
+    await signInAs(sam);
+    await openEscort();
+    await tab("Tasks");
+    assert.match(await taskCard().innerText(), /This task is for Training Ship only\./);
+  });
+  await check("every task opens once the event is closed", async () => {
+    await supabase.sql("update public.events set starts_at = now() - interval '1 hour', announced_at = now() - interval '3 days' where title = 'Escort 001'");
+    await signInAs(founder);
+    await openEscort();
+    await tab("Report");
+    await page.getByRole("button", { name: "Make the return and close the event" }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "The attendance return is made." }).waitFor();
+    assert.equal((await escort()).state, "done");
+    await signInAs(sam);
+    await openEscort();
+    await tab("Tasks");
+    assert.match(await taskCard().innerText(), /Hold the lane until the convoy is through\./);
+    assert.equal(await page.locator('nav[aria-label="Parts of this event"]:visible a', { hasText: "withheld" }).count(), 0);
+  });
+  await check("a task, and each change to who reads it, is in the logs without its words", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/admin/logs?show=operations`);
+    await page.locator(".log:visible").first().waitFor();
+    const text = await logText();
+    assert.match(text, /Ada Vance gave Training Ship its task for Escort 001\.\s+Read by the unit's commander\./);
+    assert.match(text, /Kit Marlow changed who reads the task of Training Ship for Escort 001\.\s+Now the unit\. Before, the unit's commander\./);
+    assert.doesNotMatch(text, /until the convoy is through/);
   });
 
   await check("no page raised a script error", async () => {

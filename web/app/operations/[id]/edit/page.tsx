@@ -7,6 +7,7 @@ import type { Plan } from "@/lib/operations";
 import { deleteDraft } from "../../actions";
 import { EventForm, ExtraPostForm, KeyPostsForm, OrdersForm, RemoveExtraPost, UnitsForm } from "../../OpsForms";
 import { PlanEditor, ReadingForm, type PlanRow } from "../../PlanForms";
+import { RemoveTask, TaskForm } from "../../TaskForms";
 import { EditHead, openForEdit } from "./frame";
 
 export const metadata: Metadata = {
@@ -50,7 +51,7 @@ function rowsOf(plan: Plan): Record<keyof Plan, PlanRow[]> {
 async function EditEvent({ params }: { params: Props["params"] }) {
   const opened = await openForEdit((await params).id);
   if ("shut" in opened) return opened.shut;
-  const { event, people, mayCreate, types, choices, taking, roll, orders, sections, plan } = opened.result;
+  const { event, people, mayCreate, types, choices, taking, roll, orders, sections, plan, tasks, taskUnits } = opened.result;
   const rows = rowsOf(plan);
   const { date, time } = toFields(event.startsAt);
 
@@ -174,7 +175,43 @@ async function EditEvent({ params }: { params: Props["params"] }) {
         <TabPanel id="tasks">
           <div className="wrap band tab-band">
             <Panes>
-              <PlanEditor id={event.id} part="elements" rows={rows.elements} wide />
+              {tasks.map((task) => (
+                <Pane id={`task-${task.id}`} icon="flag" title={task.unit.path} key={task.id}>
+                  {task.takingPart ? null : <p className="roll-note">This unit no longer takes part in the event.</p>}
+                  <TaskForm
+                    id={event.id}
+                    task={{
+                      id: task.id,
+                      unit: task.unit.name,
+                      callsign: task.callsign,
+                      level: task.level,
+                      body: task.body ?? "",
+                      reads: task.reads ?? { everyone: "", unit: "", leaders: "", commander: "" },
+                    }}
+                  />
+                  <RemoveTask id={event.id} task={task.id} unit={task.unit.name} />
+                </Pane>
+              ))}
+              <Pane id="task-new" icon="flag" title="Give a unit its task">
+                {taskUnits.length > 0 ? (
+                  <TaskForm id={event.id} units={taskUnits} />
+                ) : (
+                  <p>Every unit taking part has its task.</p>
+                )}
+              </Pane>
+              <PlanEditor id={event.id} part="elements" rows={rows.elements} />
+              <Pane id="task-key" icon="lock" title="How withholding works" wide>
+                <p>
+                  A new task starts as the unit&apos;s own. The commanders of the units above always read it, and so do
+                  command and whoever runs the event. A unit&apos;s commander can pass a task down inside the unit.
+                  Everyone else is shown that the unit has a task, and none of its words. Every task opens to all once
+                  the event is closed.
+                </p>
+                <p>
+                  Who commands a unit, and which posts lead, is kept by an admin under Structure. Someone standing in
+                  for a post reads what its holder would. A member of the opposing force reads only what everyone reads.
+                </p>
+              </Pane>
             </Panes>
           </div>
         </TabPanel>
