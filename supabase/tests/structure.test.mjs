@@ -96,6 +96,17 @@ test("signed-in users can run the rule helpers and nothing else", async () => {
   );
 });
 
+test("the old fixed list of event kinds is gone, and events keep their types", async () => {
+  const [left] = await fleet.rows(
+    `select (select count(*)::int from pg_type where typnamespace = 'public'::regnamespace and typname = 'event_kind') as types,
+            (select count(*)::int from pg_proc where pronamespace = 'app'::regnamespace and proname = 'may_create_event') as helpers,
+            (select data_type from information_schema.columns
+             where table_schema = 'public' and table_name = 'events' and column_name = 'kind') as kind,
+            (select count(*)::int from public.event_types) as kinds`,
+  );
+  assert.deepEqual(left, { types: 0, helpers: 0, kind: "text", kinds: 5 });
+});
+
 test("every function pins its search path", async () => {
   const loose = await fleet.rows(
     `select proname from pg_proc
