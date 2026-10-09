@@ -3752,6 +3752,75 @@ a.contents-name:hover {
   display: block;
 }
 
+/* Under an event's facts: the calendar file, and the button that drafts another like it. */
+.glance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px 12px;
+  margin-top: 20px;
+}
+
+.glance-actions .copy-event {
+  margin-top: 0;
+}
+
+/* A line beside the buttons of whoever runs an event: where a draft stands with command. */
+.band .decisions-note {
+  flex-basis: 100%;
+  max-width: 46rem;
+  margin: 0;
+  color: var(--text-2);
+}
+
+/* Who is on an event's opposing force. */
+.opfor-roll {
+  max-width: 46rem;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.opfor-roll li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding-block: 10px;
+  border-top: 1px solid var(--seam);
+}
+
+.opfor-roll li > span {
+  color: var(--white);
+  font-weight: 600;
+}
+
+.opfor-roll .chip,
+.opfor-roll .tag {
+  margin-left: 10px;
+}
+
+.opfor-roll .stand-in {
+  margin-top: 0;
+  gap: 4px 16px;
+}
+
+.opfor-leads {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.opfor-leads input {
+  width: 1.2rem;
+  height: 1.2rem;
+  margin: 0;
+  accent-color: var(--gold);
+}
+
 /* On a member's record: the qualifications they hold and the times they were mentioned. */
 .earned {
   display: grid;

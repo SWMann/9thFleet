@@ -4,6 +4,8 @@
  */
 
 export type EventState = "draft" | "announced" | "done" | "cancelled";
+/** Where a draft stands with command: nobody has asked, someone has, or command has approved it. */
+export type Approval = "not_asked" | "asked" | "approved";
 export type WeaponsState = "hold" | "tight" | "free";
 export type Reply = "attending" | "not_attending";
 export type Returned = "present" | "absent_with_notice" | "absent_without_notice";
@@ -86,6 +88,8 @@ export type EventType = {
   example: string;
   /** Command drafts every type. This one is open to instructors too. */
   instructorsMayDraft: boolean;
+  /** A draft of this type by someone who is not command waits for command's approval. */
+  needsApproval: boolean;
   /** What a new event of this type starts with. */
   defaultDuration: number;
   defaultWeaponsState: WeaponsState | null;

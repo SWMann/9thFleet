@@ -8,11 +8,13 @@
 // Run it with `npm run e2e`. It builds nothing: run `npm run build` first.
 
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import { createChecks, openBrowser, startSite } from "./harness.mjs";
 import { startSupabaseWithDatabase } from "./supabase-with-database.mjs";
 
 const SITE_PORT = 3112;
 const DATABASE_PORT = 54398;
+const DISCORD_PORT = 54399;
 
 const founder = { discordId: "1", name: "ada_on_discord" };
 const kit = { discordId: "7", name: "kit_on_discord" };
@@ -40,12 +42,34 @@ const applicationsOf = async (person) =>
     [person.discordId],
   );
 
+// A stand-in for the fleet's Discord channel. It keeps what the site posts to it,
+// and can be told to turn the next post away.
+const discord = { posts: [], failNext: false };
+const discordServer = createServer((request, response) => {
+  let text = "";
+  request.on("data", (chunk) => (text += chunk));
+  request.on("end", () => {
+    if (discord.failNext) {
+      discord.failNext = false;
+      response.writeHead(500).end();
+      return;
+    }
+    discord.posts.push({ path: request.url, body: JSON.parse(text || "{}") });
+    response.writeHead(204).end();
+  });
+});
+await new Promise((resolve) => discordServer.listen(DISCORD_PORT, "127.0.0.1", resolve));
+
 let running;
 let browser;
 try {
   running = await startSite({
     port: SITE_PORT,
-    env: { SUPABASE_URL: supabase.origin, SUPABASE_PUBLISHABLE_KEY: "sb_publishable_for_tests" },
+    env: {
+      SUPABASE_URL: supabase.origin,
+      SUPABASE_PUBLISHABLE_KEY: "sb_publishable_for_tests",
+      DISCORD_ANNOUNCE_WEBHOOK: `http://127.0.0.1:${DISCORD_PORT}/api/webhooks/1/for-tests`,
+    },
   });
   const { site } = running;
   const opened = await openBrowser();
@@ -1776,12 +1800,12 @@ try {
     await eventFormReady();
     await page.getByLabel("Type").selectOption({ label: "Patrol" });
     await page.getByLabel("Title").fill("Convoy 001");
-    await page.getByLabel(/^Muster at/).fill("Baijini Point, pad 04");
+    await page.getByLabel(/^Muster at/).fill("Baijini Point, pad 04; north side");
     await page.getByLabel(/^Area/).fill("ArcCorp to microTech");
     await page.getByRole("button", { name: "Save as a draft" }).click();
     await headingIs("Convoy 001");
     const facts = await page.locator(".facts:visible").innerText();
-    assert.match(facts, /Muster at\s+Baijini Point, pad 04/i);
+    assert.match(facts, /Muster at\s+Baijini Point, pad 04; north side/i);
     assert.match(facts, /Area\s+ArcCorp to microTech/i);
     // The event starts at 19:00 UTC, so the timeline below is worked out against that.
     await supabase.sql("update public.events set starts_at = date_trunc('day', now()) + interval '3 days 19 hours' where title = 'Convoy 001'");
@@ -1923,7 +1947,7 @@ try {
     await page.getByRole("button", { name: "Draft another like this" }).click();
     await headingIs("Convoy 002");
     await eventFormReady();
-    assert.equal(await page.getByLabel(/^Muster at/).inputValue(), "Baijini Point, pad 04");
+    assert.equal(await page.getByLabel(/^Muster at/).inputValue(), "Baijini Point, pad 04; north side");
     await editPart("Orders and plan");
     await planPart("objectives").locator("details.record:not(.record-new)").first().waitFor();
     assert.equal(await planPart("objectives").locator("details.record:not(.record-new)").count(), 2);
@@ -2101,6 +2125,194 @@ try {
     assert.match(operations, /Ada Vance recorded the loss of 2 × Pisces at Radio course 001\./);
   });
 
+  console.log("Approval, the opposing force and reach");
+  const announceNow = async () => {
+    await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).click();
+    await page.getByRole("button", { name: "Yes, announce it" }).click();
+  };
+  const draftEvent = async (type, title, more = async () => {}) => {
+    await page.goto(`${site}/operations/new`);
+    await eventFormReady();
+    await page.getByLabel("Type").selectOption({ label: type });
+    await page.getByLabel("Title").fill(title);
+    await more();
+    await page.getByRole("button", { name: "Save as a draft" }).click();
+    await headingIs(title);
+  };
+
+  await check("an announcement is posted to Discord with the bare facts, and none of the orders", async () => {
+    const posted = discord.posts.find((post) => post.body.content?.includes("Patrol 001"));
+    assert.ok(posted, "the first announcement was not posted");
+    const event = await patrol();
+    assert.equal(posted.path, "/api/webhooks/1/for-tests");
+    assert.match(
+      posted.body.content,
+      new RegExp(`^\\*\\*Patrol: Patrol 001\\*\\*\\n<t:\\d+:F> \\(<t:\\d+:R>\\)\\n${site}/operations/${event.id}$`),
+    );
+    // Whatever a title says, the post pings nobody.
+    assert.deepEqual(posted.body.allowed_mentions, { parse: [] });
+    // The summary and the orders are for the serving fleet, behind sign-in.
+    const everything = discord.posts.map((post) => JSON.stringify(post.body)).join("\n");
+    assert.doesNotMatch(everything, /ArcCorp|deter piracy|Commander: Ada Vance|Baijini|Ambush/);
+    // One post for each announcement, and none for a draft, a cancellation or a closed event.
+    const announced = await supabase.sql("select count(*)::int as n from public.events where announced_at is not null");
+    assert.equal(discord.posts.length, announced[0].n);
+  });
+  await check("an announcement still goes through when Discord does not answer, and says so", async () => {
+    await signInAs(founder);
+    await draftEvent("Patrol", "Patrol 090 @everyone");
+    discord.failNext = true;
+    await announceNow();
+    await page.locator(".form-result:visible").filter({ hasText: "It could not be posted to Discord, so tell the fleet yourself." }).waitFor();
+    assert.equal((await eventTitled("Patrol 090 @everyone")).state, "announced");
+    assert.equal(discord.posts.filter((post) => post.body.content?.includes("Patrol 090")).length, 0);
+  });
+  await check("a member takes one event away as a calendar file, and nobody else can", async () => {
+    await signInAs(kit);
+    const event = await convoy();
+    await openConvoy();
+    assert.equal(await page.getByRole("link", { name: "Add to calendar" }).getAttribute("href"), `/operations/${event.id}/calendar`);
+    const file = await page.request.get(`${site}/operations/${event.id}/calendar`);
+    assert.equal(file.status(), 200);
+    assert.match(file.headers()["content-type"], /^text\/calendar/);
+    assert.match(file.headers()["content-disposition"], /attachment; filename="convoy-001\.ics"/);
+    assert.match(file.headers()["cache-control"], /no-store/);
+    const text = await file.text();
+    assert.match(text, /BEGIN:VCALENDAR\r\n[\s\S]*BEGIN:VEVENT\r\n[\s\S]*END:VEVENT\r\nEND:VCALENDAR\r\n$/);
+    assert.match(text, /SUMMARY:Convoy 001\r\n/);
+    const stamp = (iso) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+    assert.ok(text.includes(`DTSTART:${stamp(event.starts_at)}\r\n`));
+    assert.ok(text.includes(`DTEND:${stamp(Date.parse(event.starts_at) + event.duration_minutes * 60_000)}\r\n`));
+    // A comma and a semicolon are written the way a calendar file needs them.
+    assert.ok(text.includes("LOCATION:Baijini Point\\, pad 04\\; north side\r\n"));
+    assert.ok(text.replace(/\r\n /g, "").includes(`URL:${site}/operations/${event.id}`));
+    // The orders, the plan and the roll are not in it.
+    assert.doesNotMatch(text, /Hold the lane|Screen the convoy|Anvil|Kit Marlow|pad 06/);
+
+    // An event the member cannot see is not found, and nobody signed out gets a file.
+    const draft = await eventTitled("Gunnery 002");
+    assert.equal((await page.request.get(`${site}/operations/${draft.id}/calendar`)).status(), 404);
+    await context.clearCookies();
+    const refused = await page.request.get(`${site}/operations/${event.id}/calendar`, { maxRedirects: 0 });
+    assert.equal(refused.status(), 307);
+    assert.match(refused.headers().location, /\/sign-in$/);
+  });
+  await check("a type of event can need command's approval, and a draft of it waits until command gives it", async () => {
+    await signInAs(founder);
+    await openEditor("Event types");
+    const training = await openRecord("Training evolution");
+    await training.getByLabel("A draft by anyone but command needs command's approval before it is announced").check();
+    await training.getByRole("button", { name: "Save", exact: true }).click();
+    await told(training, "Saved.");
+    assert.equal((await typeRow("training")).needs_approval, true);
+
+    // Kit is an instructor, and not command.
+    await signInAs(kit);
+    await draftEvent("Training evolution", "Approval drill 001");
+    await page.getByText("This type of event needs command's approval before it is announced.").waitFor();
+    assert.equal(await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).count(), 0);
+    await page.getByRole("button", { name: "Ask command to approve it" }).click();
+    await page.getByText("Waiting for command's approval.").waitFor();
+    const waiting = await eventTitled("Approval drill 001");
+    assert.equal(waiting.approval, "asked");
+    // A draft's date is not settled, so it has no calendar file, even for whoever wrote it.
+    assert.equal(await page.getByRole("link", { name: "Add to calendar" }).count(), 0);
+    assert.equal((await page.request.get(`${site}/operations/${waiting.id}/calendar`)).status(), 404);
+    await shot("operation-awaiting-approval");
+
+    await signInAs(jo);
+    await page.goto(`${site}/admin`);
+    await leadIs(/Stage 1/);
+    assert.match(await page.locator("main").innerText(), /Approval drill 001 is waiting for command's approval/);
+    await openEvent("Approval drill 001");
+    await page.getByRole("button", { name: "Approve it" }).click();
+    await page.getByText("Command has approved this draft.").waitFor();
+    const approved = await eventTitled("Approval drill 001");
+    assert.equal(approved.approval, "approved");
+    assert.equal(approved.approved_by, (await memberOf(jo)).id);
+    assert.ok(approved.approved_at);
+
+    await signInAs(kit);
+    await openEvent("Approval drill 001");
+    await page.getByText("Command has approved this draft.").waitFor();
+    await announceNow();
+    await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
+    assert.equal((await eventTitled("Approval drill 001")).state, "announced");
+    // Command needs nobody's approval for a draft of its own.
+    await signInAs(jo);
+    await draftEvent("Training evolution", "Approval drill 002");
+    await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).waitFor();
+  });
+  await check("command sets up an opposing force, and the side being exercised is shown none of it", async () => {
+    await signInAs(founder);
+    await draftEvent("Patrol", "Wargame 001", async () => {
+      // Lee commands the side being exercised, and is not command.
+      await choosePerson(page.getByLabel("Operation commander"), "Lee Tanaka");
+    });
+    const section = page.locator("section:visible", { has: page.locator("#opfor") });
+    await section.getByText("Nobody has been named yet.").waitFor();
+    await choosePerson(section.getByLabel("Name to the opposing force"), "Kit Marlow");
+    await section.getByLabel("Leads it").check();
+    await section.getByRole("button", { name: "Name to the opposing force" }).click();
+    await section.locator(".opfor-roll li", { hasText: "Kit Marlow" }).waitFor();
+    assert.match(await section.locator(".opfor-roll").innerText(), /Kit Marlow\s*Leads/i);
+    // Whoever runs the event is on the other side, so is not offered.
+    assert.equal(await section.getByLabel("Name to the opposing force").locator("option", { hasText: "Lee Tanaka" }).count(), 0);
+    await section.getByLabel("The opposing force's plan").fill("Ambush at the second waypoint.");
+    await section.getByRole("button", { name: "Save the plan" }).click();
+    await told(section, "Saved.");
+    await announceNow();
+    await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
+    await shot("operation-opfor");
+
+    // The event's own commander runs it, and sees neither the plan nor who is against them.
+    await signInAs(lee);
+    await openEvent("Wargame 001");
+    await page.getByRole("heading", { name: "Running this event" }).waitFor();
+    assert.equal(await page.locator("#opfor").count(), 0);
+    assert.doesNotMatch(await page.locator("main").innerText(), /Opposing force|Ambush|Kit Marlow/i);
+
+    // The member who leads it reads it, writes its plan, and is not on the roll.
+    await signInAs(kit);
+    await openEvent("Wargame 001");
+    const mine = page.locator("section:visible", { has: page.locator("#opfor") });
+    await mine.getByText("You are on the opposing force for this event.").first().waitFor();
+    assert.equal(await mine.getByLabel("Name to the opposing force").count(), 0, "who is on it is command's to say");
+    await mine.getByLabel("The opposing force's plan").fill("Ambush at the third waypoint instead.");
+    await mine.getByRole("button", { name: "Save the plan" }).click();
+    await told(mine, "Saved.");
+    assert.equal((await one("select plan from public.event_opfor where event_id = $1", [(await eventTitled("Wargame 001")).id])).plan, "Ambush at the third waypoint instead.");
+    await page.getByText("so you are not on its roll and have nothing to reply to").waitFor();
+    assert.equal(await page.getByRole("button", { name: "Attending", exact: true }).count(), 0);
+
+    // Taken off it, they are an ordinary member of the event again.
+    await signInAs(founder);
+    await openEvent("Wargame 001");
+    await page.locator(".opfor-roll:visible li", { hasText: "Kit Marlow" }).getByRole("button", { name: /Take off/ }).click();
+    await page.locator("section:visible", { has: page.locator("#opfor") }).getByText("Nobody has been named yet.").waitFor();
+    await signInAs(kit);
+    await openEvent("Wargame 001");
+    assert.equal(await page.locator("#opfor").count(), 0);
+    await page.getByRole("button", { name: "Attending", exact: true }).click();
+    await page.locator(".form-result:visible").filter({ hasText: "You are down as attending." }).waitFor();
+  });
+  await check("approval, the opposing force and a failed post are in the logs", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/admin/logs?show=operations`);
+    await page.locator(".log:visible").first().waitFor();
+    const text = await logText();
+    assert.match(text, /Kit Marlow asked command to approve Approval drill 001\./);
+    assert.match(text, /Jo Reyes approved Approval drill 001\./);
+    assert.match(text, /Ada Vance named Kit Marlow to the opposing force of Wargame 001, to lead it\./);
+    assert.match(text, /Kit Marlow wrote the opposing force's plan for Wargame 001\./);
+    assert.match(text, /Ada Vance took Kit Marlow off the opposing force of Wargame 001\./);
+    // The plan's words are not in the list.
+    assert.doesNotMatch(text, /Ambush/);
+    await page.goto(`${site}/admin/logs?show=refused`);
+    await page.locator(".log:visible").first().waitFor();
+    assert.match(await logText(), /Ada Vance tried to post an announcement to Discord, and it failed\./);
+  });
+
   await check("no page raised a script error", async () => {
     assert.deepEqual(pageErrors, []);
   });
@@ -2112,6 +2324,7 @@ try {
 } finally {
   await browser?.close();
   running?.stop();
+  discordServer.close();
   await supabase.close();
 }
 

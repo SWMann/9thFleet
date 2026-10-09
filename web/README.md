@@ -48,7 +48,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/auth/callback` | Where Discord sends you back. It turns Discord's one-time code into a session |
 | `/profile` | Your record: status, service, rank, post, your names, and for a serving member the qualifications they hold and the times they were mentioned |
 | `/order-of-battle` | Every unit and post, who holds each, what is vacant and what opens later. For the serving fleet |
-| `/operations` | Training and operation nights: the orders, the roll, stand-ins, the attendance return and the after-action report. For the serving fleet. Command drafts events, and instructors draft the types open to them. An event can be copied, and can repeat weekly. It says which units take part, who it is open to, how many places it has and what it needs to go ahead. Its orders carry a plan: objectives, tasks, a timeline in the reader's own time, ships, a comms plan, reading, and numbered amendments that those attending acknowledge. An event can teach a qualification, which an instructor signs off for those who pass. Its report records how each objective turned out, losses and mentions |
+| `/operations` | Training and operation nights: the orders, the roll, stand-ins, the attendance return and the after-action report. For the serving fleet. Command drafts events, and instructors draft the types open to them. An event can be copied, and can repeat weekly. It says which units take part, who it is open to, how many places it has and what it needs to go ahead. Its orders carry a plan: objectives, tasks, a timeline in the reader's own time, ships, a comms plan, reading, and numbered amendments that those attending acknowledge. An event can teach a qualification, which an instructor signs off for those who pass. Its report records how each objective turned out, losses and mentions. A type of event can need command's approval before it is announced. Command can set an opposing force against an event, which the side being exercised cannot see. A member can take one event away as a calendar file, and an announcement can be posted to Discord |
 | `/apply` | The application form, and the state of your application once it is sent |
 | `/staff/applications` | For staff: the applications, their answers, interview notes and the decision. An admin opens and closes recruitment here |
 | `/admin` | For the people who run the fleet: its figures. See Admin pages below |
@@ -78,6 +78,14 @@ How it is kept safe:
 The site finds the database through two settings, which the Supabase integration on Vercel provides:
 `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Both are public values. To
 run against the database on your own computer, copy `.env.example` to `.env.local` and fill them in.
+
+One more setting is optional, and it is a secret: `DISCORD_ANNOUNCE_WEBHOOK`, the address of a
+webhook on the Discord channel where events are announced. Anyone who has it can post to that
+channel, so it is set in the Vercel project and nowhere else. It never goes in this repository, in a
+file that is committed, or in a variable whose name starts with `NEXT_PUBLIC_`. With it set, the
+site posts once when an event is announced: the type, the title, the date and time, and a link. The
+orders stay behind sign-in. Without it, nothing is posted. If Discord does not answer, the event is
+still announced and whoever announced it is told to tell the fleet themselves.
 
 Two things are set in the Supabase dashboard, under Authentication:
 
@@ -189,6 +197,8 @@ to be tracked.
 | The order of battle page | `app/order-of-battle/page.tsx`, and what it reads in `lib/order-of-battle.ts` |
 | The operations pages | `app/operations/`, and what they read in `lib/operations.ts` |
 | How go or no-go is worked out, for the event's page and the admin pages | `lib/manning.ts` |
+| What is posted to Discord when an event is announced | `lib/discord.ts` |
+| The calendar file for one event | `app/operations/[id]/calendar/route.ts` |
 | The lists in an event's plan, and each one's fields | `planParts` in `lib/operations-form.ts`. One editor, `app/operations/PlanForms.tsx`, draws them all |
 | The types of event | Nowhere in the code. An admin keeps them at `/admin/structure/event-types` |
 | The weapons states, Volume 2's names for the order's five sections, and the event cycle | `lib/operations-form.ts` |

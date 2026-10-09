@@ -21,6 +21,7 @@ or let someone promote themselves.
 | `migrations/…_event_manning.sql` | Who takes part in an event: the units, extra posts for the night, posts that must be filled, who it is open to, and places with a reserve list |
 | `migrations/…_event_plan.sql` | Fuller orders: objectives, elements and their tasks, the timeline, ships, nets, where to muster, what to read, and amendments with their acknowledgement |
 | `migrations/…_event_report.sql` | Signing off a qualification at the event that teaches it, and the report's records: how each objective turned out, losses and mentions |
+| `migrations/…_event_opfor.sql` | Command's approval for the types of event that need it, and the opposing force: its plan and who is on it, kept from the side being exercised |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -115,6 +116,16 @@ Roles add up: an admin holds every role. Things the database decides for itself:
 - **The report keeps records as well as words.** Whoever ran an event says how each objective turned
   out, what was lost, and who is mentioned. A mention is written about someone else, one for each
   member for each event, and is read by the serving fleet with the event and on the member's record.
+- **A type of event can need command's approval.** An admin says so on the type. A draft of that
+  type by anyone but command cannot be announced until command approves it. The database records
+  who approved it and when, and takes the approval back if the draft's type is changed afterwards.
+  Command's own drafts never wait.
+- **The opposing force is kept from the side it is set against.** Command names who is on it, and
+  who leads it. Its plan and its members can be read by command and by those members, and by nobody
+  else, which includes the event's own commander, second-in-command and author. Whoever leads it
+  can write its plan. A member named to it comes off the event's roll and cannot reply to it. They
+  read the event's orders like anyone else. A copy brings the opposing force with it only when
+  command makes the copy.
 - **A weekly event drafts the next one.** When it is closed, or cancelled after it was announced,
   the database drafts next week's with the same details and orders, in the name of whoever closed
   it. A number at the end of the title goes up by one. The draft is never announced by itself.
