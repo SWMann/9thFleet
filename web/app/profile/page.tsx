@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { RichLine } from "@/components/rich/Rich";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getSession, isServing, isStaff, type Member, type Role, type Service, type Status } from "@/lib/member";
@@ -166,7 +167,9 @@ async function Record() {
                 <ul>
                   {earned.mentions.map((mention) => (
                     <li key={mention.event.id}>
-                      <strong>{mention.citation}</strong>
+                      <strong>
+                        <RichLine text={mention.citation} />
+                      </strong>
                       <span>
                         <Link href={`/operations/${mention.event.id}`}>{mention.event.title}</Link>, {day.format(new Date(mention.mentionedAt))}
                       </span>

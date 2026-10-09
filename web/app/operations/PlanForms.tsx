@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { RichField } from "@/components/rich/RichField";
 import { outcomeNames, planPartOf, type Outcome, type PlanField, type PlanPartKey } from "@/lib/operations-form";
 import {
   acknowledgeAmendment,
@@ -144,7 +145,16 @@ function RowForm({
               </p>
             ) : null}
             {field.kind === "long" ? (
-              <textarea id={name} name={field.key} rows={4} maxLength={field.max} defaultValue={held(field.key)} required={field.required} aria-describedby={described} />
+              <RichField
+                id={name}
+                name={field.key}
+                rows={field.line ? 2 : 4}
+                maxLength={field.max}
+                defaultValue={held(field.key)}
+                required={field.required}
+                line={field.line}
+                describedBy={described}
+              />
             ) : (
               <input
                 id={name}
@@ -237,15 +247,7 @@ export function AmendmentForm({ id }: { id: string }) {
           Say what has changed in the orders since they went out. It is numbered and dated, it cannot be rewritten, and
           everyone attending is asked to acknowledge it.
         </p>
-        <textarea
-          id="amendment"
-          name="body"
-          rows={3}
-          maxLength={2000}
-          required
-          defaultValue={result.values?.body ?? ""}
-          aria-describedby="amendment_hint"
-        />
+        <RichField id="amendment" name="body" rows={3} maxLength={2000} required defaultValue={result.values?.body ?? ""} describedBy="amendment_hint" />
       </div>
       <div className="form-end">
         <button className="button button-quiet" type="submit" disabled={pending}>

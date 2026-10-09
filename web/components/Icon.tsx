@@ -110,6 +110,19 @@ const paths = {
   layers: <path d="M12 3l9 5-9 5-9-5 9-5zM3 12.5l9 5 9-5M3 17l9 5 9-5" />,
   inbox: <path d="M4 13l2.5-8h11L20 13v6H4v-6zM4 13h5l1 2.5h4l1-2.5h5" />,
   grid: <path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z" />,
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5.5M12 7.5v.5" />
+    </>
+  ),
+  bullets: <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.5M4.5 12h.5M4.5 18h.5" />,
+  numbers: <path d="M10 6h10M10 12h10M10 18h10M4 5l1.5-1v4M4 8h3M4 15.5c0-2 3-2 3-.3 0 1.3-3 1.8-3 3.3h3" />,
+  quote: <path d="M5 17c2-1 3-2.5 3-5H5V7h5v5c0 3-1.5 5-4 6zM14 17c2-1 3-2.5 3-5h-3V7h5v5c0 3-1.5 5-4 6z" />,
+  link: <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />,
+  rule: <path d="M4 12h16M8 6h8M8 18h8" />,
+  undo: <path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" />,
+  redo: <path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3" />,
   pin: (
     <>
       <path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z" />

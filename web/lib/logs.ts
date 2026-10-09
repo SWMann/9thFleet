@@ -3,6 +3,7 @@ import { attemptNames, type Attempt } from "@/lib/activity";
 import { gate } from "@/lib/admin";
 import type { Role, Service, Status } from "@/lib/member";
 import { hLabel, outcomeNames, returnedNames, type Outcome, type Returned } from "@/lib/operations-form";
+import { plainText } from "@/lib/rich/markdown";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -376,15 +377,27 @@ function shown(key: string, value: unknown, names: Names, table: string): string
 }
 
 /** The fields an update changed, as "field: old to new". Long text is only named. */
+/** The fields that hold formatted text, by table. A log line gives their words, without the marks that format them. */
+const FORMATTED: Record<string, string[]> = {
+  event_orders: ["warning_order", "situation", "mission", "execution", "support", "command_and_signal"],
+  event_elements: ["task"],
+  event_mentions: ["citation"],
+  areas: ["about"],
+  fleet_roles: ["summary"],
+  qualifications: ["description"],
+  event_types: ["situation_holds", "mission_holds", "execution_holds", "support_holds", "command_and_signal_holds"],
+};
+
 function changes(row: AuditRow, names: Names, said: string[] = []): string | null {
   if (row.action !== "update" || !row.old_row || !row.new_row) return null;
   const parts: string[] = [];
+  const words = (key: string, value: unknown) => (FORMATTED[row.table_name]?.includes(key) && typeof value === "string" ? plainText(value) : value);
   for (const key of Object.keys(row.new_row)) {
     // A field the line itself already speaks of is not said twice.
     if (QUIET.has(key) || said.includes(key)) continue;
-    const was = row.old_row[key];
-    const now = row.new_row[key];
-    if (JSON.stringify(was) === JSON.stringify(now)) continue;
+    if (JSON.stringify(row.old_row[key]) === JSON.stringify(row.new_row[key])) continue;
+    const was = words(key, row.old_row[key]);
+    const now = words(key, row.new_row[key]);
     const label = key.replace(/_id$/, "").replaceAll("_", " ");
     const long =
       [was, now].some((value) => typeof value === "object" && value !== null) ||
@@ -629,7 +642,7 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
     case "event_amendments": {
       const event = names.event(any.event_id);
       if (row.action === "delete") return line("operations", `${actor} deleted amendment ${any.number} to the orders of ${event}`);
-      const body = String(now.body ?? "");
+      const body = plainText(String(now.body ?? ""));
       return line("operations", `${actor} issued amendment ${any.number} to the orders of ${event}`, body.length > 240 ? `${body.slice(0, 240)}…` : body);
     }
 
@@ -657,9 +670,9 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
 
     case "event_mentions": {
       const event = names.event(any.event_id);
-      if (row.action === "insert") return line("personnel", `${actor} mentioned ${subject} in the report of ${event}`, String(now.citation ?? ""));
+      if (row.action === "insert") return line("personnel", `${actor} mentioned ${subject} in the report of ${event}`, plainText(String(now.citation ?? "")));
       if (row.action === "delete") return line("personnel", `${actor} withdrew ${whose} mention in the report of ${event}`);
-      return line("personnel", `${actor} corrected ${whose} mention in the report of ${event}`, String(now.citation ?? ""));
+      return line("personnel", `${actor} corrected ${whose} mention in the report of ${event}`, plainText(String(now.citation ?? "")));
     }
 
     case "event_opfor": {

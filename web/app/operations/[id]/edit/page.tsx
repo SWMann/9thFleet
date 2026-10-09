@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Pane, Panes } from "@/components/Pane";
+import { RichLine } from "@/components/rich/Rich";
+import { RichSourcesProvider } from "@/components/rich/RichSources";
 import { TabPanel, Tabs, type TabSpec } from "@/components/Tabs";
 import { toFields } from "@/lib/operations-form";
 import type { Plan } from "@/lib/operations";
@@ -52,12 +54,12 @@ function rowsOf(plan: Plan): Record<keyof Plan, PlanRow[]> {
 async function EditEvent({ params }: { params: Props["params"] }) {
   const opened = await openForEdit((await params).id);
   if ("shut" in opened) return opened.shut;
-  const { event, people, mayCreate, types, choices, taking, roll, orders, sections, plan, tasks, taskUnits } = opened.result;
+  const { event, people, mayCreate, types, choices, taking, roll, orders, sections, plan, tasks, taskUnits, sources } = opened.result;
   const rows = rowsOf(plan);
   const { date, time } = toFields(event.startsAt);
 
   return (
-    <>
+    <RichSourcesProvider value={sources}>
       <EditHead id={event.id} title={event.title} lead="Its details, the force it uses, its orders and its tasks. Each card saves by itself." />
 
       <Tabs label="Parts of the editor" tabs={tabs}>
@@ -158,7 +160,11 @@ async function EditEvent({ params }: { params: Props["params"] }) {
             ) : null}
             <Panes>
               <Pane id="orders" icon="book" title="The orders" wide>
-                <OrdersForm id={event.id} orders={orders} sections={sections} />
+                <OrdersForm
+                  id={event.id}
+                  orders={orders}
+                  sections={sections.map((section) => ({ ...section, guidance: <RichLine text={section.holds} /> }))}
+                />
               </Pane>
               <PlanEditor id={event.id} part="objectives" rows={rows.objectives} />
               <PlanEditor id={event.id} part="timings" rows={rows.timings} />
@@ -215,6 +221,6 @@ async function EditEvent({ params }: { params: Props["params"] }) {
           </div>
         </TabPanel>
       </Tabs>
-    </>
+    </RichSourcesProvider>
   );
 }

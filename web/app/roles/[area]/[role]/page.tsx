@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { RichLine } from "@/components/rich/Rich";
+import { plainText } from "@/lib/rich/markdown";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Icon } from "@/components/Icon";
@@ -27,7 +29,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (found.state !== "ready") return { title: "Role" };
   return {
     title: `${found.role.name}: ${found.area.name}`,
-    description: `${leadOf(found.role, found.area)} Its grades, what it needs, where it leads and the ships it is found on in the UEE 9th Fleet.`,
+    description: `${plainText(leadOf(found.role, found.area))} Its grades, what it needs, where it leads and the ships it is found on in the UEE 9th Fleet.`,
   };
 }
 
@@ -81,7 +83,7 @@ async function RoleCard({ params }: { params: Props["params"] }) {
           </p>
         }
         title={<strong>{role.name}</strong>}
-        lead={leadOf(role, area)}
+        lead={<RichLine text={leadOf(role, area)} />}
       >
         <p className="chips">
           {role.posts > 0 ? <RoleChips role={role} /> : <span className="chip">No posts yet</span>}
@@ -252,7 +254,9 @@ async function RoleCard({ params }: { params: Props["params"] }) {
               <li className="card" key={requirement.name}>
                 <Icon name="checks" size={30} />
                 <h3>{requirement.name}</h3>
-                <p>{requirement.description}</p>
+                <p>
+                  <RichLine text={requirement.description} />
+                </p>
                 <p className="state">
                   Every {role.name} needs this{requirement.waivedWhenActing ? ". An acting holder is let off while they prove themselves" : ""}
                 </p>
@@ -262,7 +266,9 @@ async function RoleCard({ params }: { params: Props["params"] }) {
               <li className="card" key={requirement.name}>
                 <Icon name="checks" size={30} />
                 <h3>{requirement.name}</h3>
-                <p>{requirement.description}</p>
+                <p>
+                  <RichLine text={requirement.description} />
+                </p>
                 <p className="state">
                   {requirement.everyPost ? `Every ${role.name} post needs this` : `Needed on ${listOf(requirement.where)}`}
                   {requirement.waivedWhenActing ? ". An acting holder is let off while they prove themselves" : ""}
@@ -300,7 +306,11 @@ async function RoleCard({ params }: { params: Props["params"] }) {
                 <h3>
                   <Link href={`/roles/${area.slug}/${entry.slug}`}>{entry.name}</Link>
                 </h3>
-                {entry.summary ? <p className="role-card-summary">{entry.summary}</p> : null}
+                {entry.summary ? (
+                  <p className="role-card-summary">
+                    <RichLine text={entry.summary} />
+                  </p>
+                ) : null}
               </li>
             ))}
           </ul>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { RichField } from "@/components/rich/RichField";
 import { addNote, moveApplication, type StaffResult } from "./actions";
 
 const untouched: StaffResult = { ok: false, message: "" };
@@ -77,14 +78,14 @@ export function NoteForm({ id }: { id: string }) {
   const [result, action, pending] = useActionState(addNote, untouched);
 
   return (
-    <form action={action} className="fields fields-wide">
+    <form action={action} className="fields fields-wide" key={result.stamp ?? 0}>
       <input type="hidden" name="id" value={id} />
       <div className="field">
         <label htmlFor="note">Add a note</label>
         <p className="hint" id="note_hint">
           What was said at interview, and what you think. Staff can read it. The applicant cannot.
         </p>
-        <textarea id="note" name="body" rows={4} maxLength={4000} required aria-describedby="note_hint" />
+        <RichField id="note" name="body" rows={4} maxLength={4000} required defaultValue={result.values?.body ?? ""} describedBy="note_hint" />
       </div>
       <div className="form-end">
         <button className="button" type="submit" disabled={pending}>

@@ -75,6 +75,18 @@ try {
   const opened = await openBrowser();
   browser = opened.browser;
   const { context, page, pageErrors, shot, headingIs } = opened;
+  /** What a field with formatting holds, as its words. It is an editor, not a plain field, so it is read as the page reads. */
+  const wordsIn = async (field) => (await field.innerText()).trim();
+  /** Type lines into a field with formatting, with a line break between them: Shift and Enter, as its writer would. */
+  const typeLines = async (field, lines) => {
+    // The plain field comes first and the editor takes its place a moment later. Wait for the editor.
+    await field.and(page.locator('[contenteditable="true"]')).waitFor();
+    await field.fill(lines[0]);
+    for (const line of lines.slice(1)) {
+      await field.press("Shift+Enter");
+      await field.pressSequentially(line);
+    }
+  };
 
   // A page shows a holding line while its record is read, so wait for the
   // line that is expected instead of reading whichever is there first.
@@ -95,7 +107,7 @@ try {
     await page.locator(".form-result").filter({ hasText: "Saved." }).waitFor();
   };
   const fillForm = async ({ confirm = true } = {}) => {
-    await page.getByLabel("Why do you want to join the 9th Fleet?").fill("To crew a ship properly,\nwith people who turn up.");
+    await typeLines(page.getByLabel("Why do you want to join the 9th Fleet?"), ["To crew a ship properly,", "with people who turn up."]);
     await page.getByLabel("What have you done in Star Citizen so far?").fill("Two years, mostly turrets and salvage.");
     await page.getByLabel("Which evenings can you usually make?").fill("Wednesday and Sunday, UK time.");
     for (const box of await page.getByRole("checkbox").all()) {
@@ -545,6 +557,26 @@ try {
     await page.getByRole("button", { name: "Send application" }).waitFor();
     assert.match(await page.locator("main").innerText(), /Your last application was declined on/);
   });
+  await check("an application that is turned down is given back as it was filled in", async () => {
+    // Sam fills the form in, and recruitment closes before it is sent.
+    const before = (await applicationsOf(sam)).length;
+    await page.goto(`${site}/apply`);
+    await fillForm();
+    await supabase.sql("update public.fleet_settings set recruitment_open = false");
+    try {
+      await send();
+      await page.locator(".form-result-bad", { hasText: "The database did not accept the application." }).waitFor();
+      assert.equal((await applicationsOf(sam)).length, before);
+      // Nothing that was written or ticked is lost.
+      const why = page.getByLabel("Why do you want to join the 9th Fleet?").and(page.locator('[contenteditable="true"]'));
+      await why.waitFor();
+      assert.equal(await wordsIn(why), "To crew a ship properly,\nwith people who turn up.");
+      assert.equal(await wordsIn(page.getByLabel("Which evenings can you usually make?")), "Wednesday and Sunday, UK time.");
+      for (const box of await page.getByRole("checkbox").all()) assert.equal(await box.isChecked(), true);
+    } finally {
+      await supabase.sql("update public.fleet_settings set recruitment_open = true");
+    }
+  });
   await check("three applications in 30 days is the limit", async () => {
     await apply();
     await withdraw();
@@ -739,7 +771,7 @@ try {
     assert.equal(absent.returned, "absent_without_notice");
     assert.equal(absent.returned_by, (await memberOf(founder)).id);
 
-    await page.getByLabel("What happened").fill("Two contacts on the lane. Neither closed.\nNo engagement.");
+    await typeLines(page.getByLabel("What happened"), ["Two contacts on the lane. Neither closed.", "No engagement."]);
     await page.getByLabel(/^What to change/).fill("Brief the fallback sooner.");
     await page.getByRole("button", { name: "File the report" }).click();
     await page.locator(".form-result").filter({ hasText: "The after-action report is filed." }).waitFor();
@@ -1162,7 +1194,7 @@ try {
     await gunner.getByRole("button", { name: "Save", exact: true }).click();
     await told(gunner, /lower-case letters and numbers/);
     assert.equal(await gunner.getByLabel("Address").inputValue(), "Bad Address");
-    assert.equal(await gunner.getByLabel("Summary").inputValue(), "Half-written.");
+    assert.equal(await wordsIn(gunner.getByLabel("Summary")), "Half-written.");
     assert.equal((await roleRow("gunner")).summary, "Fights a ship's guns.", "a refused save changed the role");
 
     // The database's own rule: a role keeps its kind while it has posts.
@@ -1521,7 +1553,7 @@ try {
     assert.equal(copy.commander_id, (await memberOf(founder)).id);
     assert.ok(Date.parse(copy.starts_at) > Date.now(), "a copy starts in the future");
     await editPart("Orders");
-    assert.equal(await page.getByLabel("2 Mission").inputValue(), "Task Force Jericho will patrol the lane in order to deter piracy against traders.");
+    assert.equal(await wordsIn(page.getByLabel("2 Mission")), "Task Force Jericho will patrol the lane in order to deter piracy against traders.");
     assert.equal((await ordersOf("Patrol 002")).warning_order, (await ordersOf("Patrol 001")).warning_order);
     await shot("operation-copy");
   });
@@ -1894,7 +1926,7 @@ try {
     );
     const again = await addToPlan("elements", { Element: "UEES Nexus", Task: "Something else." }, "Add the element");
     await told(again, "The event already has an element with that name.");
-    assert.equal(await again.getByLabel("Task").inputValue(), "Something else.", "the form lost what was typed");
+    assert.equal(await wordsIn(again.getByLabel("Task")), "Something else.", "the form lost what was typed");
     await again.getByLabel("Element").fill("A Flight");
     await again.getByLabel("Callsign").fill("Hornet");
     await again.getByRole("button", { name: "Add the element" }).click();
@@ -2660,6 +2692,349 @@ try {
     const key = page.locator("form.picks:visible", { hasText: "Posts that must be filled" });
     await key.getByLabel("Helmsman").waitFor();
     assert.equal(await key.getByRole("checkbox").count(), 6);
+  });
+
+  console.log("Formatted text");
+  /** A long field once its editor has taken the plain field's place. */
+  const editorOf = (label, within = page) => within.getByLabel(label).and(page.locator('[contenteditable="true"]'));
+  const barOf = (field) => page.locator(".rich-editor", { has: field }).getByRole("toolbar", { name: "Formatting" });
+  const openOrdersEditor = async (title) => {
+    await page.goto(`${site}/operations/${(await eventTitled(title)).id}/edit?tab=orders`);
+    await headingIs(title);
+    await editorOf("1 Situation").waitFor();
+  };
+  const kitId = (await memberOf(kit)).id;
+  await check("a long field is formatted as it is typed, with a bar of tools, boxes on /, and @ to name someone", async () => {
+    await signInAs(founder);
+    await openOrdersEditor("Escort 002");
+    const field = editorOf("1 Situation");
+    // The bar comes with the field's first use, so six fields together are not six bars.
+    assert.equal(await page.getByRole("toolbar", { name: "Formatting" }).count(), 0);
+    await field.click();
+    await barOf(field).waitFor();
+    assert.equal(await page.getByRole("toolbar", { name: "Formatting" }).count(), 1);
+
+    await page.keyboard.type("Two reports put ");
+    await page.keyboard.press("ControlOrMeta+b");
+    assert.equal(await barOf(field).getByRole("button", { name: "Bold" }).getAttribute("aria-pressed"), "true");
+    await page.keyboard.type("four fighters");
+    await page.keyboard.press("ControlOrMeta+b");
+    await page.keyboard.type(" on the lane.");
+    await page.keyboard.press("Enter");
+
+    // The / menu offers ways to lay text out, boxes and words from the event's own plan, and narrows as a name is typed.
+    await page.keyboard.type("/");
+    const menu = page.locator(".rich-menu:visible");
+    await menu.getByRole("option", { name: /^Heading/ }).waitFor();
+    const offered = (await menu.getByRole("option").allInnerTexts()).map((text) => text.split("\n")[0].trim());
+    for (const expected of ["Heading", "Bullet list", "Numbered list", "Quote", "Warning box", "Note box", "Codeword box", "The event's start, in UTC"]) {
+      assert.ok(offered.includes(expected), `the / menu does not offer ${expected}: ${offered.join(", ")}`);
+    }
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await shot("rich-menu");
+    await page.keyboard.type("warn");
+    await menu.getByRole("option", { name: /^Warning box/ }).waitFor();
+    assert.equal(await menu.getByRole("option").count(), 1);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Weapons tight until the word.");
+    // Enter on an empty line leaves the box.
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+
+    // @ names a member, a unit or a post from the serving fleet.
+    await page.keyboard.type("Report to @Kit");
+    await menu.getByRole("option", { name: /Kit Marlow/ }).waitFor();
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("at 1930Z.");
+    await page.keyboard.press("Enter");
+
+    await barOf(field).getByRole("button", { name: "Bullet list" }).click();
+    await page.keyboard.type("Fuel");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Rearm");
+
+    assert.equal(await field.locator("strong").innerText(), "four fighters");
+    assert.equal(await field.locator(".callout-warning").getAttribute("data-label"), "Warning");
+    assert.equal(await field.locator(".mention").innerText(), "@Kit Marlow");
+    // A time in UTC is marked as it is typed.
+    assert.equal(await field.locator(".zulu").innerText(), "1930Z");
+    // The plain field is still in the form, out of sight, and holds the same words as Markdown.
+    const plain = page.locator('textarea[name="situation"]');
+    assert.equal(await plain.isVisible(), false);
+    assert.match(await plain.inputValue(), /^Two reports put \*\*four fighters\*\* on the lane\.\n\n> \[!WARNING\]/);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await shot("rich-editor");
+
+    await page.getByRole("button", { name: "Save the orders" }).click();
+    await page.locator(".orders-form:visible .form-result", { hasText: "Saved." }).waitFor();
+    assert.equal(
+      (await ordersOf("Escort 002")).situation,
+      [
+        "Two reports put **four fighters** on the lane.",
+        "> [!WARNING]\n> Weapons tight until the word.",
+        `Report to [@Kit Marlow](member:${kitId}) at 1930Z.`,
+        "- Fuel\n- Rearm",
+      ].join("\n\n"),
+    );
+    // What was saved is what the editor shows when the page is opened again.
+    await openOrdersEditor("Escort 002");
+    assert.equal(await editorOf("1 Situation").locator(".callout-warning p").innerText(), "Weapons tight until the word.");
+    assert.equal(await editorOf("1 Situation").locator("li").count(), 2);
+
+    // The bar comes in above the words without moving them on the screen, and a click stays a click.
+    const word = editorOf("1 Situation").locator("strong");
+    await word.scrollIntoViewIfNeeded();
+    const before = await word.boundingBox();
+    await word.click();
+    await barOf(editorOf("1 Situation")).waitFor();
+    const after = await word.boundingBox();
+    assert.ok(Math.abs(after.y - before.y) <= 1, `the words moved by ${after.y - before.y}px when the bar came in`);
+    assert.equal(await page.evaluate(() => window.getSelection()?.isCollapsed), true, "a click chose a run of words");
+  });
+  await check("its reader sees the formatting, their own name picked out, and a time in their own time", async () => {
+    await page.goto(`${site}/operations/${(await eventTitled("Escort 002")).id}`);
+    await headingIs("Escort 002");
+    await announceNow();
+    await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
+
+    // The reader's clock is set to London's, to see their own time beside UTC.
+    const clock = await context.newCDPSession(page);
+    await clock.send("Emulation.setTimezoneOverride", { timezoneId: "Europe/London" });
+    try {
+      await signInAs(kit);
+      await openEvent("Escort 002");
+      await tab("Orders");
+      const orders = page.locator(".orders:visible");
+      assert.equal(await orders.locator(".rich strong").first().innerText(), "four fighters");
+      assert.match((await orders.locator("aside.callout-warning").innerText()).replace(/\s+/g, " "), /^Warning Weapons tight until the word\.$/i);
+      assert.deepEqual(await orders.locator(".rich ul li").allInnerTexts(), ["Fuel", "Rearm"]);
+      // The reader is Kit, so the mention of Kit stands out.
+      const mention = orders.locator("a.mention");
+      assert.equal(await mention.innerText(), "@Kit Marlow");
+      assert.match(await mention.getAttribute("class"), /mention-member mention-you/);
+      assert.equal(await mention.getAttribute("href"), `/order-of-battle#member-${kitId}`);
+
+      const start = new Date((await eventTitled("Escort 002")).starts_at);
+      const local = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Europe/London" }).format(
+        new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate(), 19, 30)),
+      );
+      // In the months London is on UTC there is nothing to add.
+      const expected = local === "19:30" ? "1930Z" : `1930Z (${local} your time)`;
+      await orders.locator("time.zulu", { hasText: expected }).waitFor();
+      assert.equal((await orders.locator("time.zulu").innerText()).trim(), expected);
+      await shot("rich-reading");
+
+      // A mention leads to where that member stands in the order of battle.
+      await mention.click();
+      await page.waitForURL(/\/order-of-battle#member-/);
+      assert.match(await page.locator(`#member-${kitId}`).innerText(), /Kit Marlow/);
+      assert.match(await page.locator(".post", { has: page.locator(`#member-${kitId}`) }).innerText(), /Helmsman/);
+    } finally {
+      await clock.send("Emulation.setTimezoneOverride", { timezoneId: "" });
+      await clock.detach();
+    }
+  });
+  await check("nothing typed into a field is ever run, and no picture is drawn from one", async () => {
+    const hostile = [
+      "<script>window.hacked = 1</script>",
+      '<img src="x" onerror="window.hacked = 2">',
+      "[click here](javascript:window.hacked=3)",
+      "![a ship](https://example.com/ship.png)",
+      '<a href="javascript:window.hacked=4">raw</a>',
+      // Addresses a browser would read as another site, dressed as pages of this one.
+      "[the fleet's rules](/\\evil.example/login) and [more](/&#9;/evil.example)",
+      // A name that claims to be someone else's, and one that is nobody's.
+      `[@Fleet Admiral](member:${kitId}) and [@Nobody](member:00000000-0000-4000-8000-000000000000)`,
+    ].join("\n\n");
+    const escort2 = (await eventTitled("Escort 002")).id;
+    await supabase.sql("update public.event_orders set mission = $2 where event_id = $1", [escort2, hostile]);
+    // And text nested deeper than anyone writes, which would exhaust whatever tried to follow it down.
+    await supabase.sql("update public.event_orders set execution = $2, command_and_signal = $3 where event_id = $1", [
+      escort2,
+      `${">".repeat(1999)}deep quote`,
+      `${"- ".repeat(990)}deep list`,
+    ]);
+    const clean = async () => {
+      assert.equal(await page.evaluate(() => window.hacked), undefined);
+      assert.equal(await page.locator('main a[href^="javascript" i]').count(), 0);
+      // No link leads off the site unless it is plainly a web address.
+      const away = await page.locator("main .rich a, main .rich-input a").evaluateAll((links) => links.map((link) => link.href).filter((href) => href.includes("evil.example")));
+      assert.deepEqual(away, []);
+    };
+
+    // As it is read.
+    await signInAs(kit);
+    await openEvent("Escort 002");
+    await tab("Orders");
+    const orders = page.locator(".orders:visible");
+    const mission = await orders.innerText();
+    assert.match(mission, /<script>window\.hacked = 1<\/script>/, "what looked like a script is shown as the words it is");
+    assert.match(mission, /click here/);
+    assert.match(mission, /a ship/);
+    assert.equal(await orders.locator("img, script").count(), 0);
+    // The page is whole: the deeply nested text is there as its words.
+    assert.match(mission, /deep quote/);
+    assert.match(mission, /deep list/);
+    // Kit is named by the fleet's record of them, whatever the writer typed, and a name that is nobody's leads nowhere.
+    const section = orders.locator(".order", { has: page.locator("h3", { hasText: "2 Mission" }) });
+    assert.deepEqual(await section.locator("a.mention-member").allInnerTexts(), ["@Kit Marlow"]);
+    assert.match(mission, /@Nobody/);
+    await clean();
+
+    // And as it is edited: the same text in the editor runs nothing, and saving it again keeps it as words.
+    await signInAs(founder);
+    await openOrdersEditor("Escort 002");
+    const field = editorOf("2 Mission");
+    assert.match(await field.innerText(), /<script>window\.hacked = 1<\/script>/);
+    // The editor puts in a marker of its own beside a name, to hold the cursor. No picture comes from the text.
+    assert.equal(await field.locator("img:not(.ProseMirror-separator), script").count(), 0);
+    assert.match(await editorOf("3 Execution").innerText(), /deep quote/);
+    assert.match(await editorOf("5 Command and signal").innerText(), /deep list/);
+    await clean();
+    await field.click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.type(" Seen.");
+    await page.getByRole("button", { name: "Save the orders" }).click();
+    await page.locator(".orders-form:visible .form-result", { hasText: "Saved." }).waitFor();
+    const saved = await ordersOf("Escort 002");
+    const kept = saved.mission;
+    assert.match(kept, /Seen\./);
+    assert.doesNotMatch(kept, /\]\(javascript:/i, "an address that would run something is not kept as a link");
+    assert.doesNotMatch(kept, /\]\(\/[\\&]/, "an address that leads off the site is not kept as a link");
+    // A field that was only looked at is saved exactly as it was stored.
+    assert.equal(saved.execution, `${">".repeat(1999)}deep quote`);
+    assert.equal(saved.situation.includes("> [!WARNING]"), true);
+    await openEvent("Escort 002");
+    await tab("Orders");
+    assert.equal(await page.locator(".orders:visible").locator("img, script").count(), 0);
+    await clean();
+  });
+  await check("a link is set from the bar, and only to somewhere safe", async () => {
+    await openOrdersEditor("Escort 002");
+    const field = editorOf("4 Support");
+    await field.click();
+    await page.keyboard.type("Read ");
+    await barOf(field).getByRole("button", { name: "Link" }).click();
+    const address = page.getByLabel("Link address");
+    await address.fill("javascript:alert(1)");
+    await page.getByRole("button", { name: "Set link" }).click();
+    await page.getByText("A link goes to a web address, an email address or a page of this site.").waitFor();
+    await address.fill("/manual/command/orders");
+    await address.press("Enter");
+    assert.equal(await field.locator("a").getAttribute("href"), "/manual/command/orders");
+
+    // The / menu links to a published section of the manual by its name.
+    await page.keyboard.press("End");
+    await page.keyboard.type(" and /succ");
+    await page.locator(".rich-menu:visible").getByRole("option", { name: /Succession and continuity/ }).waitFor();
+    await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "Save the orders" }).click();
+    await page.locator(".orders-form:visible .form-result", { hasText: "Saved." }).waitFor();
+    const support = (await ordersOf("Escort 002")).support;
+    assert.equal(support, "Read [/manual/command/orders](/manual/command/orders) and [Succession and continuity](/manual/command/succession-and-continuity)");
+  });
+  await check("a field that must be filled says so, and one that holds too much says by how much", async () => {
+    await openEvent("Escort 002");
+    await tab("Run it");
+    const form = page.locator("form:visible", { has: page.getByRole("button", { name: "Issue the amendment" }) });
+    const field = editorOf("Issue an amendment", form);
+    await field.waitFor();
+    const amendments = async () => (await one("select count(*)::int as n from public.event_amendments where event_id = $1", [(await eventTitled("Escort 002")).id])).n;
+    await form.getByRole("button", { name: "Issue the amendment" }).click();
+    await form.getByText("Fill this in.").waitFor();
+    assert.equal(await amendments(), 0);
+
+    await field.fill("x".repeat(2001));
+    await form.getByText("2,001 of 2,000 characters, counting formatting").waitFor();
+    await form.getByRole("button", { name: "Issue the amendment" }).click();
+    await form.getByText("This is 1 character too long, counting its formatting.").waitFor();
+    assert.equal(await amendments(), 0);
+
+    // A unit is named the same way as a member.
+    await field.fill("");
+    await field.click();
+    // The bar's own button opens the same list as typing @.
+    await page.locator(".rich-editor", { has: page.getByLabel("Issue an amendment") }).getByRole("button", { name: "Name a member, unit or post" }).click();
+    await page.locator(".rich-menu:visible").getByRole("option").first().waitFor();
+    await page.keyboard.type("Training");
+    await page.locator(".rich-menu:visible").getByRole("option", { name: /^Training Ship/ }).waitFor();
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("holds until 2015Z.");
+    await form.getByRole("button", { name: "Issue the amendment" }).click();
+    for (let tries = 0; tries < 80 && (await amendments()) === 0; tries += 1) await page.waitForTimeout(100);
+    assert.equal(await amendments(), 1);
+    const ship = await one("select id from public.units where name = 'Training Ship'");
+    await tab("Orders");
+    const named = page.locator(".amendments:visible a.mention-unit");
+    assert.equal(await named.innerText(), "@Training Ship");
+    assert.equal(await named.getAttribute("href"), `/order-of-battle#unit-${ship.id}`);
+    assert.equal((await one("select body from public.event_amendments where event_id = $1", [(await eventTitled("Escort 002")).id])).body, `[@Training Ship](unit:${ship.id}) holds until 2015Z.`);
+  });
+  await check("a short description takes bold, italic and links, and is shown in its line of the page", async () => {
+    await openEditor("Roles");
+    const gunner = await openRecord("Gunner");
+    const summary = editorOf("Summary", gunner);
+    await summary.waitFor();
+    await summary.fill("");
+    await summary.click();
+    // Formatting typed the Markdown way is formatted as it is typed.
+    await page.keyboard.type("Mans a turret and **keeps it firing**.");
+    assert.equal(await summary.locator("strong").innerText(), "keeps it firing");
+    const bar = gunner.locator(".rich-editor", { has: page.getByLabel("Summary") }).getByRole("toolbar", { name: "Formatting" });
+    assert.equal(await bar.getByRole("button", { name: "Bold" }).count(), 1);
+    assert.equal(await bar.getByRole("button", { name: "Bullet list" }).count(), 0, "a line of the page cannot hold a list");
+    await gunner.getByRole("button", { name: "Save", exact: true }).click();
+    await told(gunner, "Saved.");
+    assert.equal((await roleRow("gunner")).summary, "Mans a turret and **keeps it firing**.");
+
+    await page.goto(`${site}/roles/gunnery/gunner`);
+    await headingIs("Gunner");
+    assert.equal(await page.locator(".page-head .lead:visible strong").innerText(), "keeps it firing");
+    // Where formatting cannot be shown, the words are given without its marks.
+    assert.match(await page.locator('meta[name="description"]').getAttribute("content"), /^Mans a turret and keeps it firing\. /);
+    await page.goto(`${site}/admin/logs?show=structure`);
+    await page.locator(".log:visible").first().waitFor();
+    const logged = await logText();
+    assert.match(logged, /Mans a turret and keeps it firing\./);
+    assert.doesNotMatch(logged, /\*\*keeps it firing\*\*/);
+  });
+  await check("nobody is named on a page a visitor can read, and someone who is not serving is offered nobody to name", async () => {
+    // A mention written into a public description by hand is shown as a name, and leads nowhere.
+    await supabase.sql("update public.fleet_roles set summary = $1 where slug = 'gunner'", [`Ask [@Kit Marlow](member:${kitId}) about it.`]);
+    await context.clearCookies();
+    await page.goto(`${site}/roles/gunnery/gunner`);
+    await headingIs("Gunner");
+    assert.match(await page.locator(".page-head .lead:visible").innerText(), /Ask Kit Marlow about it\./);
+    assert.equal(await page.locator("main a.mention, main a[href*='order-of-battle#']").count(), 0);
+    await supabase.sql("update public.fleet_roles set summary = 'Mans a turret and **keeps it firing**.' where slug = 'gunner'");
+
+    // The editors on a public description offer bold, italic and links, and no @.
+    await signInAs(founder);
+    await openEditor("Roles");
+    const gunner = await openRecord("Gunner");
+    const summary = editorOf("Summary", gunner);
+    await summary.waitFor();
+    await summary.click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.type(" @Kit");
+    await page.waitForTimeout(400);
+    assert.equal(await page.locator(".rich-menu:visible").count(), 0);
+    assert.equal(await gunner.getByRole("button", { name: "Name a member, unit or post" }).count(), 0);
+
+    // A description that already names someone opens with every word in place, and is saved with the name alone.
+    await supabase.sql("update public.fleet_roles set summary = $1 where slug = 'gunner'", [`Ask [@Kit Marlow](member:${kitId}) about the turrets.`]);
+    await openEditor("Roles");
+    const again = await openRecord("Gunner");
+    const held = editorOf("Summary", again);
+    await held.waitFor();
+    assert.equal(await wordsIn(held), "Ask @Kit Marlow about the turrets.");
+    await held.click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.type(" Daily.");
+    await again.getByRole("button", { name: "Save", exact: true }).click();
+    await told(again, "Saved.");
+    assert.equal((await roleRow("gunner")).summary, "Ask Kit Marlow about the turrets. Daily.");
+    await supabase.sql("update public.fleet_roles set summary = 'Mans a turret and **keeps it firing**.' where slug = 'gunner'");
   });
 
   await check("no page raised a script error", async () => {

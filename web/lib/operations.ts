@@ -18,6 +18,8 @@ import {
 import type { ForcePicture, ForceUnit } from "@/lib/force";
 import { getOrderOfBattle, type Unit } from "@/lib/order-of-battle";
 import { pictures, type PictureName } from "@/lib/pictures";
+import { fleetMentions, manualLinks } from "@/lib/rich/offer";
+import type { RichSources } from "@/lib/rich/sources";
 import { audienceOf, indexFleet, passableTo, readsLine, standingIn, taskLevels, unitsAbove, type TaskLevel } from "@/lib/tasks";
 import { createClient } from "@/lib/supabase/server";
 
@@ -733,6 +735,10 @@ export type Operation =
       opfor: Opfor | null;
       /** Whether this member is command, who approves drafts. */
       isCommand: boolean;
+      /** What this member's editors can offer here: who can be named, and what the / menu can drop in. Null for someone who writes nothing. */
+      sources: RichSources | null;
+      /** The serving members by id, so that someone named in the text is shown by their real name. */
+      memberNames: Record<string, string>;
     };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1015,6 +1021,28 @@ export async function getOperation(id: string): Promise<Operation> {
           .map((unit) => ({ id: unit.id, label: unit.path, reads: readsAt(unit.id, unit.name) }))
       : [];
 
+  // Whoever writes anything here can name the serving fleet, and drop in the plan's own words.
+  const writes = edits || runs || opfor?.writes === true;
+  const sources: RichSources | null = writes
+    ? {
+        mentions: fleetMentions(
+          battle.state === "ready" ? battle.fleet : null,
+          rosterRows
+            .filter((entry) => SERVING.includes(entry.status))
+            .map((entry) => nameOf(entry, entry.member_id)!)
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        ),
+        inserts: [
+          ...tasks.filter((task) => task.callsign).map((task) => ({ group: "Callsigns", label: task.callsign, text: task.callsign })),
+          ...plan.elements.filter((element) => element.callsign).map((element) => ({ group: "Callsigns", label: element.callsign, text: element.callsign })),
+          ...plan.nets.map((net) => ({ group: "Nets", label: net.name, text: net.name })),
+          ...plan.objectives.map((objective, index) => ({ group: "Objectives", label: `Objective ${index + 1}`, text: objective.title })),
+        ],
+        links: manualLinks(),
+        day: row.starts_at,
+      }
+    : null;
+
   const records: ReportRecords = {
     outcomes: Object.fromEntries(
       ((outcomes.data ?? []) as { objective_id: string; outcome: Outcome; note: string }[]).map((entry) => [
@@ -1104,6 +1132,10 @@ export async function getOperation(id: string): Promise<Operation> {
     taskUnits,
     opfor,
     isCommand: command,
+    sources,
+    memberNames: Object.fromEntries(
+      rosterRows.filter((entry) => SERVING.includes(entry.status) && entry.character_name).map((entry) => [entry.member_id, entry.character_name!]),
+    ),
   };
 }
 

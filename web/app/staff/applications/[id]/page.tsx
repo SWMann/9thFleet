@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Rich } from "@/components/rich/Rich";
+import { RichSourcesProvider } from "@/components/rich/RichSources";
+import { fleetSources } from "@/lib/rich/offer";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { formatDate, serviceNames, stageNames } from "@/lib/application-form";
@@ -58,6 +61,9 @@ async function Application({ params }: { params: PageProps<"/staff/applications/
   if (result.state !== "ready") redirect("/profile");
 
   const { application } = result;
+  // Who a note can name, and the same people by id, so that someone named is shown by their real name.
+  const sources = await fleetSources();
+  const members = Object.fromEntries(sources.mentions.filter((entry) => entry.kind === "member").map((entry) => [entry.id, entry.label]));
   const name = application.name ?? "Name not set";
   const open = application.stage === "submitted" || application.stage === "interview";
 
@@ -101,7 +107,9 @@ async function Application({ params }: { params: PageProps<"/staff/applications/
               {application.answers.answers.map((entry) => (
                 <div key={entry.question}>
                   <dt>{entry.question}</dt>
-                  <dd>{entry.answer}</dd>
+                  <dd>
+                    <Rich text={entry.answer} mentions={false} />
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -135,7 +143,7 @@ async function Application({ params }: { params: PageProps<"/staff/applications/
                 <ul className="notes">
                   {application.notes.map((note) => (
                     <li key={note.id}>
-                      <p className="note-body">{note.body}</p>
+                      <Rich text={note.body} className="note-body" members={members} />
                       <p className="note-by">
                         {note.author ?? "A former member"}, {formatDate(note.writtenAt)}
                       </p>
@@ -151,7 +159,9 @@ async function Application({ params }: { params: PageProps<"/staff/applications/
                   ))}
                 </ul>
               )}
-              <NoteForm id={application.id} />
+              <RichSourcesProvider value={sources}>
+                <NoteForm id={application.id} />
+              </RichSourcesProvider>
             </div>
           </section>
 

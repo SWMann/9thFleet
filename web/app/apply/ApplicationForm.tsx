@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { RichField } from "@/components/rich/RichField";
 import { confirmations, questions, serviceNames } from "@/lib/application-form";
 import { submitApplication, type ApplyResult } from "./actions";
 
@@ -11,7 +12,8 @@ export function ApplicationForm({ services }: { services: (keyof typeof serviceN
   const [result, action, pending] = useActionState(submitApplication, untouched);
 
   return (
-    <form action={action} className="fields fields-wide">
+    // An application that was not sent is given back as it was filled in.
+    <form action={action} className="fields fields-wide" key={result.stamp ?? 0}>
       {services.length === 1 ? (
         <div className="field">
           <span className="field-label">Service</span>
@@ -23,7 +25,7 @@ export function ApplicationForm({ services }: { services: (keyof typeof serviceN
           <legend>Which service do you want to join?</legend>
           {services.map((service, index) => (
             <label key={service} className="choice">
-              <input type="radio" name="service" value={service} defaultChecked={index === 0} required />
+              <input type="radio" name="service" value={service} defaultChecked={result.values?.service ? result.values.service === service : index === 0} required />
               <span>{serviceNames[service]}</span>
             </label>
           ))}
@@ -39,13 +41,14 @@ export function ApplicationForm({ services }: { services: (keyof typeof serviceN
           <p className="hint" id={`${question.id}_hint`}>
             {question.hint}
           </p>
-          <textarea
+          <RichField
             id={question.id}
             name={question.id}
             rows={question.rows}
             maxLength={question.max}
             required={question.required}
-            aria-describedby={`${question.id}_hint`}
+            defaultValue={result.values?.[question.id] ?? ""}
+            describedBy={`${question.id}_hint`}
           />
         </div>
       ))}
@@ -54,7 +57,7 @@ export function ApplicationForm({ services }: { services: (keyof typeof serviceN
         <legend>Confirm each of these</legend>
         {confirmations.map((confirmation) => (
           <label key={confirmation.id} className="choice">
-            <input type="checkbox" name={confirmation.id} required />
+            <input type="checkbox" name={confirmation.id} defaultChecked={result.values?.[confirmation.id] === "on"} required />
             <span>
               {confirmation.statement}
               {confirmation.id === "standards" ? (

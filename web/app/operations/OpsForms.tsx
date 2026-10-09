@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
+import { RichField } from "@/components/rich/RichField";
 import { useActionState, useState } from "react";
 import {
   returnedNames,
@@ -478,38 +479,42 @@ export function CopyButton({ id }: { id: string }) {
 }
 
 /** The warning order and the five sections of the operation order, named as the event's type names them. */
-export function OrdersForm({ id, orders, sections }: { id: string; orders: Record<string, string>; sections: Section[] }) {
+export function OrdersForm({
+  id,
+  orders,
+  sections,
+}: {
+  id: string;
+  orders: Record<string, string>;
+  /** Each section, with what it holds already drawn, since that guidance can have formatting of its own. */
+  sections: (Section & { guidance: React.ReactNode })[];
+}) {
   const [result, action, pending] = useActionState(saveOrders, untouched);
+  // Orders that were turned down are shown as they were typed, not as they were last saved.
+  const held = (key: string) => result.values?.[key] ?? orders[key] ?? "";
   return (
-    <form action={action} className="fields orders-form">
+    <form action={action} className="fields orders-form" key={result.stamp ?? 0}>
       <input type="hidden" name="id" value={id} />
       <div className="field">
         <label htmlFor="warning_order">Warning order</label>
         <p className="hint" id="warning_order_hint">
           The task, the time, the commander and the second-in-command. It goes out at least 72 hours before.
         </p>
-        <textarea
-          id="warning_order"
-          name="warning_order"
-          rows={4}
-          maxLength={4000}
-          defaultValue={orders.warning_order}
-          aria-describedby="warning_order_hint"
-        />
+        <RichField id="warning_order" name="warning_order" rows={4} maxLength={4000} defaultValue={held("warning_order")} describedBy="warning_order_hint" />
       </div>
       {sections.map((section) => (
         <div className="field" key={section.key}>
           <label htmlFor={section.key}>{section.name}</label>
           <p className="hint" id={`${section.key}_hint`}>
-            {section.holds}
+            {section.guidance}
           </p>
-          <textarea
+          <RichField
             id={section.key}
             name={section.key}
             rows={section.key === "mission" ? 2 : 4}
             maxLength={section.max}
-            defaultValue={orders[section.key]}
-            aria-describedby={`${section.key}_hint`}
+            defaultValue={held(section.key)}
+            describedBy={`${section.key}_hint`}
           />
         </div>
       ))}
@@ -667,14 +672,7 @@ export function OpforPlanForm({ id, plan }: { id: string; plan: string }) {
         <p className="hint" id="opfor_plan_hint">
           What the opposing force is to do, where and when. Only command and its members can read it.
         </p>
-        <textarea
-          id="opfor_plan"
-          name="plan"
-          rows={6}
-          maxLength={6000}
-          defaultValue={result.values?.plan ?? plan}
-          aria-describedby="opfor_plan_hint"
-        />
+        <RichField id="opfor_plan" name="plan" rows={6} maxLength={6000} defaultValue={result.values?.plan ?? plan} describedBy="opfor_plan_hint" />
       </div>
       <div className="form-end">
         <button className="button button-quiet" type="submit" disabled={pending}>
@@ -1059,34 +1057,34 @@ export function ReportForm({
 }) {
   const [result, action, pending] = useActionState(fileReport, untouched);
   return (
-    <form action={action} className="fields fields-wide">
+    <form action={action} className="fields fields-wide" key={result.stamp ?? 0}>
       <input type="hidden" name="id" value={id} />
       <div className="field">
         <label htmlFor="what_happened">What happened</label>
         <p className="hint" id="what_happened_hint">
           The plan, what happened and why.
         </p>
-        <textarea
+        <RichField
           id="what_happened"
           name="what_happened"
           rows={6}
           maxLength={6000}
           required
-          defaultValue={report?.whatHappened ?? ""}
-          aria-describedby="what_happened_hint"
+          defaultValue={result.values?.what_happened ?? report?.whatHappened ?? ""}
+          describedBy="what_happened_hint"
         />
       </div>
       <div className="field">
         <label htmlFor="to_keep">
           What to keep <span className="optional">Optional</span>
         </label>
-        <textarea id="to_keep" name="to_keep" rows={4} maxLength={4000} defaultValue={report?.toKeep ?? ""} />
+        <RichField id="to_keep" name="to_keep" rows={4} maxLength={4000} defaultValue={result.values?.to_keep ?? report?.toKeep ?? ""} />
       </div>
       <div className="field">
         <label htmlFor="to_change">
           What to change <span className="optional">Optional</span>
         </label>
-        <textarea id="to_change" name="to_change" rows={4} maxLength={4000} defaultValue={report?.toChange ?? ""} />
+        <RichField id="to_change" name="to_change" rows={4} maxLength={4000} defaultValue={result.values?.to_change ?? report?.toChange ?? ""} />
       </div>
       <div className="form-end">
         <button className="button" type="submit" disabled={pending}>

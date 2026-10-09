@@ -7,7 +7,14 @@ import { typed } from "@/lib/application-form";
 import { explainRefusal } from "@/lib/refusals";
 import { createClient } from "@/lib/supabase/server";
 
-export type StaffResult = { ok: boolean; message: string };
+export type StaffResult = {
+  ok: boolean;
+  message: string;
+  /** What was typed, given back when it was not saved, so that the form keeps it. */
+  values?: Record<string, string>;
+  /** Changes each time the form is given back, so that it is drawn afresh. */
+  stamp?: number;
+};
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MOVES: Record<string, string> = {
@@ -64,20 +71,23 @@ export async function addNote(_previous: StaffResult, formData: FormData): Promi
 
   const id = formData.get("id");
   const body = typed(formData.get("body"));
-  if (typeof id !== "string" || !UUID.test(id)) return { ok: false, message: "That application could not be found." };
-  if (body === "") return { ok: false, message: "Write the note first." };
-  if (body.length > 4000) return { ok: false, message: "Keep a note under 4,000 characters." };
+  // A note that is turned down is handed back as it was typed.
+  const again = { values: { body }, stamp: Date.now() };
+  if (typeof id !== "string" || !UUID.test(id)) return { ok: false, message: "That application could not be found.", ...again };
+  if (body === "") return { ok: false, message: "Write the note first.", ...again };
+  if (body.length > 4000) return { ok: false, message: "Keep a note under 4,000 characters.", ...again };
 
   const { error } = await session.supabase
     .from("application_notes")
     .insert({ application_id: id, author_id: session.id, body });
   if (error) {
     const shown = explainRefusal(error, "The note could not be saved. Only staff can write one, and not on their own application.");
-    return { ok: false, message: await turnedDown(session.supabase, "note.add", error, shown) };
+    return { ok: false, message: await turnedDown(session.supabase, "note.add", error, shown), ...again };
   }
 
   refresh();
-  return { ok: true, message: "Saved." };
+  // A new stamp with nothing to hand back: the form is drawn afresh, empty, for the next note.
+  return { ok: true, message: "Saved.", stamp: Date.now() };
 }
 
 /** Remove a note. The database lets its author or an admin do that, and nobody else. */

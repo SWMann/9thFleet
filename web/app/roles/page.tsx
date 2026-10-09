@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { RichLine } from "@/components/rich/Rich";
 import { Suspense } from "react";
 import { ManualBar } from "@/components/manual/ManualBar";
 import { PageHead } from "@/components/PageHead";
@@ -77,7 +78,9 @@ async function Areas() {
                 <Link href={`/roles/${area.slug}`}>{area.name}</Link>
               </h2>
             </div>
-            <p className="tile-foot">{area.about}</p>
+            <p className="tile-foot">
+              <RichLine text={area.about} />
+            </p>
           </article>
         ))}
       </AreaFilter>
