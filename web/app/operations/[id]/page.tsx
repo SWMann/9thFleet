@@ -1,23 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Fragment, Suspense } from "react";
-import { ReadingList } from "@/components/manual/Reading";
+import { Suspense } from "react";
+import { hasReading, ReadingList } from "@/components/manual/Reading";
 import { PageHead } from "@/components/PageHead";
+import { Pane, Panes } from "@/components/Pane";
+import { TabPanel, Tabs, type TabSpec } from "@/components/Tabs";
 import { YourTime } from "@/components/YourTime";
 import { shortfall } from "@/lib/manning";
 import { getOperation, type FleetEvent, type Operation, type Person, type RollPost } from "@/lib/operations";
-import {
-  formatWhen,
-  hLabel,
-  outcomeNames,
-  returnedNames,
-  serviceNames,
-  stateNames,
-  weapons,
-  weaponsName,
-  type ParagraphKey,
-} from "@/lib/operations-form";
+import { formatWhen, hLabel, outcomeNames, returnedNames, serviceNames, stateNames, weapons, weaponsName } from "@/lib/operations-form";
 import {
   CopyButton,
   GivePlace,
@@ -55,6 +47,7 @@ function Head({ title, lead, children }: { title: string; lead: string; children
   return (
     <PageHead
       picture="operations"
+      slim
       before={
         <p className="back">
           <Link href="/operations">Operations</Link>
@@ -92,6 +85,17 @@ const manningWords = {
   "no-go": "Below its minimum",
 } as const;
 
+/** When the roll closes, or that it has. */
+function rollLine(event: FleetEvent): string {
+  if (event.state === "draft") return "Opens when the event is announced";
+  const closes = event.rollClosesAt ? formatWhen(event.rollClosesAt) : null;
+  return closes && event.rollOpen ? `Closes ${closes.day}, ${closes.utc}` : "Closed";
+}
+
+/**
+ * An event, as tabs of cards. Every tab is on the page, and the address says
+ * which one is shown, so a link can open the roll or the orders directly.
+ */
 async function Event({ params }: { params: Props["params"] }) {
   const { id } = await params;
   const result = await getOperation(id);
@@ -106,16 +110,34 @@ async function Event({ params }: { params: Props["params"] }) {
   // What the report records beyond its words: enough to show it even before the words are written.
   const recorded = Object.keys(records.outcomes).length > 0 || records.losses.length > 0 || records.mentions.length > 0;
   const open_to = openTo(event);
-  const latest = amendments[0]?.number ?? null;
+  const latest = amendments[0] ?? null;
   // Everyone who said they are attending is asked to acknowledge the latest amendment.
   const toAcknowledge =
-    event.state === "announced" && latest !== null && result.mine.reply === "attending" && (result.acknowledged ?? 0) < latest ? latest : null;
+    event.state === "announced" && latest !== null && result.mine.reply === "attending" && (result.acknowledged ?? 0) < latest.number
+      ? latest.number
+      : null;
   // Someone who may draft this type of event may draft another like it.
   const mayCopy = result.mayCreate.some((type) => type.key === event.kind);
   const when = formatWhen(event.startsAt);
-  const closes = event.rollClosesAt ? formatWhen(event.rollClosesAt) : null;
   const open = event.state === "draft" || event.state === "announced";
   const weaponsMeaning = weapons.find((entry) => entry.key === event.weaponsState)?.meaning;
+  const begun = event.started && event.state !== "cancelled";
+  const making = runs && begun;
+  const signingOff = Boolean(event.teaches) && begun && (signOff !== null || passed.length > 0);
+  const reading = (report !== null || recorded) && !making;
+  const running = (runs || edits) && open;
+  const callsigns = plan.elements.filter((element) => element.callsign);
+  const beside = plan.objectives.length > 0 || plan.timings.length > 0 || plan.ships.length > 0 || plan.nets.length > 0 || callsigns.length > 0;
+
+  const tabs: TabSpec[] = [
+    { id: "overview", label: "Overview", icon: "target" },
+    { id: "orders", label: "Orders", icon: "book" },
+    { id: "tasks", label: "Tasks", icon: "flag" },
+    ...(event.state !== "draft" ? [{ id: "roll", label: "Roll", icon: "people" } as const] : []),
+    { id: "report", label: "Report", icon: "pen" },
+    ...(result.opfor ? [{ id: "opfor", label: "Opposing force", icon: "shield" } as const] : []),
+    ...(running ? [{ id: "run", label: "Run it", icon: "anchor" } as const] : []),
+  ];
 
   return (
     <>
@@ -126,577 +148,650 @@ async function Event({ params }: { params: Props["params"] }) {
           {event.weaponsState ? <span className="chip">{weaponsName(event.weaponsState)}</span> : null}
           {event.repeatsWeekly ? <span className="chip">Weekly</span> : null}
         </p>
+        <ul className="head-facts">
+          <li>
+            <span>When</span>
+            <strong>
+              {when.day}, {when.utc}
+            </strong>
+          </li>
+          {event.musterAt ? (
+            <li>
+              <span>Muster</span>
+              <strong>{event.musterAt}</strong>
+            </li>
+          ) : null}
+          <li>
+            <span>Commander</span>
+            <strong>{named(event.commander, "Not named")}</strong>
+          </li>
+          <li>
+            <span>Roll</span>
+            <strong>{rollLine(event)}</strong>
+          </li>
+        </ul>
+        {edits && open ? (
+          <p className="actions">
+            <Link className="button button-quiet" href={`/operations/${event.id}/edit`}>
+              Change the details and orders
+            </Link>
+          </p>
+        ) : null}
       </Head>
 
-      <section className="wrap band" aria-labelledby="glance">
-        <h2 id="glance">
-          At a <strong>glance</strong>
-        </h2>
-        <dl className="facts">
-          <div>
-            <dt>When</dt>
-            <dd>
-              {when.day}, {when.utc}
-              <YourTime iso={event.startsAt} fallback={when.uk} withDay />
-            </dd>
-          </div>
-          <div>
-            <dt>Length</dt>
-            <dd>{length(event.durationMinutes)}</dd>
-          </div>
-          {event.musterAt ? (
-            <div>
-              <dt>Muster at</dt>
-              <dd>{event.musterAt}</dd>
-            </div>
-          ) : null}
-          {event.area ? (
-            <div>
-              <dt>Area</dt>
-              <dd>{event.area}</dd>
-            </div>
-          ) : null}
-          <div>
-            <dt>Roll</dt>
-            <dd>
-              {event.state === "draft"
-                ? "Opens when the event is announced"
-                : closes
-                  ? event.rollOpen
-                    ? `Closes ${closes.day}, ${closes.utc}`
-                    : "Closed"
-                  : "Closed"}
-            </dd>
-          </div>
-          <div>
-            <dt>Commander</dt>
-            <dd>{named(event.commander, "Not named")}</dd>
-          </div>
-          <div>
-            <dt>Second-in-command</dt>
-            <dd>{named(event.second, "To be named from those attending")}</dd>
-          </div>
-          {event.observer ? (
-            <div>
-              <dt>Observer</dt>
-              <dd>{named(event.observer, "")}</dd>
-            </div>
-          ) : null}
-          {event.weaponsState ? (
-            <div>
-              <dt>Weapons state</dt>
-              <dd>
-                {weaponsName(event.weaponsState)}
-                <span className="aside">{weaponsMeaning}</span>
-              </dd>
-            </div>
-          ) : null}
-          {event.pveFallback ? (
-            <div>
-              <dt>Fallback</dt>
-              <dd>{event.pveFallback}</dd>
-            </div>
-          ) : null}
-          {open_to ? (
-            <div>
-              <dt>Open to</dt>
-              <dd>{open_to}</dd>
-            </div>
-          ) : null}
-          {event.places !== null ? (
-            <div>
-              <dt>Places</dt>
-              <dd>
-                {event.places}
-                {event.state === "draft" ? null : (
-                  <span className="aside">
-                    {roll.withPlace.length} taken
-                    {roll.reserve.length > 0 ? `, ${roll.reserve.length} on the reserve list` : ""}
-                  </span>
-                )}
-              </dd>
-            </div>
-          ) : null}
-          {event.minimumAttending !== null ? (
-            <div>
-              <dt>Minimum</dt>
-              <dd>{event.minimumAttending} attending</dd>
-            </div>
-          ) : null}
-          {result.taking.names.length > 0 ? (
-            <div>
-              <dt>Taking part</dt>
-              <dd>{result.taking.names.join(", ")}</dd>
-            </div>
-          ) : null}
-          {event.teaches ? (
-            <div>
-              <dt>Teaches</dt>
-              <dd>
-                {event.teaches.name}
-                <span className="aside">An instructor signs off who passes</span>
-              </dd>
-            </div>
-          ) : null}
-          {event.repeatsWeekly ? (
-            <div>
-              <dt>Repeats</dt>
-              <dd>
-                Weekly
-                <span className="aside">
-                  {open ? "Closing it drafts next week's" : "Closing it drafted next week's"}
-                </span>
-              </dd>
-            </div>
-          ) : null}
-          {result.copiedFrom ? (
-            <div>
-              <dt>Copied from</dt>
-              <dd>
-                <Link href={`/operations/${result.copiedFrom.id}`}>{result.copiedFrom.title}</Link>
-              </dd>
-            </div>
-          ) : null}
-        </dl>
-        {event.state === "announced" || mayCopy ? (
-          <div className="glance-actions">
-            {/* A file, not a page: the browser saves it, so it is a plain link. A draft's date is not settled, so it has none. */}
-            {event.state === "announced" ? (
-              <a className="button button-quiet" href={`/operations/${event.id}/calendar`} download>
-                Add to calendar
-              </a>
-            ) : null}
-            {mayCopy ? <CopyButton id={event.id} /> : null}
-          </div>
-        ) : null}
-      </section>
+      <Tabs label="Parts of this event" tabs={tabs}>
+        <TabPanel id="overview">
+          <div className="wrap band tab-band">
+            <Panes>
+              {event.state === "draft" ? (
+                <Pane id="draft" icon="pen" title="A draft">
+                  <p>This is a draft. Only you, its commander and command can see it.</p>
+                  <p>It is announced from the Run it tab, once its orders are written.</p>
+                </Pane>
+              ) : null}
 
-      {manning ? (
-        <section className="wrap band" aria-labelledby="manning">
-          <h2 id="manning">
-            Go or <strong>no-go</strong>
-          </h2>
-          <div className={`manning manning-${manning.state}`}>
-            <p className="manning-word">{manningWords[manning.state]}</p>
-            <p>
-              {manning.state === "go"
-                ? `${manning.attending} attending${manning.minimum !== null ? `, against a minimum of ${manning.minimum}` : ""}, and every post that must be filled has someone in it.`
-                : shortfall(manning)}{" "}
-              {manning.state === "short" ? "Members can still reply." : manning.state === "no-go" ? "The roll has closed. Whether it goes ahead is the operation commander's decision." : ""}
-            </p>
+              {event.state === "announced" ? <YourReply result={result} /> : null}
+
+              {manning ? (
+                <Pane id="manning" icon="people" title="Go or no-go">
+                  <div className={`manning manning-${manning.state}`}>
+                    <p className="manning-word">{manningWords[manning.state]}</p>
+                    <p>
+                      {manning.state === "go"
+                        ? `${manning.attending} attending${manning.minimum !== null ? `, against a minimum of ${manning.minimum}` : ""}, and every post that must be filled has someone in it.`
+                        : shortfall(manning)}{" "}
+                      {manning.state === "short"
+                        ? "Members can still reply."
+                        : manning.state === "no-go"
+                          ? "The roll has closed. Whether it goes ahead is the operation commander's decision."
+                          : ""}
+                    </p>
+                  </div>
+                </Pane>
+              ) : null}
+
+              {latest ? (
+                <Pane id="latest-amendment" icon="radio" title="Latest amendment">
+                  <p className="amendment-head">
+                    <strong>Amendment {latest.number}</strong>
+                    <span>
+                      {formatWhen(latest.issuedAt).day}, {formatWhen(latest.issuedAt).utc}
+                    </span>
+                  </p>
+                  <p className="order-text">{latest.body}</p>
+                  {toAcknowledge !== null ? (
+                    <div className="standing-in">
+                      <p>It changes the orders. Read it, then acknowledge it.</p>
+                      <AcknowledgeButton id={event.id} number={toAcknowledge} />
+                    </div>
+                  ) : result.acknowledged !== null && result.acknowledged === latest.number ? (
+                    <p className="roll-note">You have acknowledged amendment {latest.number}.</p>
+                  ) : null}
+                </Pane>
+              ) : null}
+
+              {result.myReturn && !runs ? (
+                <Pane id="returned" icon="checks" title="Your attendance">
+                  <p>
+                    The operation commander recorded you as <strong>{returnedNames[result.myReturn].toLowerCase()}</strong>. Only
+                    you, staff and whoever ran the event can see this.
+                  </p>
+                </Pane>
+              ) : null}
+
+              <Pane id="glance" icon="calendar" title="At a glance" wide>
+                <dl className="facts">
+                  <div>
+                    <dt>When</dt>
+                    <dd>
+                      {when.day}, {when.utc}
+                      <YourTime iso={event.startsAt} fallback={when.uk} withDay />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Length</dt>
+                    <dd>{length(event.durationMinutes)}</dd>
+                  </div>
+                  {event.musterAt ? (
+                    <div>
+                      <dt>Muster at</dt>
+                      <dd>{event.musterAt}</dd>
+                    </div>
+                  ) : null}
+                  {event.area ? (
+                    <div>
+                      <dt>Area</dt>
+                      <dd>{event.area}</dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt>Roll</dt>
+                    <dd>{rollLine(event)}</dd>
+                  </div>
+                  <div>
+                    <dt>Commander</dt>
+                    <dd>{named(event.commander, "Not named")}</dd>
+                  </div>
+                  <div>
+                    <dt>Second-in-command</dt>
+                    <dd>{named(event.second, "To be named from those attending")}</dd>
+                  </div>
+                  {event.observer ? (
+                    <div>
+                      <dt>Observer</dt>
+                      <dd>{named(event.observer, "")}</dd>
+                    </div>
+                  ) : null}
+                  {event.weaponsState ? (
+                    <div>
+                      <dt>Weapons state</dt>
+                      <dd>
+                        {weaponsName(event.weaponsState)}
+                        <span className="aside">{weaponsMeaning}</span>
+                      </dd>
+                    </div>
+                  ) : null}
+                  {event.pveFallback ? (
+                    <div>
+                      <dt>Fallback</dt>
+                      <dd>{event.pveFallback}</dd>
+                    </div>
+                  ) : null}
+                  {open_to ? (
+                    <div>
+                      <dt>Open to</dt>
+                      <dd>{open_to}</dd>
+                    </div>
+                  ) : null}
+                  {event.places !== null ? (
+                    <div>
+                      <dt>Places</dt>
+                      <dd>
+                        {event.places}
+                        {event.state === "draft" ? null : (
+                          <span className="aside">
+                            {roll.withPlace.length} taken
+                            {roll.reserve.length > 0 ? `, ${roll.reserve.length} on the reserve list` : ""}
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {event.minimumAttending !== null ? (
+                    <div>
+                      <dt>Minimum</dt>
+                      <dd>{event.minimumAttending} attending</dd>
+                    </div>
+                  ) : null}
+                  {result.taking.names.length > 0 ? (
+                    <div>
+                      <dt>Taking part</dt>
+                      <dd>{result.taking.names.join(", ")}</dd>
+                    </div>
+                  ) : null}
+                  {event.teaches ? (
+                    <div>
+                      <dt>Teaches</dt>
+                      <dd>
+                        {event.teaches.name}
+                        <span className="aside">An instructor signs off who passes</span>
+                      </dd>
+                    </div>
+                  ) : null}
+                  {event.repeatsWeekly ? (
+                    <div>
+                      <dt>Repeats</dt>
+                      <dd>
+                        Weekly
+                        <span className="aside">{open ? "Closing it drafts next week's" : "Closing it drafted next week's"}</span>
+                      </dd>
+                    </div>
+                  ) : null}
+                  {result.copiedFrom ? (
+                    <div>
+                      <dt>Copied from</dt>
+                      <dd>
+                        <Link href={`/operations/${result.copiedFrom.id}`}>{result.copiedFrom.title}</Link>
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+                {event.state === "announced" || mayCopy ? (
+                  <div className="glance-actions">
+                    {/* A file, not a page: the browser saves it, so it is a plain link. A draft's date is not settled, so it has none. */}
+                    {event.state === "announced" ? (
+                      <a className="button button-quiet" href={`/operations/${event.id}/calendar`} download>
+                        Add to calendar
+                      </a>
+                    ) : null}
+                    {mayCopy ? <CopyButton id={event.id} /> : null}
+                  </div>
+                ) : null}
+              </Pane>
+
+              {hasReading(event.reading) ? (
+                <Pane id="reading" icon="book" title="Read before the night" wide>
+                  <ReadingList addresses={event.reading} />
+                </Pane>
+              ) : null}
+            </Panes>
           </div>
-        </section>
-      ) : null}
+        </TabPanel>
 
-      {event.state === "announced" ? <YourReply result={result} /> : null}
-
-      {(runs || edits) && open ? (
-        <section className="wrap band" aria-labelledby="running">
-          <h2 id="running">
-            Running this <strong>event</strong>
-          </h2>
-          <p className="intro">
-            {event.state === "draft"
-              ? "This is a draft. Only you, its commander and command can see it."
-              : "You run this event, so you keep its orders, fill the gaps on the roll and make the return."}
-          </p>
-          <MoveForms
-            id={event.id}
-            state={event.state as "draft" | "announced"}
-            title={event.title}
-            editHref={edits ? `/operations/${event.id}/edit` : null}
-            mayCancel={runs || event.state === "draft"}
-            approval={event.approval}
-            needsApproval={event.needsApproval}
-            isCommand={result.isCommand}
-          />
-          {runs && event.state === "announced" ? (
-            <div className="amend">
-              <AmendmentForm id={event.id} />
-              {latest !== null ? (
-                <p className="roll-note">
-                  {result.awaiting.length > 0
-                    ? `Not yet acknowledged amendment ${latest}: ${result.awaiting.map((person) => named(person, "")).join(", ")}.`
-                    : `Everyone attending has acknowledged amendment ${latest}.`}
-                </p>
+        <TabPanel id="orders">
+          <div className="wrap band tab-band">
+            <h2 className="tab-title" id="orders">
+              The orders
+            </h2>
+            <div className={beside ? "orders orders-split" : "orders"}>
+              <div className="orders-main">
+                <div className="order">
+                  <h3>Warning order</h3>
+                  {orders.warning_order ? <p className="order-text">{orders.warning_order}</p> : <p className="order-none">Not written yet.</p>}
+                </div>
+                {sections.map((section) => (
+                  <div className="order" key={section.key}>
+                    <h3>{section.name}</h3>
+                    {orders[section.key] ? (
+                      <p className="order-text">{orders[section.key]}</p>
+                    ) : (
+                      <p className="order-none">Not written yet. {section.holds}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {beside ? (
+                <div className="orders-side">
+                  <PlanBeside result={result} />
+                </div>
               ) : null}
             </div>
-          ) : null}
-        </section>
-      ) : null}
 
-      {result.opfor ? <OpposingForce result={result} open={open} /> : null}
-
-      <section className="wrap band" aria-labelledby="orders">
-        <h2 id="orders">
-          The <strong>orders</strong>
-        </h2>
-        {amendments.length > 0 ? (
-          <div className="amendments">
-            <h3 className="unit-group-name">Amendments</h3>
-            {toAcknowledge !== null ? (
-              <div className="standing-in">
-                <p>
-                  <strong>Amendment {toAcknowledge}</strong> changes these orders. Read it, then acknowledge it.
-                </p>
-                <AcknowledgeButton id={event.id} number={toAcknowledge} />
-              </div>
-            ) : result.acknowledged !== null && result.acknowledged === latest ? (
-              <p className="roll-note">You have acknowledged amendment {latest}.</p>
-            ) : null}
-            <ol className="amendment-list" reversed>
-              {amendments.map((amendment) => {
-                const issued = formatWhen(amendment.issuedAt);
-                return (
-                  <li key={amendment.number} value={amendment.number}>
-                    <p className="amendment-head">
-                      <strong>Amendment {amendment.number}</strong>
-                      <span>
-                        {issued.day}, {issued.utc}, by {named(amendment.issuedBy, "a member who has left")}
-                      </span>
-                    </p>
-                    <p className="order-text">{amendment.body}</p>
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-        ) : null}
-
-        <div className="orders">
-          <div className="order">
-            <h3>Warning order</h3>
-            {orders.warning_order ? <p className="order-text">{orders.warning_order}</p> : <p className="order-none">Not written yet.</p>}
-          </div>
-          {plan.objectives.length > 0 ? (
-            <div className="order">
-              <h3>Objectives</h3>
-              <ol className="plan-list">
-                {plan.objectives.map((objective) => (
-                  <li key={objective.id}>{objective.title}</li>
-                ))}
-              </ol>
-            </div>
-          ) : null}
-          {sections.map((section) => (
-            <Fragment key={section.key}>
-              <div className="order">
-                <h3>{section.name}</h3>
-                {orders[section.key] ? (
-                  <p className="order-text">{orders[section.key]}</p>
-                ) : (
-                  <p className="order-none">Not written yet. {section.holds}</p>
-                )}
-              </div>
-              <PlanAfter section={section.key} result={result} />
-            </Fragment>
-          ))}
-        </div>
-        <ReadingList title="Read before the night" addresses={event.reading} />
-      </section>
-
-      {event.state !== "draft" ? <TheRoll result={result} /> : null}
-
-      {runs && event.started && event.state !== "cancelled" ? (
-        <>
-          <section className="wrap band" aria-labelledby="return">
-            <h2 id="return">
-              The attendance <strong>return</strong>
-            </h2>
-            <p className="intro">
-              Mark who was there. It feeds each member&apos;s activity record
-              {event.state === "done" ? "." : ", and making it closes the event."} A member sees only their own line.
-            </p>
-            {result.returns.length > 0 ? (
-              <ReturnForm id={event.id} lines={result.returns} done={event.state === "done"} />
-            ) : (
-              <p>Nobody is on the roll.</p>
-            )}
-          </section>
-          <section className="wrap band" aria-labelledby="file">
-            <h2 id="file">
-              The after-action <strong>report</strong>
-            </h2>
-            <p className="intro">Due within 48 hours. The fleet reads it, and its lessons become changes to procedure.</p>
-            <ReportForm id={event.id} report={report} />
-            {plan.objectives.length > 0 ? (
-              <div className="plan-part">
-                <h3 className="plan-part-title">How each objective turned out</h3>
-                <OutcomesForm id={event.id} objectives={plan.objectives} outcomes={records.outcomes} />
-              </div>
-            ) : null}
-            <PlanEditor
-              id={event.id}
-              part="losses"
-              rows={records.losses.map((loss) => ({ id: loss.id, values: { item: loss.item, quantity: String(loss.quantity), note: loss.note } }))}
-            />
-            <PlanEditor
-              id={event.id}
-              part="mentions"
-              rows={records.mentions.map((mention) => ({
-                id: mention.id,
-                values: { member_id: mention.person.id, member_name: named(mention.person, ""), citation: mention.citation },
-              }))}
-              members={result.present
-                .filter((person) => !records.mentions.some((mention) => mention.person.id === person.id))
-                .map((person) => ({ value: person.id, label: named(person, "") }))}
-            />
-          </section>
-        </>
-      ) : null}
-
-      {event.teaches && event.started && event.state !== "cancelled" && (signOff || passed.length > 0) ? (
-        <section className="wrap band" aria-labelledby="sign-off">
-          <h2 id="sign-off">
-            Signed <strong>off</strong>
-          </h2>
-          <p className="intro">
-            This event teaches {event.teaches.name}.{" "}
-            {passed.length > 0
-              ? `Signed off here: ${passed.map((person) => named(person, "")).join(", ")}.`
-              : "Nobody has been signed off yet."}
-          </p>
-          {signOff ? (
-            signOff.candidates.length > 0 ? (
-              <SignOffForm id={event.id} qualification={signOff.qualification.name} candidates={signOff.candidates} />
-            ) : (
-              <p>Nobody else is down as having been there.</p>
-            )
-          ) : null}
-        </section>
-      ) : null}
-
-      {(report || recorded) && !(runs && event.started) ? (
-        <section className="wrap band" aria-labelledby="report">
-          <h2 id="report">
-            After-action <strong>report</strong>
-          </h2>
-          <p className="intro">
-            {report
-              ? `Filed by ${named(report.author, "a member who has left")} on ${formatWhen(report.filedAt).day}.`
-              : "The report's words are not written yet."}
-          </p>
-          <div className="orders">
-            {report ? (
-              <div className="order">
-                <h3>What happened</h3>
-                <p className="order-text">{report.whatHappened}</p>
-              </div>
-            ) : null}
-            {plan.objectives.some((objective) => records.outcomes[objective.id]) ? (
-              <div className="order">
-                <h3>Objectives</h3>
-                <ol className="plan-list outcome-list">
-                  {plan.objectives.map((objective) => {
-                    const outcome = records.outcomes[objective.id];
+            {amendments.length > 0 ? (
+              <div className="amendments">
+                <h3 className="unit-group-name">Amendments</h3>
+                <ol className="amendment-list" reversed>
+                  {amendments.map((amendment) => {
+                    const issued = formatWhen(amendment.issuedAt);
                     return (
-                      <li key={objective.id}>
-                        {objective.title}
-                        <span className={outcome ? `chip chip-outcome-${outcome.outcome}` : "chip"}>
-                          {outcome ? outcomeNames[outcome.outcome] : "Not answered"}
-                        </span>
-                        {outcome?.note ? <small>{outcome.note}</small> : null}
+                      <li key={amendment.number} value={amendment.number}>
+                        <p className="amendment-head">
+                          <strong>Amendment {amendment.number}</strong>
+                          <span>
+                            {issued.day}, {issued.utc}, by {named(amendment.issuedBy, "a member who has left")}
+                          </span>
+                        </p>
+                        <p className="order-text">{amendment.body}</p>
                       </li>
                     );
                   })}
                 </ol>
               </div>
             ) : null}
-            {records.losses.length > 0 ? (
-              <div className="order">
-                <h3>Losses</h3>
-                <table className="plan-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">What was lost</th>
-                      <th scope="col">How many</th>
-                      <th scope="col">Note</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {records.losses.map((loss) => (
-                      <tr key={loss.id}>
-                        <th scope="row">{loss.item}</th>
-                        <td>{loss.quantity}</td>
-                        <td>{loss.note}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-            {records.mentions.length > 0 ? (
-              <div className="order">
-                <h3>Mentions</h3>
-                <dl className="plan-tasks">
-                  {records.mentions.map((mention) => (
-                    <div key={mention.id}>
-                      <dt>
-                        {named(mention.person, "")}
-                        {mention.person.id === result.member.id ? <span className="tag tag-you">You</span> : null}
-                      </dt>
-                      <dd className="order-text">{mention.citation}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            ) : null}
-            {report?.toKeep ? (
-              <div className="order">
-                <h3>What to keep</h3>
-                <p className="order-text">{report.toKeep}</p>
-              </div>
-            ) : null}
-            {report?.toChange ? (
-              <div className="order">
-                <h3>What to change</h3>
-                <p className="order-text">{report.toChange}</p>
-              </div>
-            ) : null}
           </div>
-        </section>
-      ) : null}
+        </TabPanel>
 
-      {result.myReturn && !runs ? (
-        <section className="wrap band" aria-labelledby="returned">
-          <h2 id="returned">
-            Your <strong>attendance</strong>
-          </h2>
-          <p className="intro">
-            The operation commander recorded you as <strong>{returnedNames[result.myReturn].toLowerCase()}</strong>. Only
-            you, staff and whoever ran the event can see this.
-          </p>
-        </section>
-      ) : null}
-      <div className="band-end" />
+        <TabPanel id="tasks">
+          <div className="wrap band tab-band">
+            <h2 className="tab-title" id="tasks">
+              Tasks
+            </h2>
+            {plan.elements.length > 0 ? (
+              <div className="task-list">
+                {plan.elements.map((element) => (
+                  <div className="order" key={element.id}>
+                    <h3>
+                      {element.name}
+                      {element.callsign ? <span className="aside">Callsign {element.callsign}</span> : null}
+                    </h3>
+                    <p className={element.task ? "order-text" : "order-none"}>{element.task || "No task given yet."}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="tab-none">No element has been given a task yet.</p>
+            )}
+          </div>
+        </TabPanel>
+
+        {event.state !== "draft" ? (
+          <TabPanel id="roll">
+            <div className="wrap band tab-band">
+              <TheRoll result={result} />
+            </div>
+          </TabPanel>
+        ) : null}
+
+        <TabPanel id="report">
+          <div className="wrap band tab-band">
+            <Panes>
+              {making ? (
+                <>
+                  <Pane id="return" icon="checks" title="The attendance return" wide>
+                    <p>
+                      Mark who was there. It feeds each member&apos;s activity record
+                      {event.state === "done" ? "." : ", and making it closes the event."} A member sees only their own line.
+                    </p>
+                    {result.returns.length > 0 ? (
+                      <ReturnForm id={event.id} lines={result.returns} done={event.state === "done"} />
+                    ) : (
+                      <p>Nobody is on the roll.</p>
+                    )}
+                  </Pane>
+                  <Pane id="file" icon="pen" title="The after-action report" wide>
+                    <p>Due within 48 hours. The fleet reads it, and its lessons become changes to procedure.</p>
+                    <ReportForm id={event.id} report={report} />
+                  </Pane>
+                  {plan.objectives.length > 0 ? (
+                    <div className="plan-part pane-wide">
+                      <h3 className="plan-part-title">How each objective turned out</h3>
+                      <OutcomesForm id={event.id} objectives={plan.objectives} outcomes={records.outcomes} />
+                    </div>
+                  ) : null}
+                  <PlanEditor
+                    id={event.id}
+                    part="losses"
+                    rows={records.losses.map((loss) => ({ id: loss.id, values: { item: loss.item, quantity: String(loss.quantity), note: loss.note } }))}
+                  />
+                  <PlanEditor
+                    id={event.id}
+                    part="mentions"
+                    rows={records.mentions.map((mention) => ({
+                      id: mention.id,
+                      values: { member_id: mention.person.id, member_name: named(mention.person, ""), citation: mention.citation },
+                    }))}
+                    members={result.present
+                      .filter((person) => !records.mentions.some((mention) => mention.person.id === person.id))
+                      .map((person) => ({ value: person.id, label: named(person, "") }))}
+                  />
+                </>
+              ) : null}
+
+              {signingOff && event.teaches ? (
+                <Pane id="sign-off" icon="star" title="Signed off" wide>
+                  <p>
+                    This event teaches {event.teaches.name}.{" "}
+                    {passed.length > 0
+                      ? `Signed off here: ${passed.map((person) => named(person, "")).join(", ")}.`
+                      : "Nobody has been signed off yet."}
+                  </p>
+                  {signOff ? (
+                    signOff.candidates.length > 0 ? (
+                      <SignOffForm id={event.id} qualification={signOff.qualification.name} candidates={signOff.candidates} />
+                    ) : (
+                      <p>Nobody else is down as having been there.</p>
+                    )
+                  ) : null}
+                </Pane>
+              ) : null}
+
+              {reading ? (
+                <Pane id="report" icon="pen" title="After-action report" wide>
+                  <p>
+                    {report
+                      ? `Filed by ${named(report.author, "a member who has left")} on ${formatWhen(report.filedAt).day}.`
+                      : "The report's words are not written yet."}
+                  </p>
+                  <div className="orders">
+                    {report ? (
+                      <div className="order">
+                        <h3>What happened</h3>
+                        <p className="order-text">{report.whatHappened}</p>
+                      </div>
+                    ) : null}
+                    {plan.objectives.some((objective) => records.outcomes[objective.id]) ? (
+                      <div className="order">
+                        <h3>Objectives</h3>
+                        <ol className="plan-list outcome-list">
+                          {plan.objectives.map((objective) => {
+                            const outcome = records.outcomes[objective.id];
+                            return (
+                              <li key={objective.id}>
+                                {objective.title}
+                                <span className={outcome ? `chip chip-outcome-${outcome.outcome}` : "chip"}>
+                                  {outcome ? outcomeNames[outcome.outcome] : "Not answered"}
+                                </span>
+                                {outcome?.note ? <small>{outcome.note}</small> : null}
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      </div>
+                    ) : null}
+                    {records.losses.length > 0 ? (
+                      <div className="order">
+                        <h3>Losses</h3>
+                        <table className="plan-table">
+                          <thead>
+                            <tr>
+                              <th scope="col">What was lost</th>
+                              <th scope="col">How many</th>
+                              <th scope="col">Note</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {records.losses.map((loss) => (
+                              <tr key={loss.id}>
+                                <th scope="row">{loss.item}</th>
+                                <td>{loss.quantity}</td>
+                                <td>{loss.note}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+                    {records.mentions.length > 0 ? (
+                      <div className="order">
+                        <h3>Mentions</h3>
+                        <dl className="plan-tasks">
+                          {records.mentions.map((mention) => (
+                            <div key={mention.id}>
+                              <dt>
+                                {named(mention.person, "")}
+                                {mention.person.id === result.member.id ? <span className="tag tag-you">You</span> : null}
+                              </dt>
+                              <dd className="order-text">{mention.citation}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </div>
+                    ) : null}
+                    {report?.toKeep ? (
+                      <div className="order">
+                        <h3>What to keep</h3>
+                        <p className="order-text">{report.toKeep}</p>
+                      </div>
+                    ) : null}
+                    {report?.toChange ? (
+                      <div className="order">
+                        <h3>What to change</h3>
+                        <p className="order-text">{report.toChange}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                </Pane>
+              ) : null}
+
+              {!making && !signingOff && !reading ? (
+                <Pane id="no-report" icon="pen" title="The report" wide>
+                  <p>
+                    {event.state === "cancelled"
+                      ? "This event was cancelled, so it has no report."
+                      : event.started
+                        ? "No report has been filed yet. It is due within 48 hours of the event."
+                        : "The report opens once the event has started. Whoever runs it makes the attendance return and files the report here."}
+                  </p>
+                </Pane>
+              ) : null}
+            </Panes>
+          </div>
+        </TabPanel>
+
+        {result.opfor ? (
+          <TabPanel id="opfor">
+            <div className="wrap band tab-band">
+              <OpposingForce result={result} open={open} />
+            </div>
+          </TabPanel>
+        ) : null}
+
+        {running ? (
+          <TabPanel id="run">
+            <div className="wrap band tab-band">
+              <Panes>
+                <Pane id="running" icon="anchor" title="Decisions" wide={!(runs && event.state === "announced")}>
+                  <p>
+                    {event.state === "draft"
+                      ? "Announce it when its details and orders are ready. Until then nobody else is told."
+                      : "You run this event, so you keep its orders, fill the gaps on the roll and make the return."}
+                  </p>
+                  <MoveForms
+                    id={event.id}
+                    state={event.state as "draft" | "announced"}
+                    title={event.title}
+                    // The link to change it is under the title, where it can be reached from every tab.
+                    editHref={null}
+                    mayCancel={runs || event.state === "draft"}
+                    approval={event.approval}
+                    needsApproval={event.needsApproval}
+                    isCommand={result.isCommand}
+                  />
+                </Pane>
+                {runs && event.state === "announced" ? (
+                  <Pane id="amend" icon="radio" title="Amend the orders">
+                    <AmendmentForm id={event.id} />
+                    {latest !== null ? (
+                      <p className="roll-note">
+                        {result.awaiting.length > 0
+                          ? `Not yet acknowledged amendment ${latest.number}: ${result.awaiting.map((person) => named(person, "")).join(", ")}.`
+                          : `Everyone attending has acknowledged amendment ${latest.number}.`}
+                      </p>
+                    ) : null}
+                  </Pane>
+                ) : null}
+              </Panes>
+            </div>
+          </TabPanel>
+        ) : null}
+      </Tabs>
     </>
   );
 }
 
 /**
- * The parts of the plan that sit with a section of the orders: tasks and the
- * timeline after Execution, ships after Support, and the comms plan after
- * Command and signal. Each is left out when the event has none.
+ * The parts of the plan that sit beside the orders: the objectives, the
+ * timeline, the ships and the comms plan. Each is left out when the event has none.
  */
-function PlanAfter({ section, result }: { section: ParagraphKey; result: Ready }) {
+function PlanBeside({ result }: { result: Ready }) {
   const { plan } = result;
-  if (section === "execution") {
-    return (
-      <>
-        {plan.elements.length > 0 ? (
-          <div className="order">
-            <h3>Tasks</h3>
-            <dl className="plan-tasks">
-              {plan.elements.map((element) => (
-                <div key={element.id}>
-                  <dt>{element.name}</dt>
-                  <dd className="order-text">{element.task || "No task given yet."}</dd>
-                </div>
+  const callsigns = plan.elements.filter((element) => element.callsign);
+  return (
+    <>
+      {plan.objectives.length > 0 ? (
+        <div className="order">
+          <h3>Objectives</h3>
+          <ol className="plan-list">
+            {plan.objectives.map((objective) => (
+              <li key={objective.id}>{objective.title}</li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+      {plan.timings.length > 0 ? (
+        <div className="order">
+          <h3>Timeline</h3>
+          <table className="plan-table">
+            <thead>
+              <tr>
+                <th scope="col">When</th>
+                <th scope="col">What happens</th>
+              </tr>
+            </thead>
+            <tbody>
+              {plan.timings.map((timing) => {
+                const at = formatWhen(timing.at);
+                return (
+                  <tr key={timing.id}>
+                    <th scope="row">
+                      {at.utc}
+                      <YourTime iso={timing.at} fallback={at.uk} />
+                      <small>{hLabel(timing.offsetMinutes)}</small>
+                    </th>
+                    <td>{timing.label}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {plan.ships.length > 0 ? (
+        <div className="order">
+          <h3>Ships</h3>
+          <table className="plan-table">
+            <thead>
+              <tr>
+                <th scope="col">Ship</th>
+                <th scope="col">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {plan.ships.map((ship) => (
+                <tr key={ship.id}>
+                  <th scope="row">{ship.ship}</th>
+                  <td>{ship.note}</td>
+                </tr>
               ))}
-            </dl>
-          </div>
-        ) : null}
-        {plan.timings.length > 0 ? (
-          <div className="order">
-            <h3>Timeline</h3>
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {plan.nets.length > 0 || callsigns.length > 0 ? (
+        <div className="order">
+          <h3>Comms plan</h3>
+          {plan.nets.length > 0 ? (
             <table className="plan-table">
               <thead>
                 <tr>
-                  <th scope="col">When</th>
-                  <th scope="col">What happens</th>
+                  <th scope="col">Net</th>
+                  <th scope="col">What it is for</th>
+                  <th scope="col">Who controls it</th>
                 </tr>
               </thead>
               <tbody>
-                {plan.timings.map((timing) => {
-                  const at = formatWhen(timing.at);
-                  return (
-                    <tr key={timing.id}>
-                      <th scope="row">
-                        {at.utc}
-                        <YourTime iso={timing.at} fallback={at.uk} />
-                        <small>{hLabel(timing.offsetMinutes)}</small>
-                      </th>
-                      <td>{timing.label}</td>
-                    </tr>
-                  );
-                })}
+                {plan.nets.map((net) => (
+                  <tr key={net.id}>
+                    <th scope="row">{net.name}</th>
+                    <td>{net.purpose}</td>
+                    <td>{net.controller}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
-          </div>
-        ) : null}
-      </>
-    );
-  }
-  if (section === "support" && plan.ships.length > 0) {
-    return (
-      <div className="order">
-        <h3>Ships</h3>
-        <table className="plan-table">
-          <thead>
-            <tr>
-              <th scope="col">Ship</th>
-              <th scope="col">Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {plan.ships.map((ship) => (
-              <tr key={ship.id}>
-                <th scope="row">{ship.ship}</th>
-                <td>{ship.note}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-  const callsigns = plan.elements.filter((element) => element.callsign);
-  if (section === "command_and_signal" && (plan.nets.length > 0 || callsigns.length > 0)) {
-    return (
-      <div className="order">
-        <h3>Comms plan</h3>
-        {plan.nets.length > 0 ? (
-          <table className="plan-table">
-            <thead>
-              <tr>
-                <th scope="col">Net</th>
-                <th scope="col">What it is for</th>
-                <th scope="col">Who controls it</th>
-              </tr>
-            </thead>
-            <tbody>
-              {plan.nets.map((net) => (
-                <tr key={net.id}>
-                  <th scope="row">{net.name}</th>
-                  <td>{net.purpose}</td>
-                  <td>{net.controller}</td>
+          ) : null}
+          {callsigns.length > 0 ? (
+            <table className="plan-table">
+              <thead>
+                <tr>
+                  <th scope="col">Element</th>
+                  <th scope="col">Callsign</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : null}
-        {callsigns.length > 0 ? (
-          <table className="plan-table">
-            <thead>
-              <tr>
-                <th scope="col">Element</th>
-                <th scope="col">Callsign</th>
-              </tr>
-            </thead>
-            <tbody>
-              {callsigns.map((element) => (
-                <tr key={element.id}>
-                  <th scope="row">{element.name}</th>
-                  <td>{element.callsign}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : null}
-      </div>
-    );
-  }
-  return null;
+              </thead>
+              <tbody>
+                {callsigns.map((element) => (
+                  <tr key={element.id}>
+                    <th scope="row">{element.name}</th>
+                    <td>{element.callsign}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
 }
 
 /**
@@ -707,58 +802,58 @@ function OpposingForce({ result, open }: { result: Ready; open: boolean }) {
   const { event } = result;
   const opfor = result.opfor!;
   return (
-    <section className="wrap band" aria-labelledby="opfor">
-      <h2 id="opfor">
-        Opposing <strong>force</strong>
+    <section aria-labelledby="opfor">
+      <h2 className="tab-title" id="opfor">
+        Opposing force
       </h2>
-      <p className="intro">
+      <p className="tab-lead">
         {opfor.mine ? "You are on the opposing force for this event. " : ""}
         Only command and the members of the opposing force can see this. The side being exercised sees neither the plan
         nor who is on it, and that includes the event&apos;s commander.
       </p>
-      <div className="unit-group">
-        <h3 className="unit-group-name">Who is on it</h3>
-        {opfor.members.length > 0 ? (
-          <ul className="opfor-roll">
-            {opfor.members.map((entry) => (
-              <li key={entry.person.id}>
-                <span>
-                  {named(entry.person, "")}
-                  {entry.leads ? <span className="chip chip-gold">Leads</span> : null}
-                  {entry.person.id === result.member.id ? <span className="tag tag-you">You</span> : null}
-                </span>
-                {opfor.names && open ? (
-                  <OpforMemberButtons id={event.id} member={entry.person.id} name={entry.person.name} leads={entry.leads} />
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="roll-note">Nobody has been named yet.</p>
-        )}
-        {opfor.names && open ? (
-          <>
-            <p className="roll-note">
-              Naming a member takes them off this event&apos;s roll. Whoever leads the opposing force can write its plan.
-            </p>
-            <OpforAddForm id={event.id} candidates={opfor.candidates} />
-          </>
-        ) : null}
-      </div>
-      <div className="unit-group">
-        <h3 className="unit-group-name">Its plan</h3>
-        {opfor.writes && open ? (
-          <OpforPlanForm id={event.id} plan={opfor.plan} />
-        ) : opfor.plan ? (
-          <div className="orders">
-            <div className="order">
-              <p className="order-text">{opfor.plan}</p>
+      <Panes>
+        <Pane id="opfor-roll" icon="people" title="Who is on it">
+          {opfor.members.length > 0 ? (
+            <ul className="opfor-roll">
+              {opfor.members.map((entry) => (
+                <li key={entry.person.id}>
+                  <span>
+                    {named(entry.person, "")}
+                    {entry.leads ? <span className="chip chip-gold">Leads</span> : null}
+                    {entry.person.id === result.member.id ? <span className="tag tag-you">You</span> : null}
+                  </span>
+                  {opfor.names && open ? (
+                    <OpforMemberButtons id={event.id} member={entry.person.id} name={entry.person.name} leads={entry.leads} />
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="roll-note">Nobody has been named yet.</p>
+          )}
+          {opfor.names && open ? (
+            <>
+              <p className="roll-note">
+                Naming a member takes them off this event&apos;s roll. Whoever leads the opposing force can write its plan.
+              </p>
+              <OpforAddForm id={event.id} candidates={opfor.candidates} />
+            </>
+          ) : null}
+        </Pane>
+        <Pane id="opfor-plan" icon="flag" title="Its plan">
+          {opfor.writes && open ? (
+            <OpforPlanForm id={event.id} plan={opfor.plan} />
+          ) : opfor.plan ? (
+            <div className="orders">
+              <div className="order">
+                <p className="order-text">{opfor.plan}</p>
+              </div>
             </div>
-          </div>
-        ) : (
-          <p className="roll-note">No plan has been written yet.</p>
-        )}
-      </div>
+          ) : (
+            <p className="roll-note">No plan has been written yet.</p>
+          )}
+        </Pane>
+      </Panes>
     </section>
   );
 }
@@ -768,15 +863,12 @@ function YourReply({ result }: { result: Ready }) {
   // Someone on the opposing force is not on the roll.
   if (result.opfor?.mine) {
     return (
-      <section className="wrap band" aria-labelledby="reply">
-        <h2 id="reply">
-          Your <strong>reply</strong>
-        </h2>
-        <p className="intro">
+      <Pane id="reply" icon="checks" title="Your reply">
+        <p>
           You are on the opposing force for this event, so you are not on its roll and have nothing to reply to. Whoever
           makes the attendance return records that you were there.
         </p>
-      </section>
+      </Pane>
     );
   }
   const closes = event.rollClosesAt ? formatWhen(event.rollClosesAt) : null;
@@ -793,13 +885,10 @@ function YourReply({ result }: { result: Ready }) {
   const shut = mine.notOpen !== null && mine.reply !== "attending";
 
   return (
-    <section className="wrap band" aria-labelledby="reply">
-      <h2 id="reply">
-        Your <strong>reply</strong>
-      </h2>
+    <Pane id="reply" icon="checks" title="Your reply">
       {event.rollOpen ? (
         <>
-          <p className="intro">
+          <p>
             {shut
               ? `${mine.notOpen} If you hold a post, say you are not attending so that it can be filled.`
               : mine.holdsAPost
@@ -810,7 +899,7 @@ function YourReply({ result }: { result: Ready }) {
           <ReplyForm id={event.id} reply={mine.reply} onlyDecline={shut} />
         </>
       ) : (
-        <p className="intro">The roll has closed. {said} Tell the operation commander if your plans change.</p>
+        <p>The roll has closed. {said} Tell the operation commander if your plans change.</p>
       )}
       {mine.place === "reserve" ? (
         <div className="standing-in">
@@ -829,7 +918,7 @@ function YourReply({ result }: { result: Ready }) {
           <StandInButton id={event.id}>Step back out</StandInButton>
         </div>
       ) : null}
-    </section>
+    </Pane>
   );
 }
 
@@ -849,9 +938,9 @@ function TheRoll({ result }: { result: Ready }) {
   const candidates = roll.spare.length + roll.inPost.length;
 
   return (
-    <section className="wrap band" aria-labelledby="roll">
-      <h2 id="roll">
-        The <strong>roll</strong>
+    <>
+      <h2 className="tab-title" id="roll">
+        The roll
       </h2>
       <dl className="tally">
         <div>
@@ -1038,6 +1127,6 @@ function TheRoll({ result }: { result: Ready }) {
           </ul>
         </div>
       ) : null}
-    </section>
+    </>
   );
 }

@@ -39,18 +39,21 @@ export function PlanEditor({
   part,
   rows,
   members = [],
+  wide = false,
 }: {
   id: string;
   part: PlanPartKey;
   rows: PlanRow[];
   /** Who can be chosen, for a list with a member in it. */
   members?: Choice[];
+  /** Among cards, take the whole row. */
+  wide?: boolean;
 }) {
   const spec = planPartOf(part);
   if (!spec) return null;
   const article = /^[aeiou]/.test(spec.one) ? "an" : "a";
   return (
-    <div className="plan-part" id={`plan-${spec.key}`}>
+    <div className={wide ? "plan-part pane-wide" : "plan-part"} id={`plan-${spec.key}`}>
       <h3 className="plan-part-title">{spec.many}</h3>
       <p className="hint">{spec.about}</p>
       {rows.map((row) => {

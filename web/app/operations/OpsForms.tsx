@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Icon } from "@/components/Icon";
 import { useActionState, useState } from "react";
 import {
   returnedNames,
@@ -125,313 +126,333 @@ export function EventForm({
   // The form is drawn afresh after each answer, so a list shows what is now true
   // after a save, and what was chosen after a refusal.
   return (
-    <form action={action} className="fields fields-wide" key={result.stamp ?? 0}>
+    <form action={action} className="event-form" key={result.stamp ?? 0}>
       {event.id ? <input type="hidden" name="id" value={event.id} /> : null}
 
-      <div className="field">
-        <label htmlFor="kind">Type</label>
-        <p className="hint" id="kind_hint">
-          Command drafts any type. Instructors draft the types open to them.
-          {event.id ? "" : " Choosing a type sets its usual length and weapons state."}
-        </p>
-        <select id="kind" name="kind" value={kind} onChange={(change) => choose(change.target.value)} required aria-describedby="kind_hint kind_about">
-          {types.map((entry) => (
-            <option key={entry.key} value={entry.key}>
-              {entry.name}
-            </option>
-          ))}
-        </select>
-        <p className="type-about" id="kind_about" aria-live="polite">
-          {about}
-        </p>
-      </div>
+      <div className="panes">
+        <fieldset className="pane">
+          <legend className="pane-title">
+            <Icon name="calendar" size={18} />
+            <span>What and when</span>
+          </legend>
+          <div className="field">
+            <label htmlFor="kind">Type</label>
+            <p className="hint" id="kind_hint">
+              Command drafts any type. Instructors draft the types open to them.
+              {event.id ? "" : " Choosing a type sets its usual length and weapons state."}
+            </p>
+            <select id="kind" name="kind" value={kind} onChange={(change) => choose(change.target.value)} required aria-describedby="kind_hint kind_about">
+              {types.map((entry) => (
+                <option key={entry.key} value={entry.key}>
+                  {entry.name}
+                </option>
+              ))}
+            </select>
+            <p className="type-about" id="kind_about" aria-live="polite">
+              {about}
+            </p>
+          </div>
 
-      <div className="field">
-        <label htmlFor="title">Title</label>
-        <p className="hint" id="title_hint">
-          A short name, such as Patrol 001. A number at the end goes up by one when the event is copied or repeats.
-        </p>
-        <input
-          id="title"
-          name="title"
-          type="text"
-          defaultValue={held("title", event.title)}
-          required
-          minLength={3}
-          maxLength={80}
-          autoComplete="off"
-          aria-describedby="title_hint"
-        />
-      </div>
-
-      <div className="field">
-        <label htmlFor="summary">
-          Summary <span className="optional">Optional</span>
-        </label>
-        <p className="hint" id="summary_hint">
-          One line on the task, such as the lane between ArcCorp and microTech. Members see it. Visitors never do.
-        </p>
-        <input
-          id="summary"
-          name="summary"
-          type="text"
-          defaultValue={held("summary", event.summary)}
-          maxLength={200}
-          autoComplete="off"
-          aria-describedby="summary_hint"
-        />
-      </div>
-
-      <div className="field-row">
-        <div className="field">
-          <label htmlFor="date">Date</label>
-          <input id="date" name="date" type="date" defaultValue={held("date", event.date)} required />
-        </div>
-        <div className="field">
-          <label htmlFor="time">Start, in UTC</label>
-          <input id="time" name="time" type="time" defaultValue={held("time", event.time)} required />
-        </div>
-        <div className="field">
-          <label htmlFor="duration">Minutes</label>
-          <input
-            id="duration"
-            name="duration"
-            type="number"
-            value={duration}
-            onChange={(change) => setDuration(change.target.value)}
-            min={15}
-            max={480}
-            step={5}
-            required
-          />
-        </div>
-      </div>
-      <p className="field-note">
-        Orders use UTC. A warning order goes out at least 72 hours before, and the roll closes 24 hours before.
-      </p>
-
-      <div className="field">
-        <label htmlFor="muster_at">
-          Muster at <span className="optional">Optional</span>
-        </label>
-        <p className="hint" id="muster_at_hint">
-          Where to be 15 minutes before the start, such as Baijini Point, pad 04.
-        </p>
-        <input
-          id="muster_at"
-          name="muster_at"
-          type="text"
-          defaultValue={held("muster_at", event.musterAt)}
-          maxLength={120}
-          autoComplete="off"
-          aria-describedby="muster_at_hint"
-        />
-      </div>
-
-      <div className="field">
-        <label htmlFor="area">
-          Area <span className="optional">Optional</span>
-        </label>
-        <p className="hint" id="area_hint">
-          Where the event takes place, such as the lane between ArcCorp and microTech.
-        </p>
-        <input id="area" name="area" type="text" defaultValue={held("area", event.area)} maxLength={120} autoComplete="off" aria-describedby="area_hint" />
-      </div>
-
-      <div className="field">
-        <label className="choice" htmlFor="repeats_weekly">
-          <input
-            id="repeats_weekly"
-            name="repeats_weekly"
-            type="checkbox"
-            defaultChecked={result.values ? result.values.repeats_weekly === "on" : event.repeatsWeekly}
-            aria-describedby="repeats_weekly_hint"
-          />
-          <span>Repeats weekly</span>
-        </label>
-        <p className="hint" id="repeats_weekly_hint">
-          When this one is closed, or cancelled after it was announced, next week&apos;s is drafted with the same details and
-          orders. A draft is never announced by itself.
-        </p>
-      </div>
-
-      <div className="field">
-        <label htmlFor="commander">Operation commander</label>
-        <p className="hint" id="commander_hint">
-          They command everyone present, whatever rank anyone wears.
-        </p>
-        <select id="commander" name="commander" defaultValue={held("commander", event.commander)} required aria-describedby="commander_hint">
-          {people.map((person) => (
-            <option key={person.id} value={person.id}>
-              {label(person)}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="field">
-        <label htmlFor="second">
-          Second-in-command <span className="optional">Optional</span>
-        </label>
-        <p className="hint" id="second_hint">
-          They take over at once if the commander drops out. Name one from whoever is attending if nobody is set yet.
-        </p>
-        <select id="second" name="second" defaultValue={held("second", event.second)} aria-describedby="second_hint">
-          <option value="">Not named yet</option>
-          {people.map((person) => (
-            <option key={person.id} value={person.id}>
-              {label(person)}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="field">
-        <label htmlFor="observer">
-          Observer <span className="optional">Optional</span>
-        </label>
-        <p className="hint" id="observer_hint">
-          An instructor who watches and debriefs on training and assessed operations. They give no orders.
-        </p>
-        <select id="observer" name="observer" defaultValue={held("observer", event.observer)} aria-describedby="observer_hint">
-          <option value="">None</option>
-          {people.map((person) => (
-            <option key={person.id} value={person.id}>
-              {label(person)}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="field">
-        <label htmlFor="weapons_state">
-          Weapons state <span className="optional">Optional</span>
-        </label>
-        <select id="weapons_state" name="weapons_state" value={weaponsState} onChange={(change) => setWeaponsState(change.target.value)}>
-          <option value="">Not set</option>
-          {weapons.map((state) => (
-            <option key={state.key} value={state.key}>
-              {state.name}: {state.meaning.toLowerCase()}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="field">
-        <label htmlFor="pve_fallback">
-          Fallback <span className="optional">Optional</span>
-        </label>
-        <p className="hint" id="pve_fallback_hint">
-          What the force does if no hostile shows. Every operation against players carries one.
-        </p>
-        <input
-          id="pve_fallback"
-          name="pve_fallback"
-          type="text"
-          defaultValue={held("pve_fallback", event.pveFallback)}
-          maxLength={200}
-          autoComplete="off"
-          aria-describedby="pve_fallback_hint"
-        />
-      </div>
-
-      <div className="field">
-        <label htmlFor="teaches_qualification">
-          Qualification taught <span className="optional">Optional</span>
-        </label>
-        <p className="hint" id="teaches_qualification_hint">
-          For a training event that ends in a qualification. Once it has started, an instructor signs off who passed
-          from the event&apos;s page.
-        </p>
-        <select
-          id="teaches_qualification"
-          name="teaches_qualification"
-          defaultValue={held("teaches_qualification", event.teachesQualification)}
-          aria-describedby="teaches_qualification_hint"
-        >
-          <option value="">None</option>
-          {qualifications.map((qualification) => (
-            <option key={qualification.id} value={qualification.id}>
-              {qualification.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <fieldset className="field-set">
-        <legend>Who it is open to</legend>
-        <div className="field">
-          <label className="choice" htmlFor="open_to_recruits">
+          <div className="field">
+            <label htmlFor="title">Title</label>
+            <p className="hint" id="title_hint">
+              A short name, such as Patrol 001. A number at the end goes up by one when the event is copied or repeats.
+            </p>
             <input
-              id="open_to_recruits"
-              name="open_to_recruits"
-              type="checkbox"
-              defaultChecked={result.values ? result.values.open_to_recruits === "on" : event.openToRecruits}
+              id="title"
+              name="title"
+              type="text"
+              defaultValue={held("title", event.title)}
+              required
+              minLength={3}
+              maxLength={80}
+              autoComplete="off"
+              aria-describedby="title_hint"
             />
-            <span>Open to recruits</span>
-          </label>
-        </div>
-        <div className="field">
-          <label htmlFor="open_to_service">Service</label>
-          <select id="open_to_service" name="open_to_service" defaultValue={held("open_to_service", event.openToService)}>
-            <option value="">Every service</option>
-            {Object.entries(serviceNames).map(([key, name]) => (
-              <option key={key} value={key}>
-                {name} only
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="requires_qualification">
-            Qualification needed <span className="optional">Optional</span>
-          </label>
-          <p className="hint" id="requires_qualification_hint">
-            Only members who hold it can reply that they are attending. Whoever is named to run the event or to observe
-            always can.
+          </div>
+
+          <div className="field">
+            <label htmlFor="summary">
+              Summary <span className="optional">Optional</span>
+            </label>
+            <p className="hint" id="summary_hint">
+              One line on the task, such as the lane between ArcCorp and microTech. Members see it. Visitors never do.
+            </p>
+            <input
+              id="summary"
+              name="summary"
+              type="text"
+              defaultValue={held("summary", event.summary)}
+              maxLength={200}
+              autoComplete="off"
+              aria-describedby="summary_hint"
+            />
+          </div>
+
+          <div className="field-row">
+            <div className="field">
+              <label htmlFor="date">Date</label>
+              <input id="date" name="date" type="date" defaultValue={held("date", event.date)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="time">Start, in UTC</label>
+              <input id="time" name="time" type="time" defaultValue={held("time", event.time)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="duration">Minutes</label>
+              <input
+                id="duration"
+                name="duration"
+                type="number"
+                value={duration}
+                onChange={(change) => setDuration(change.target.value)}
+                min={15}
+                max={480}
+                step={5}
+                required
+              />
+            </div>
+          </div>
+          <p className="field-note">
+            Orders use UTC. A warning order goes out at least 72 hours before, and the roll closes 24 hours before.
           </p>
-          <select
-            id="requires_qualification"
-            name="requires_qualification"
-            defaultValue={held("requires_qualification", event.requiresQualification)}
-            aria-describedby="requires_qualification_hint"
-          >
-            <option value="">None</option>
-            {qualifications.map((qualification) => (
-              <option key={qualification.id} value={qualification.id}>
-                {qualification.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field-row">
+
           <div className="field">
-            <label htmlFor="places">
-              Places <span className="optional">Optional</span>
+            <label htmlFor="muster_at">
+              Muster at <span className="optional">Optional</span>
             </label>
-            <input id="places" name="places" type="number" min={1} max={500} step={1} defaultValue={held("places", event.places)} aria-describedby="places_hint" />
-          </div>
-          <div className="field">
-            <label htmlFor="minimum_attending">
-              Minimum <span className="optional">Optional</span>
-            </label>
+            <p className="hint" id="muster_at_hint">
+              Where to be 15 minutes before the start, such as Baijini Point, pad 04.
+            </p>
             <input
-              id="minimum_attending"
-              name="minimum_attending"
-              type="number"
-              min={1}
-              max={500}
-              step={1}
-              defaultValue={held("minimum_attending", event.minimumAttending)}
-              aria-describedby="places_hint"
+              id="muster_at"
+              name="muster_at"
+              type="text"
+              defaultValue={held("muster_at", event.musterAt)}
+              maxLength={120}
+              autoComplete="off"
+              aria-describedby="muster_at_hint"
             />
           </div>
-        </div>
-        <p className="field-note" id="places_hint">
-          Replies past the number of places go on a reserve list, in the order they arrive. The minimum is how many must
-          attend for the event to go ahead. Leave either empty for none.
-        </p>
-      </fieldset>
+
+          <div className="field">
+            <label htmlFor="area">
+              Area <span className="optional">Optional</span>
+            </label>
+            <p className="hint" id="area_hint">
+              Where the event takes place, such as the lane between ArcCorp and microTech.
+            </p>
+            <input id="area" name="area" type="text" defaultValue={held("area", event.area)} maxLength={120} autoComplete="off" aria-describedby="area_hint" />
+          </div>
+        </fieldset>
+        <fieldset className="pane">
+          <legend className="pane-title">
+            <Icon name="star" size={18} />
+            <span>Who runs it</span>
+          </legend>
+          <div className="field">
+            <label htmlFor="commander">Operation commander</label>
+            <p className="hint" id="commander_hint">
+              They command everyone present, whatever rank anyone wears.
+            </p>
+            <select id="commander" name="commander" defaultValue={held("commander", event.commander)} required aria-describedby="commander_hint">
+              {people.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {label(person)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="second">
+              Second-in-command <span className="optional">Optional</span>
+            </label>
+            <p className="hint" id="second_hint">
+              They take over at once if the commander drops out. Name one from whoever is attending if nobody is set yet.
+            </p>
+            <select id="second" name="second" defaultValue={held("second", event.second)} aria-describedby="second_hint">
+              <option value="">Not named yet</option>
+              {people.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {label(person)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="observer">
+              Observer <span className="optional">Optional</span>
+            </label>
+            <p className="hint" id="observer_hint">
+              An instructor who watches and debriefs on training and assessed operations. They give no orders.
+            </p>
+            <select id="observer" name="observer" defaultValue={held("observer", event.observer)} aria-describedby="observer_hint">
+              <option value="">None</option>
+              {people.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {label(person)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="weapons_state">
+              Weapons state <span className="optional">Optional</span>
+            </label>
+            <select id="weapons_state" name="weapons_state" value={weaponsState} onChange={(change) => setWeaponsState(change.target.value)}>
+              <option value="">Not set</option>
+              {weapons.map((state) => (
+                <option key={state.key} value={state.key}>
+                  {state.name}: {state.meaning.toLowerCase()}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="pve_fallback">
+              Fallback <span className="optional">Optional</span>
+            </label>
+            <p className="hint" id="pve_fallback_hint">
+              What the force does if no hostile shows. Every operation against players carries one.
+            </p>
+            <input
+              id="pve_fallback"
+              name="pve_fallback"
+              type="text"
+              defaultValue={held("pve_fallback", event.pveFallback)}
+              maxLength={200}
+              autoComplete="off"
+              aria-describedby="pve_fallback_hint"
+            />
+          </div>
+        </fieldset>
+        <fieldset className="pane">
+          <legend className="pane-title">
+            <Icon name="people" size={18} />
+            <span>Who it is open to</span>
+          </legend>
+          <div className="field">
+            <label className="choice" htmlFor="open_to_recruits">
+              <input
+                id="open_to_recruits"
+                name="open_to_recruits"
+                type="checkbox"
+                defaultChecked={result.values ? result.values.open_to_recruits === "on" : event.openToRecruits}
+              />
+              <span>Open to recruits</span>
+            </label>
+          </div>
+          <div className="field">
+            <label htmlFor="open_to_service">Service</label>
+            <select id="open_to_service" name="open_to_service" defaultValue={held("open_to_service", event.openToService)}>
+              <option value="">Every service</option>
+              {Object.entries(serviceNames).map(([key, name]) => (
+                <option key={key} value={key}>
+                  {name} only
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="requires_qualification">
+              Qualification needed <span className="optional">Optional</span>
+            </label>
+            <p className="hint" id="requires_qualification_hint">
+              Only members who hold it can reply that they are attending. Whoever is named to run the event or to observe
+              always can.
+            </p>
+            <select
+              id="requires_qualification"
+              name="requires_qualification"
+              defaultValue={held("requires_qualification", event.requiresQualification)}
+              aria-describedby="requires_qualification_hint"
+            >
+              <option value="">None</option>
+              {qualifications.map((qualification) => (
+                <option key={qualification.id} value={qualification.id}>
+                  {qualification.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label htmlFor="places">
+                Places <span className="optional">Optional</span>
+              </label>
+              <input id="places" name="places" type="number" min={1} max={500} step={1} defaultValue={held("places", event.places)} aria-describedby="places_hint" />
+            </div>
+            <div className="field">
+              <label htmlFor="minimum_attending">
+                Minimum <span className="optional">Optional</span>
+              </label>
+              <input
+                id="minimum_attending"
+                name="minimum_attending"
+                type="number"
+                min={1}
+                max={500}
+                step={1}
+                defaultValue={held("minimum_attending", event.minimumAttending)}
+                aria-describedby="places_hint"
+              />
+            </div>
+          </div>
+          <p className="field-note" id="places_hint">
+            Replies past the number of places go on a reserve list, in the order they arrive. The minimum is how many must
+            attend for the event to go ahead. Leave either empty for none.
+          </p>
+        </fieldset>
+        <fieldset className="pane">
+          <legend className="pane-title">
+            <Icon name="clock" size={18} />
+            <span>Repeats and teaching</span>
+          </legend>
+          <div className="field">
+            <label className="choice" htmlFor="repeats_weekly">
+              <input
+                id="repeats_weekly"
+                name="repeats_weekly"
+                type="checkbox"
+                defaultChecked={result.values ? result.values.repeats_weekly === "on" : event.repeatsWeekly}
+                aria-describedby="repeats_weekly_hint"
+              />
+              <span>Repeats weekly</span>
+            </label>
+            <p className="hint" id="repeats_weekly_hint">
+              When this one is closed, or cancelled after it was announced, next week&apos;s is drafted with the same details and
+              orders. A draft is never announced by itself.
+            </p>
+          </div>
+
+          <div className="field">
+            <label htmlFor="teaches_qualification">
+              Qualification taught <span className="optional">Optional</span>
+            </label>
+            <p className="hint" id="teaches_qualification_hint">
+              For a training event that ends in a qualification. Once it has started, an instructor signs off who passed
+              from the event&apos;s page.
+            </p>
+            <select
+              id="teaches_qualification"
+              name="teaches_qualification"
+              defaultValue={held("teaches_qualification", event.teachesQualification)}
+              aria-describedby="teaches_qualification_hint"
+            >
+              <option value="">None</option>
+              {qualifications.map((qualification) => (
+                <option key={qualification.id} value={qualification.id}>
+                  {qualification.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </fieldset>
+      </div>
 
       <div className="form-end">
         <button className="button" type="submit" disabled={pending}>
@@ -461,7 +482,7 @@ export function CopyButton({ id }: { id: string }) {
 export function OrdersForm({ id, orders, sections }: { id: string; orders: Record<string, string>; sections: Section[] }) {
   const [result, action, pending] = useActionState(saveOrders, untouched);
   return (
-    <form action={action} className="fields fields-wide">
+    <form action={action} className="fields orders-form">
       <input type="hidden" name="id" value={id} />
       <div className="field">
         <label htmlFor="warning_order">Warning order</label>

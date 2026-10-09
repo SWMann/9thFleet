@@ -75,6 +75,8 @@ export async function openBrowser() {
   // This one says it is an ordinary browser, so the counting can be tested.
   const userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
   const context = await browser.newContext({ viewport: { width, height: 900 }, userAgent });
+  // E2E_TIMEOUT, in milliseconds, shortens how long a step waits. It is for finding failures quickly, not for the real run.
+  if (Number(process.env.E2E_TIMEOUT) > 0) context.setDefaultTimeout(Number(process.env.E2E_TIMEOUT));
   const page = await context.newPage();
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(String(error)));

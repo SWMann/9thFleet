@@ -4,11 +4,10 @@ import { PageHead } from "@/components/PageHead";
 import { getOperation, type Operation } from "@/lib/operations";
 
 /**
- * What the pages for changing an event share: the head, the links between
- * them, and the check that the person asking may change this event.
+ * What the page for changing an event needs before it draws anything: the
+ * head, and the check that the person asking may change this event.
  */
 
-export type EditPart = "details" | "taking" | "orders";
 export type Ready = Extract<Operation, { state: "ready" }>;
 
 export function EditHead({ id, title, lead }: { id?: string; title: string; lead: string }) {
@@ -24,29 +23,6 @@ export function EditHead({ id, title, lead }: { id?: string; title: string; lead
       title={<strong>{title}</strong>}
       lead={lead}
     />
-  );
-}
-
-const parts: { key: EditPart; label: string; path: string }[] = [
-  { key: "details", label: "Details", path: "" },
-  { key: "taking", label: "Who takes part", path: "/taking" },
-  { key: "orders", label: "Orders and plan", path: "/orders" },
-];
-
-/** The three pages an event is changed on, as a row of links. */
-export function EditNav({ id, current }: { id: string; current: EditPart }) {
-  return (
-    <nav aria-label="Parts of the event">
-      <ul className="parts editor-nav">
-        {parts.map((part) => (
-          <li key={part.key}>
-            <Link href={`/operations/${id}/edit${part.path}`} aria-current={part.key === current ? "page" : undefined}>
-              {part.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </nav>
   );
 }
 

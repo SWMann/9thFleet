@@ -580,11 +580,23 @@ try {
     await page.goto(`${site}/operations/${(await patrol()).id}`);
     await headingIs("Patrol 001");
   };
-  // An event is changed on three pages, with a row of links between them.
-  const editPart = async (name) => {
-    const parts = page.locator('nav[aria-label="Parts of the event"]:visible');
-    await parts.getByRole("link", { name, exact: true }).click();
-    await page.locator('nav[aria-label="Parts of the event"]:visible a[aria-current="page"]', { hasText: name }).waitFor();
+  // An event's page and its editor are tabs of cards. Every tab is on the page, and only the one that is shown
+  // can be worked on. Each has its own name, so asking for a tab also waits for the right page to arrive.
+  const tabOf = (label) => async (name) => {
+    const bar = page.locator(`nav[aria-label="${label}"]:visible`);
+    const link = bar.getByRole("link", { name, exact: true });
+    if ((await link.getAttribute("aria-current")) !== "page") await link.click();
+    await bar.locator('a[aria-current="page"]', { hasText: name }).waitFor();
+  };
+  const tab = tabOf("Parts of this event");
+  const editPart = tabOf("Parts of the editor");
+  // Look at every tab of an event in turn, for something that must be on none of them.
+  const everyTab = async (look) => {
+    const names = (await page.locator('nav[aria-label="Parts of this event"]:visible a').allInnerTexts()).map((label) => label.trim());
+    for (const name of names) {
+      await tab(name);
+      await look(name);
+    }
   };
   await check("an applicant is not shown operations", async () => {
     await signInAs(sam);
@@ -623,7 +635,7 @@ try {
     await signInAs(founder);
     await openPatrol();
     await page.getByRole("link", { name: "Change the details and orders" }).click();
-    await editPart("Orders and plan");
+    await editPart("Orders");
     await page.getByLabel("Warning order").fill("Patrol the lane at 1900 UTC.\nCommander: Ada Vance.");
     await page.getByLabel("2 Mission").fill("Task Force Jericho will patrol the lane in order to deter piracy against traders.");
     await page.getByRole("button", { name: "Save the orders" }).click();
@@ -631,7 +643,9 @@ try {
     await shot("operation-edit");
 
     await openPatrol();
-    assert.match(await page.locator(".orders").innerText(), /Commander: Ada Vance\./);
+    await tab("Orders");
+    assert.match(await page.locator(".orders:visible").innerText(), /Commander: Ada Vance\./);
+    await tab("Run it");
     await page.locator(".decisions summary", { hasText: /^Announce$/ }).click();
     await page.getByRole("button", { name: "Yes, announce it" }).click();
     await page.locator(".form-result").filter({ hasText: "Announced." }).waitFor();
@@ -641,8 +655,10 @@ try {
     await shot("operation-announced");
   });
   await check("members reply for themselves and can change their minds while the roll is open", async () => {
+    await tab("Overview");
     await page.getByRole("button", { name: "Attending", exact: true }).click();
     await page.locator(".form-result").filter({ hasText: "You are down as attending." }).waitFor();
+    await tab("Roll");
     assert.match(await post("Fleet Commander").innerText(), /Confirmed/i);
 
     await signInAs(kit);
@@ -652,13 +668,16 @@ try {
     assert.match(await page.locator(".sequence").innerText(), /The roll closes 24 hours out/);
     await page.getByRole("link", { name: "Patrol 001" }).click();
     await headingIs("Patrol 001");
-    assert.match(await page.locator(".orders").innerText(), /in order to deter piracy/);
+    await tab("Orders");
+    assert.match(await page.locator(".orders:visible").innerText(), /in order to deter piracy/);
+    await tab("Overview");
     await page.getByRole("button", { name: "Not attending" }).click();
     await page.locator(".form-result").filter({ hasText: "You are down as not attending." }).waitFor();
     await page.getByRole("button", { name: "Attending", exact: true }).click();
     await page.locator(".form-result").filter({ hasText: "You are down as attending." }).waitFor();
     assert.equal((await lineOf(kit)).reply, "attending");
     // A recruit holds no post, so they attend as a spare hand.
+    await tab("Roll");
     await page.locator(".names li", { hasText: "Kit Marlow" }).waitFor();
     // Nobody holds the training ship's six entry posts yet, so each is known to be empty.
     assert.equal(await page.getByRole("button", { name: "Stand in" }).count(), 6);
@@ -678,10 +697,13 @@ try {
     await page.getByText("The roll has closed. You said you are attending.").waitFor();
     assert.equal(await page.getByRole("button", { name: "Not attending" }).count(), 0);
 
+    await tab("Roll");
     await post("Gunner 1").getByRole("button", { name: "Stand in" }).click();
+    await tab("Overview");
     await page.getByText("You are standing in as Gunner 1 for the night.").waitFor();
     const line = await lineOf(kit);
     assert.equal(line.stand_in_set_by, (await memberOf(kit)).id);
+    await tab("Roll");
     assert.match(await post("Gunner 1").innerText(), /Stand-in: Starman Recruit Kit Marlow/);
     // One post at a time.
     assert.equal(await page.getByRole("button", { name: "Stand in" }).count(), 0);
@@ -690,6 +712,7 @@ try {
   await check("whoever runs the event places a stand-in and takes one out", async () => {
     await signInAs(founder);
     await openPatrol();
+    await tab("Roll");
     await post("Helmsman").getByLabel("Stand-in for Helmsman").selectOption({ label: "Starman Recruit Jo Reyes" });
     await post("Helmsman").getByRole("button", { name: "Place" }).click();
     await post("Helmsman").getByText("Stand-in: Starman Recruit Jo Reyes").waitFor();
@@ -705,6 +728,7 @@ try {
   await check("after the start the commander makes the return and files the report, and the event closes", async () => {
     await supabase.sql("update public.events set starts_at = now() - interval '1 hour' where title = 'Patrol 001'");
     await openPatrol();
+    await tab("Report");
     await page.getByLabel(/Jo Reyes/).selectOption({ label: "Absent, without notice" });
     await page.getByRole("button", { name: "Make the return and close the event" }).click();
     await page.locator(".form-result").filter({ hasText: "The attendance return is made." }).waitFor();
@@ -727,14 +751,18 @@ try {
     await page.goto(`${site}/operations`);
     assert.match(await page.locator(".event", { hasText: "Patrol 001" }).innerText(), /Done/i);
     await openPatrol();
+    // Kit is told how they were recorded.
+    await page.getByText("The operation commander recorded you as present.").waitFor();
+    await tab("Report");
     await page.getByRole("heading", { name: "After-action report" }).waitFor();
     assert.match(await page.locator("main").innerText(), /Filed by Lt\. Commander Ada Vance/);
     assert.match(await page.locator("main").innerText(), /Brief the fallback sooner\./);
-    // Kit is told how they were recorded, and is not shown that Jo was marked absent.
-    await page.getByText("The operation commander recorded you as present.").waitFor();
-    assert.doesNotMatch(await page.locator("main").innerText(), /Absent|without notice/i);
-    assert.equal(await page.getByRole("button").filter({ hasText: /Attending|Stand in|Place/ }).count(), 0);
     await shot("operation-done");
+    // On no tab is Kit shown that Jo was marked absent, or offered anything to change.
+    await everyTab(async () => {
+      assert.doesNotMatch(await page.locator("main").innerText(), /Absent|without notice/i);
+      assert.equal(await page.getByRole("button").filter({ hasText: /Attending|Stand in|Place/ }).count(), 0);
+    });
   });
 
   console.log("Admin");
@@ -1403,6 +1431,7 @@ try {
     assert.match(chips, /Weapons hold/i);
     assert.match(chips, /Weekly/i);
     // The event's page uses the type's own name for the section, and its own guidance.
+    await tab("Orders");
     assert.match(await page.locator(".orders:visible").innerText(), /2 Aim\s+Not written yet\. What everyone will be able to do by the end\./i);
     assert.match(await page.locator(".orders:visible").innerText(), /1 Situation/i);
   });
@@ -1410,7 +1439,7 @@ try {
     await page.getByRole("link", { name: "Change the details and orders" }).click();
     await eventFormReady();
     assert.equal(await page.getByLabel("Repeats weekly").isChecked(), true);
-    await editPart("Orders and plan");
+    await editPart("Orders");
     await page.getByLabel("2 Aim").fill("Every gunner hits a moving target from the dorsal turret.");
     await page.getByLabel("1 Situation").waitFor();
     await page.getByRole("button", { name: "Save the orders" }).click();
@@ -1420,6 +1449,7 @@ try {
   await check("closing a weekly event drafts next week's, with its details and orders, and announces nothing", async () => {
     const first = await eventTitled("Training Night 001");
     await openEvent("Training Night 001");
+    await tab("Run it");
     await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).click();
     await page.getByRole("button", { name: "Yes, announce it" }).click();
     await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
@@ -1427,6 +1457,7 @@ try {
 
     await supabase.sql("update public.events set starts_at = now() - interval '1 hour' where id = $1", [first.id]);
     await openEvent("Training Night 001");
+    await tab("Report");
     await page.getByRole("button", { name: "Make the return and close the event" }).click();
     const said = page.locator(".form-result:visible").filter({ hasText: "The attendance return is made." });
     await said.waitFor();
@@ -1449,6 +1480,7 @@ try {
     const facts = await page.locator(".facts:visible").innerText();
     assert.match(facts, /Repeats\s+Weekly/i);
     assert.match(facts, /Copied from\s+Training Night 001/i);
+    await tab("Orders");
     assert.match(await page.locator(".orders:visible").innerText(), /Every gunner hits a moving target from the dorsal turret\./);
     await shot("operation-weekly-next");
 
@@ -1475,7 +1507,7 @@ try {
     assert.equal(copy.repeats_weekly, false, "a copy is one night unless it is set to repeat");
     assert.equal(copy.commander_id, (await memberOf(founder)).id);
     assert.ok(Date.parse(copy.starts_at) > Date.now(), "a copy starts in the future");
-    await editPart("Orders and plan");
+    await editPart("Orders");
     assert.equal(await page.getByLabel("2 Mission").inputValue(), "Task Force Jericho will patrol the lane in order to deter piracy against traders.");
     assert.equal((await ordersOf("Patrol 002")).warning_order, (await ordersOf("Patrol 001")).warning_order);
     await shot("operation-copy");
@@ -1562,7 +1594,7 @@ try {
   });
   await check("whoever drafts an event names its units, the posts that must be filled and posts of its own", async () => {
     await page.getByRole("link", { name: "Change the details and orders" }).click();
-    await editPart("Who takes part");
+    await editPart("Forces");
     const units = page.locator("form.picks:visible", { hasText: "Units taking part" });
     await units.getByLabel("Task Force Jericho › Training Ship").check();
     await units.getByRole("button", { name: "Save the units" }).click();
@@ -1617,15 +1649,18 @@ try {
   });
   await check("the roll shows only the units taking part, with the event's own posts, and says what it still needs", async () => {
     await openGunnery();
+    await tab("Run it");
     await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).click();
     await page.getByRole("button", { name: "Yes, announce it" }).click();
     await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
+    await tab("Overview");
     await page.locator(".manning:visible").waitFor();
     assert.match(await manningSays(), /Not yet manned 2 more are needed to reach the minimum of 2\. Posts that must be filled are empty: Helmsman, Range Safety Officer\. Members can still reply\./);
+    assert.match(await page.locator(".facts:visible").innerText(), /Taking part\s+Training Ship/i);
     // Six posts on the training ship and three of the event's own. The Fleet Commander's post is not part of it.
+    await tab("Roll");
     assert.match(await page.locator(".tally:visible").innerText(), /Posts\s+9/i);
     assert.equal(await post("Fleet Commander").count(), 0);
-    assert.match(await page.locator(".facts:visible").innerText(), /Taking part\s+Training Ship/i);
     assert.match(await extraPost("Range Safety Officer").innerText(), /Empty[\s\S]*Must be filled[\s\S]*Role: Gunnery Chief/i);
     await shot("operation-manning");
   });
@@ -1634,9 +1669,13 @@ try {
     await openGunnery();
     await page.getByRole("button", { name: "Attending", exact: true }).click();
     await page.locator(".form-result:visible").filter({ hasText: "You are down as attending." }).waitFor();
+    await tab("Roll");
+    await extraPost("Range Safety Officer").waitFor();
     assert.equal(await extraPost("Range Safety Officer").getByRole("button").count(), 0, "the commander fills that one");
     await extraPost("Trainee 1").getByRole("button", { name: "Take this post" }).click();
+    await tab("Overview");
     await page.getByText("You are Trainee 1 for the night.").waitFor();
+    await tab("Roll");
     assert.equal(await page.getByRole("button", { name: "Take this post" }).count(), 0, "one post at a time");
     const line = await lineIn("Gunnery 001", kit);
     assert.equal(line.place, "in");
@@ -1657,6 +1696,8 @@ try {
     assert.equal((await lineIn("Gunnery 001", lee)).place, "reserve");
     assert.match(await page.locator(".facts:visible").innerText(), /Places\s+2\s*2 taken, 1 on the reserve list/i);
     // Someone on the reserve list has no post until a place opens.
+    await tab("Roll");
+    await extraPost("Trainee 2").waitFor();
     assert.equal(await page.getByRole("button", { name: /Take this post|Stand in/ }).count(), 0);
     await page.goto(`${site}/operations`);
     assert.match(await page.locator(".event:visible", { hasText: "Gunnery 001" }).innerText(), /You are on the reserve list/i);
@@ -1675,6 +1716,7 @@ try {
     await page.locator(".form-result:visible").filter({ hasText: "Every place is taken" }).waitFor();
     await signInAs(founder);
     await openGunnery();
+    await tab("Roll");
     const reserve = page.locator(".unit-group:visible", { has: page.getByRole("heading", { name: "Reserve list" }) });
     assert.match(await reserve.locator(".reserve-list").innerText(), /Jo Reyes/);
     await choosePerson(reserve.getByLabel("Move to the reserve list"), "Lee Tanaka");
@@ -1688,6 +1730,7 @@ try {
   });
   await check("an event below its minimum when the roll closes is a no-go, and command is told", async () => {
     // The commander always has a place, however full the event is.
+    await tab("Overview");
     await page.getByRole("button", { name: "Attending", exact: true }).click();
     await page.locator(".form-result:visible").filter({ hasText: "You are down as attending." }).waitFor();
     assert.equal((await lineIn("Gunnery 001", founder)).place, "in");
@@ -1705,6 +1748,7 @@ try {
   });
   await check("the commander fills the posts that must be filled, and the event is a go", async () => {
     await openGunnery();
+    await tab("Roll");
     // The commander's own post is not part of this event, so they are a spare hand like anyone else.
     await extraPost("Range Safety Officer").getByLabel("Stand-in for Range Safety Officer").selectOption({ label: "Lt. Commander Ada Vance" });
     await extraPost("Range Safety Officer").getByRole("button", { name: "Place" }).click();
@@ -1712,8 +1756,9 @@ try {
     await post("Helmsman").getByLabel("Stand-in for Helmsman").selectOption({ label: "Starman Recruit Jo Reyes" });
     await post("Helmsman").getByRole("button", { name: "Place" }).click();
     await post("Helmsman").getByText("Stand-in: Starman Recruit Jo Reyes").waitFor();
-    assert.match(await manningSays(), /^Go 3 attending, against a minimum of 2, and every post that must be filled has someone in it\./);
     assert.match(await post("Helmsman").innerText(), /Must be filled/i);
+    await tab("Overview");
+    assert.match(await manningSays(), /^Go 3 attending, against a minimum of 2, and every post that must be filled has someone in it\./);
     await shot("operation-go");
     await page.goto(`${site}/admin`);
     await leadIs(/Stage 1/);
@@ -1730,6 +1775,7 @@ try {
     await page.getByRole("button", { name: "Save as a draft" }).click();
     await headingIs("Marine landing 001");
     assert.match(await page.locator(".facts:visible").innerText(), /Open to\s+Marines members who hold the Radio user qualification, but not recruits/i);
+    await tab("Run it");
     await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).click();
     await page.getByRole("button", { name: "Yes, announce it" }).click();
     await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
@@ -1747,7 +1793,7 @@ try {
     await openGunnery();
     await page.getByRole("button", { name: "Draft another like this" }).click();
     await headingIs("Gunnery 002");
-    await editPart("Who takes part");
+    await editPart("Forces");
     const copy = await eventTitled("Gunnery 002");
     assert.equal(copy.places, 2);
     assert.equal(copy.minimum_attending, 2);
@@ -1785,6 +1831,9 @@ try {
   const planPart = (key) => page.locator(`#plan-${key}:visible`);
   // Add a record to one of the plan's lists: open its form, fill it, and send it.
   const addToPlan = async (key, values, button) => {
+    // The report's records are on the event's page. The rest are in the editor, where the elements and their tasks have a tab of their own.
+    if (key === "losses" || key === "mentions") await tab("Report");
+    else await editPart(key === "elements" ? "Tasks" : "Orders");
     const adding = planPart(key).locator("details.record-new");
     if ((await adding.getAttribute("open")) === null) await adding.locator("summary").click();
     for (const [label, value] of Object.entries(values)) await adding.getByLabel(label).fill(value);
@@ -1811,7 +1860,7 @@ try {
     await supabase.sql("update public.events set starts_at = date_trunc('day', now()) + interval '3 days 19 hours' where title = 'Convoy 001'");
 
     await page.getByRole("link", { name: "Change the details and orders" }).click();
-    await editPart("Orders and plan");
+    await editPart("Orders");
     const reading = page.locator("form:visible", { has: page.getByRole("button", { name: "Save the reading" }) });
     await reading.getByLabel(/^Read before the night/).fill("the orders chapter");
     await reading.getByRole("button", { name: "Save the reading" }).click();
@@ -1855,11 +1904,13 @@ try {
     ]);
 
     // A record is changed in place, and one that is not wanted is removed.
+    await editPart("Tasks");
     const flight = planPart("elements").locator("details.record:not(.record-new)", { has: page.locator("summary strong", { hasText: /^A Flight$/ }) });
     await flight.locator("summary").click();
     await flight.getByLabel("Task").fill("Top cover for the Nexus.");
     await flight.getByRole("button", { name: "Save", exact: true }).click();
     await told(flight, "Saved.");
+    await editPart("Orders");
     const gladius = planPart("ships").locator("details.record:not(.record-new)", { has: page.locator("summary strong", { hasText: /^Gladius$/ }) });
     await gladius.locator("summary").click();
     await gladius.getByRole("button", { name: /Remove this ship/ }).click();
@@ -1870,13 +1921,18 @@ try {
   });
   await check("the event's page lays the plan out with the orders, in the reader's own time as well as UTC", async () => {
     await openConvoy();
+    assert.deepEqual(await page.locator(".reading:visible a").allInnerTexts(), ["Orders", "Navy squadron"]);
+    await tab("Orders");
     const orders = (await page.locator(".orders:visible").innerText()).replace(/\s+/g, " ");
+    assert.match(orders, /3 Execution .*4 Support .*5 Command and signal/i);
     assert.match(orders, /Objectives Hold the lane for one hour Bring every trader through/i);
-    assert.match(orders, /3 Execution .* Tasks UEES Nexus Screen the convoy from the sunward side\. A Flight Top cover for the Nexus\./i);
     assert.match(orders, /Timeline .*18:45 UTC.*H-15 Muster .*20:30 UTC.*H\+90 Hot debrief/i);
-    assert.match(orders, /4 Support .* Ships .*Hammerhead Flagship for the night/i);
+    assert.match(orders, /Ships .*Hammerhead Flagship for the night/i);
     assert.match(orders, /Comms plan .*Command Orders and reports Zero .*UEES Nexus Anvil A Flight Hornet/i);
-    assert.deepEqual(await page.locator(".orders:visible + .reading a").allInnerTexts(), ["Orders", "Navy squadron"]);
+    // Each element's task is on the Tasks tab.
+    await tab("Tasks");
+    const tasks = (await page.locator(".task-list:visible").innerText()).replace(/\s+/g, " ");
+    assert.match(tasks, /UEES Nexus ?Callsign Anvil Screen the convoy from the sunward side\. A Flight ?Callsign Hornet Top cover for the Nexus\./i);
 
     // Someone reading this in Sydney is shown their own clock beside UTC.
     const starts = (await convoy()).starts_at;
@@ -1887,6 +1943,7 @@ try {
     try {
       await openConvoy();
       await page.locator(".facts:visible").getByText(`${inSydney(starts)} your time`).waitFor();
+      await tab("Orders");
       const muster = new Date(Date.parse(starts) - 15 * 60_000).toISOString();
       await page.locator(".plan-table:visible").getByText(`${inSydney(muster)} your time`).waitFor();
       await shot("operation-plan");
@@ -1898,6 +1955,7 @@ try {
   await check("an amendment is numbered and dated, and everyone attending is asked to acknowledge it", async () => {
     await openConvoy();
     assert.equal(await page.getByLabel("Issue an amendment").count(), 0, "a draft's orders are simply changed");
+    await tab("Run it");
     await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).click();
     await page.getByRole("button", { name: "Yes, announce it" }).click();
     await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
@@ -1910,6 +1968,7 @@ try {
 
     await signInAs(founder);
     await openConvoy();
+    await tab("Run it");
     await page.getByLabel("Issue an amendment").fill("Muster moved to pad 06.\nStart is unchanged.");
     await page.getByRole("button", { name: "Issue the amendment" }).click();
     await page.locator(".form-result:visible").filter({ hasText: "Amendment 1 is issued." }).waitFor();
@@ -1917,11 +1976,12 @@ try {
     const issued = await one("select * from public.event_amendments where event_id = $1", [(await convoy()).id]);
     assert.equal(issued.number, 1);
     assert.equal(issued.issued_by, (await memberOf(founder)).id);
+    await tab("Orders");
     assert.match(await page.locator(".amendment-list:visible").innerText(), /Amendment 1[\s\S]*by Lt\. Commander Ada Vance[\s\S]*Muster moved to pad 06\./);
 
     await signInAs(kit);
     await openConvoy();
-    await page.getByText("Amendment 1 changes these orders.").waitFor();
+    await page.getByText("It changes the orders. Read it, then acknowledge it.").waitFor();
     await shot("operation-amendment");
     await page.getByRole("button", { name: "Acknowledge amendment 1" }).click();
     await page.getByText("You have acknowledged amendment 1.").waitFor();
@@ -1931,24 +1991,29 @@ try {
     // Someone who has not said they are attending reads it, and is not asked.
     await signInAs(lee);
     await openConvoy();
-    await page.locator(".amendment-list:visible").waitFor();
+    await page.getByRole("heading", { name: "Latest amendment" }).waitFor();
     assert.equal(await page.getByRole("button", { name: /Acknowledge amendment/ }).count(), 0);
+    await tab("Orders");
+    await page.locator(".amendment-list:visible").waitFor();
 
     await signInAs(founder);
     await openConvoy();
+    await tab("Run it");
     await page.getByText("Everyone attending has acknowledged amendment 1.").waitFor();
     await page.getByLabel("Issue an amendment").fill("Weapons tight throughout.");
     await page.getByRole("button", { name: "Issue the amendment" }).click();
     await page.getByText("Not yet acknowledged amendment 2: Starman Recruit Kit Marlow.").waitFor();
     // The latest is first.
+    await tab("Orders");
     assert.match((await page.locator(".amendment-list:visible li").first().innerText()), /Amendment 2/);
   });
   await check("a copy carries the plan, and none of the amendments", async () => {
+    await tab("Overview");
     await page.getByRole("button", { name: "Draft another like this" }).click();
     await headingIs("Convoy 002");
     await eventFormReady();
     assert.equal(await page.getByLabel(/^Muster at/).inputValue(), "Baijini Point, pad 04; north side");
-    await editPart("Orders and plan");
+    await editPart("Orders");
     await planPart("objectives").locator("details.record:not(.record-new)").first().waitFor();
     assert.equal(await planPart("objectives").locator("details.record:not(.record-new)").count(), 2);
     assert.equal(await planPart("timings").locator("details.record:not(.record-new)").count(), 2);
@@ -1976,7 +2041,10 @@ try {
   const course = () => eventTitled("Radio course 001");
   const openCourse = () => openEvent("Radio course 001");
   const radioUser = async () => (await one("select id from public.qualifications where code = 'radio-user'")).id;
-  const reportText = async () => (await page.locator("section:visible", { has: page.locator("#report") }).innerText()).replace(/\s+/g, " ");
+  const reportText = async () => {
+    await tab("Report");
+    return (await page.locator("section:visible", { has: page.locator("#report") }).innerText()).replace(/\s+/g, " ");
+  };
 
   await check("a training event names the qualification it teaches", async () => {
     await signInAs(founder);
@@ -1992,13 +2060,14 @@ try {
     assert.equal(await page.getByRole("heading", { name: "Signed off" }).count(), 0, "nobody is signed off before the event");
 
     await page.getByRole("link", { name: "Change the details and orders" }).click();
-    await editPart("Orders and plan");
+    await editPart("Orders");
     const adding = planPart("objectives").locator("details.record-new");
     await adding.locator("summary").click();
     await adding.getByLabel("Objective").fill("Everyone passes the radio check");
     await adding.getByRole("button", { name: "Add the objective" }).click();
     await told(adding, "Added.");
     await openCourse();
+    await tab("Run it");
     await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).click();
     await page.getByRole("button", { name: "Yes, announce it" }).click();
     await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
@@ -2014,11 +2083,13 @@ try {
     // Jo is command, and not an instructor, so has nobody to sign off.
     await signInAs(jo);
     await openCourse();
-    await page.locator(".tally:visible").waitFor();
+    await tab("Report");
+    await page.getByRole("heading", { name: "Signed off" }).waitFor({ state: "detached" });
     assert.equal(await page.getByRole("button", { name: "Sign off the passes" }).count(), 0);
 
     await signInAs(kit);
     await openCourse();
+    await tab("Report");
     const form = page.locator("form.picks:visible", { hasText: "Who passed" });
     // An instructor does not sign off their own pass, so Kit is not on the list.
     assert.deepEqual((await form.locator("li").allInnerTexts()).map((text) => text.trim()), ["Private First Class Lee Tanaka"]);
@@ -2038,6 +2109,7 @@ try {
     // Everyone else reads who was signed off, and the member finds it on their own record.
     await signInAs(jo);
     await openCourse();
+    await tab("Report");
     await page.getByText("Signed off here: Private First Class Lee Tanaka.").waitFor();
     assert.equal(await page.getByRole("button", { name: "Sign off the passes" }).count(), 0);
     await signInAs(lee);
@@ -2048,6 +2120,7 @@ try {
   await check("whoever ran the event answers each objective, and records losses and mentions", async () => {
     await signInAs(founder);
     await openCourse();
+    await tab("Report");
     await page.getByLabel(/Ada Vance/).selectOption({ label: "Present" });
     await page.getByRole("button", { name: "Make the return and close the event" }).click();
     await page.locator(".form-result:visible").filter({ hasText: "The attendance return is made." }).waitFor();
@@ -2127,6 +2200,7 @@ try {
 
   console.log("Approval, the opposing force and reach");
   const announceNow = async () => {
+    await tab("Run it");
     await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).click();
     await page.getByRole("button", { name: "Yes, announce it" }).click();
   };
@@ -2209,22 +2283,26 @@ try {
     // Kit is an instructor, and not command.
     await signInAs(kit);
     await draftEvent("Training evolution", "Approval drill 001");
+    await tab("Run it");
     await page.getByText("This type of event needs command's approval before it is announced.").waitFor();
     assert.equal(await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).count(), 0);
     await page.getByRole("button", { name: "Ask command to approve it" }).click();
     await page.getByText("Waiting for command's approval.").waitFor();
     const waiting = await eventTitled("Approval drill 001");
     assert.equal(waiting.approval, "asked");
+    await shot("operation-awaiting-approval");
     // A draft's date is not settled, so it has no calendar file, even for whoever wrote it.
+    await tab("Overview");
+    await page.getByRole("heading", { name: "At a glance" }).waitFor();
     assert.equal(await page.getByRole("link", { name: "Add to calendar" }).count(), 0);
     assert.equal((await page.request.get(`${site}/operations/${waiting.id}/calendar`)).status(), 404);
-    await shot("operation-awaiting-approval");
 
     await signInAs(jo);
     await page.goto(`${site}/admin`);
     await leadIs(/Stage 1/);
     assert.match(await page.locator("main").innerText(), /Approval drill 001 is waiting for command's approval/);
     await openEvent("Approval drill 001");
+    await tab("Run it");
     await page.getByRole("button", { name: "Approve it" }).click();
     await page.getByText("Command has approved this draft.").waitFor();
     const approved = await eventTitled("Approval drill 001");
@@ -2234,6 +2312,7 @@ try {
 
     await signInAs(kit);
     await openEvent("Approval drill 001");
+    await tab("Run it");
     await page.getByText("Command has approved this draft.").waitFor();
     await announceNow();
     await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
@@ -2241,6 +2320,7 @@ try {
     // Command needs nobody's approval for a draft of its own.
     await signInAs(jo);
     await draftEvent("Training evolution", "Approval drill 002");
+    await tab("Run it");
     await page.locator(".decisions:visible summary", { hasText: /^Announce$/ }).waitFor();
   });
   await check("command sets up an opposing force, and the side being exercised is shown none of it", async () => {
@@ -2249,6 +2329,7 @@ try {
       // Lee commands the side being exercised, and is not command.
       await choosePerson(page.getByLabel("Operation commander"), "Lee Tanaka");
     });
+    await tab("Opposing force");
     const section = page.locator("section:visible", { has: page.locator("#opfor") });
     await section.getByText("Nobody has been named yet.").waitFor();
     await choosePerson(section.getByLabel("Name to the opposing force"), "Kit Marlow");
@@ -2263,18 +2344,23 @@ try {
     await told(section, "Saved.");
     await announceNow();
     await page.locator(".form-result:visible").filter({ hasText: "Announced." }).waitFor();
+    await tab("Opposing force");
     await shot("operation-opfor");
 
     // The event's own commander runs it, and sees neither the plan nor who is against them.
     await signInAs(lee);
     await openEvent("Wargame 001");
-    await page.getByRole("heading", { name: "Running this event" }).waitFor();
+    await tab("Run it");
+    await page.getByRole("heading", { name: "Decisions" }).waitFor();
     assert.equal(await page.locator("#opfor").count(), 0);
-    assert.doesNotMatch(await page.locator("main").innerText(), /Opposing force|Ambush|Kit Marlow/i);
+    await everyTab(async () => {
+      assert.doesNotMatch(await page.locator("main").innerText(), /Opposing force|Ambush|Kit Marlow/i);
+    });
 
     // The member who leads it reads it, writes its plan, and is not on the roll.
     await signInAs(kit);
     await openEvent("Wargame 001");
+    await tab("Opposing force");
     const mine = page.locator("section:visible", { has: page.locator("#opfor") });
     await mine.getByText("You are on the opposing force for this event.").first().waitFor();
     assert.equal(await mine.getByLabel("Name to the opposing force").count(), 0, "who is on it is command's to say");
@@ -2282,12 +2368,14 @@ try {
     await mine.getByRole("button", { name: "Save the plan" }).click();
     await told(mine, "Saved.");
     assert.equal((await one("select plan from public.event_opfor where event_id = $1", [(await eventTitled("Wargame 001")).id])).plan, "Ambush at the third waypoint instead.");
+    await tab("Overview");
     await page.getByText("so you are not on its roll and have nothing to reply to").waitFor();
     assert.equal(await page.getByRole("button", { name: "Attending", exact: true }).count(), 0);
 
     // Taken off it, they are an ordinary member of the event again.
     await signInAs(founder);
     await openEvent("Wargame 001");
+    await tab("Opposing force");
     await page.locator(".opfor-roll:visible li", { hasText: "Kit Marlow" }).getByRole("button", { name: /Take off/ }).click();
     await page.locator("section:visible", { has: page.locator("#opfor") }).getByText("Nobody has been named yet.").waitFor();
     await signInAs(kit);
