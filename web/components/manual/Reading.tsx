@@ -52,14 +52,18 @@ export function Reading({ role = [], area }: { role?: string[]; area: string[] }
   );
 }
 
-/** One list of sections to read, under its own heading. Nothing is drawn if none of the addresses is a section. */
-export function ReadingList({ title, addresses }: { title: string; addresses: string[] }) {
+/** Whether any of these addresses is a section of the manual, so a page can leave the list's card out. */
+export function hasReading(addresses: string[]): boolean {
+  return links(addresses).length > 0;
+}
+
+/** One list of sections to read. Nothing is drawn if none of the addresses is a section. */
+export function ReadingList({ addresses }: { addresses: string[] }) {
   const found = links(addresses);
   if (found.length === 0) return null;
   return (
     <div className="reading">
       <div>
-        <h3>{title}</h3>
         <ul>
           {found.map((link) => (
             <li key={link.href}>

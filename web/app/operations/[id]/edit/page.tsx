@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { Pane, Panes } from "@/components/Pane";
+import { TabPanel, Tabs, type TabSpec } from "@/components/Tabs";
 import { toFields } from "@/lib/operations-form";
+import type { Plan } from "@/lib/operations";
 import { deleteDraft } from "../../actions";
-import { EventForm } from "../../OpsForms";
-import { EditHead, EditNav, openForEdit } from "./frame";
+import { EventForm, ExtraPostForm, KeyPostsForm, OrdersForm, RemoveExtraPost, UnitsForm } from "../../OpsForms";
+import { PlanEditor, ReadingForm, type PlanRow } from "../../PlanForms";
+import { EditHead, openForEdit } from "./frame";
 
 export const metadata: Metadata = {
   title: "Change an event",
@@ -20,69 +24,161 @@ export default function EditEventPage({ params }: Props) {
   );
 }
 
+const tabs: TabSpec[] = [
+  { id: "details", label: "Details", icon: "calendar" },
+  { id: "forces", label: "Forces", icon: "ship" },
+  { id: "orders", label: "Orders", icon: "book" },
+  { id: "tasks", label: "Tasks", icon: "flag" },
+];
+
+/** Each of the plan's lists as its editor takes it: every value as the text a form holds. */
+function rowsOf(plan: Plan): Record<keyof Plan, PlanRow[]> {
+  return {
+    objectives: plan.objectives.map((entry) => ({ id: entry.id, values: { title: entry.title } })),
+    elements: plan.elements.map((entry) => ({ id: entry.id, values: { name: entry.name, callsign: entry.callsign, task: entry.task } })),
+    // A timing is entered as its time of day in UTC.
+    timings: plan.timings.map((entry) => ({ id: entry.id, values: { time: toFields(entry.at).time, label: entry.label } })),
+    ships: plan.ships.map((entry) => ({ id: entry.id, values: { ship: entry.ship, note: entry.note } })),
+    nets: plan.nets.map((entry) => ({ id: entry.id, values: { name: entry.name, purpose: entry.purpose, controller: entry.controller } })),
+  };
+}
+
+/**
+ * Changing an event, as tabs of cards. Every tab is on the page at once, so
+ * what is typed on one is still there after a look at another. Each card saves by itself.
+ */
 async function EditEvent({ params }: { params: Props["params"] }) {
   const opened = await openForEdit((await params).id);
   if ("shut" in opened) return opened.shut;
-  const { event, people, mayCreate, types, choices } = opened.result;
-
+  const { event, people, mayCreate, types, choices, taking, roll, orders, sections, plan } = opened.result;
+  const rows = rowsOf(plan);
   const { date, time } = toFields(event.startsAt);
+
   return (
     <>
-      <EditHead id={event.id} title={event.title} lead="What it is, when and where, who commands it, and who it is open to." />
+      <EditHead id={event.id} title={event.title} lead="Its details, the force it uses, its orders and its tasks. Each card saves by itself." />
 
-      <section className={event.state === "draft" ? "wrap band" : "wrap band band-last"} aria-labelledby="details">
-        <EditNav id={event.id} current="details" />
-        <h2 id="details">
-          The <strong>details</strong>
-        </h2>
-        <EventForm
-          event={{
-            id: event.id,
-            kind: event.kind,
-            title: event.title,
-            summary: event.summary,
-            date,
-            time,
-            duration: event.durationMinutes,
-            commander: event.commander?.id ?? "",
-            second: event.second?.id ?? "",
-            observer: event.observer?.id ?? "",
-            weaponsState: event.weaponsState ?? "",
-            pveFallback: event.pveFallback,
-            repeatsWeekly: event.repeatsWeekly,
-            openToRecruits: event.openToRecruits,
-            openToService: event.openToService ?? "",
-            requiresQualification: event.requires?.id ?? "",
-            places: event.places === null ? "" : String(event.places),
-            minimumAttending: event.minimumAttending === null ? "" : String(event.minimumAttending),
-            musterAt: event.musterAt,
-            area: event.area,
-            teachesQualification: event.teaches?.id ?? "",
-          }}
-          // Someone changing an event they could not have drafted keeps its type on the list.
-          types={types.filter((type) => type.key === event.kind || mayCreate.some((own) => own.key === type.key))}
-          people={people}
-          qualifications={choices.qualifications}
-        />
-      </section>
+      <Tabs label="Parts of the editor" tabs={tabs}>
+        <TabPanel id="details">
+          <div className="wrap band tab-band">
+            <EventForm
+              event={{
+                id: event.id,
+                kind: event.kind,
+                title: event.title,
+                summary: event.summary,
+                date,
+                time,
+                duration: event.durationMinutes,
+                commander: event.commander?.id ?? "",
+                second: event.second?.id ?? "",
+                observer: event.observer?.id ?? "",
+                weaponsState: event.weaponsState ?? "",
+                pveFallback: event.pveFallback,
+                repeatsWeekly: event.repeatsWeekly,
+                openToRecruits: event.openToRecruits,
+                openToService: event.openToService ?? "",
+                requiresQualification: event.requires?.id ?? "",
+                places: event.places === null ? "" : String(event.places),
+                minimumAttending: event.minimumAttending === null ? "" : String(event.minimumAttending),
+                musterAt: event.musterAt,
+                area: event.area,
+                teachesQualification: event.teaches?.id ?? "",
+              }}
+              // Someone changing an event they could not have drafted keeps its type on the list.
+              types={types.filter((type) => type.key === event.kind || mayCreate.some((own) => own.key === type.key))}
+              people={people}
+              qualifications={choices.qualifications}
+            />
+            {event.state === "draft" ? (
+              <div className="panes panes-after">
+                <Pane id="scrap" icon="close" title="Scrap the draft" wide>
+                  <details className="confirm">
+                    <summary className="button button-quiet">Delete this draft</summary>
+                    <form action={deleteDraft} className="confirm-body">
+                      <input type="hidden" name="id" value={event.id} />
+                      <p>Delete {event.title}? Nobody else has seen it, and it cannot be brought back.</p>
+                      <button className="button" type="submit">
+                        Yes, delete it
+                      </button>
+                    </form>
+                  </details>
+                </Pane>
+              </div>
+            ) : null}
+          </div>
+        </TabPanel>
 
-      {event.state === "draft" ? (
-        <section className="wrap band band-last" aria-labelledby="scrap">
-          <h2 id="scrap">
-            Scrap the <strong>draft</strong>
-          </h2>
-          <details className="confirm">
-            <summary className="button button-quiet">Delete this draft</summary>
-            <form action={deleteDraft} className="confirm-body">
-              <input type="hidden" name="id" value={event.id} />
-              <p>Delete {event.title}? Nobody else has seen it, and it cannot be brought back.</p>
-              <button className="button" type="submit">
-                Yes, delete it
-              </button>
-            </form>
-          </details>
-        </section>
-      ) : null}
+        <TabPanel id="forces">
+          <div className="wrap band tab-band">
+            <Panes>
+              <Pane id="units" icon="ship" title="Which force to use">
+                <UnitsForm id={event.id} units={choices.units} chosen={taking.units} />
+              </Pane>
+              <Pane id="key-posts" icon="star" title="Key posts">
+                <KeyPostsForm id={event.id} groups={choices.posts} chosen={taking.keyPosts} />
+              </Pane>
+              <Pane id="extra-posts" icon="person" title="Posts for this event only" wide>
+                <div className="extra-posts">
+                  <p className="hint">
+                    A post the order of battle does not have, for this one night: a range safety officer, an umpire,
+                    trainees. Each is listed on the roll, where it is filled like any other post.
+                  </p>
+                  {roll.extra.length > 0 ? (
+                    <ul>
+                      {roll.extra.map((post) => (
+                        <li key={post.id}>
+                          <span>
+                            {post.title}
+                            <small>
+                              {[post.role?.name, post.mustFill ? "must be filled" : null, post.openToVolunteers ? "open to volunteers" : null]
+                                .filter(Boolean)
+                                .join(", ")}
+                            </small>
+                          </span>
+                          <RemoveExtraPost id={event.id} post={post.id} title={post.title} />
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+                <ExtraPostForm id={event.id} roles={choices.roles} />
+              </Pane>
+            </Panes>
+          </div>
+        </TabPanel>
+
+        <TabPanel id="orders">
+          <div className="wrap band tab-band">
+            {event.state === "announced" ? (
+              <p className="tab-lead">
+                This event is announced. If you change its orders or its plan, issue an amendment from the event&apos;s
+                page, so that everyone attending is told what changed and can acknowledge it.
+              </p>
+            ) : null}
+            <Panes>
+              <Pane id="orders" icon="book" title="The orders" wide>
+                <OrdersForm id={event.id} orders={orders} sections={sections} />
+              </Pane>
+              <PlanEditor id={event.id} part="objectives" rows={rows.objectives} />
+              <PlanEditor id={event.id} part="timings" rows={rows.timings} />
+              <PlanEditor id={event.id} part="ships" rows={rows.ships} />
+              <PlanEditor id={event.id} part="nets" rows={rows.nets} />
+              <Pane id="pane-reading" icon="book" title="Reading" wide>
+                <ReadingForm id={event.id} reading={event.reading} />
+              </Pane>
+            </Panes>
+          </div>
+        </TabPanel>
+
+        <TabPanel id="tasks">
+          <div className="wrap band tab-band">
+            <Panes>
+              <PlanEditor id={event.id} part="elements" rows={rows.elements} wide />
+            </Panes>
+          </div>
+        </TabPanel>
+      </Tabs>
     </>
   );
 }
