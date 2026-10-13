@@ -11,6 +11,7 @@ export const config = {
     "/profile/:path*",
     "/order-of-battle/:path*",
     "/operations/:path*",
+    "/hostiles/:path*",
     "/apply/:path*",
     "/staff/:path*",
     "/admin/:path*",

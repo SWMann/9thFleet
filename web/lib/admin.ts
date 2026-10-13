@@ -170,6 +170,8 @@ export type Fleet = {
   eventPosts: { id: string; event_id: string; title: string; must_fill: boolean }[];
   returns: { event_id: string; member_id: string; returned: Returned }[];
   reports: { event_id: string; filed_at: string }[];
+  /** The hostile list, as far as the reader is sent it: all of it for command, what stands today for anyone else. */
+  hostiles: { id: string; handle: string; state: "proposed" | "listed" | "declined" | "lifted"; expires_on: string | null }[];
 };
 
 export type Loaded = { state: "no-database" } | { state: "ready"; fleet: Fleet };
@@ -179,7 +181,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
 
-  const [settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts] =
+  const [settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles] =
     await Promise.all([
       supabase.from("fleet_settings").select("current_stage, recruitment_open").maybeSingle(),
       supabase
@@ -208,8 +210,9 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       supabase.from("event_units").select("event_id, unit_id"),
       supabase.from("event_key_posts").select("event_id, position_id"),
       supabase.from("event_posts").select("id, event_id, title, must_fill"),
+      supabase.from("hostiles").select("id, handle, state, expires_on"),
     ]);
-  const results = { settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts };
+  const results = { settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles };
   for (const [name, result] of Object.entries(results)) {
     if (result.error) throw new Error(`The ${name} could not be read: ${result.error.message}`);
   }
@@ -313,6 +316,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       attendance: fleetAttendance,
       returns: fleetReturns,
       reports: rows<Fleet["reports"][number]>(reports),
+      hostiles: rows<Fleet["hostiles"][number]>(hostiles),
     },
   };
 });
@@ -755,6 +759,27 @@ export function attention(fleet: Fleet, tier: Tier): Attention[] {
           href: `/operations/${event.id}`,
         });
       }
+    }
+
+    // The hostile list is command's to keep: names waiting for an answer, and entries about to lapse.
+    const waiting = fleet.hostiles.filter((entry) => entry.state === "proposed").length;
+    if (waiting > 0) {
+      list.push({
+        what: `${waiting} ${waiting === 1 ? "name waits" : "names wait"} for a decision on the hostile list`,
+        detail: "Any serving member puts a name forward. Command lists it, puts it on watch or declines it.",
+        href: "/hostiles?tab=forward",
+      });
+    }
+    const today = new Date(now).toISOString().slice(0, 10);
+    for (const entry of fleet.hostiles) {
+      if (entry.state !== "listed" || !entry.expires_on) continue;
+      const left = Math.round((Date.parse(`${entry.expires_on}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / DAY);
+      if (left > 14 || left < -14) continue;
+      list.push({
+        what: left < 0 ? `${entry.handle} has lapsed from the hostile list` : `${entry.handle} lapses from the hostile list ${left === 0 ? "after today" : left === 1 ? "in 1 day" : `in ${left} days`}`,
+        detail: "Renew it if it should stand. An entry that is not renewed stays off the list.",
+        href: left < 0 ? "/hostiles?tab=past" : "/hostiles",
+      });
     }
   }
   return list;

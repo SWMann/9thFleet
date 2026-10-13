@@ -50,13 +50,16 @@ async function Operations() {
   return (
     <>
       <Head lead="Training and operation nights: the orders, who is attending, and what was learned.">
-        {mayCreate.length > 0 ? (
-          <p className="actions">
+        <p className="actions">
+          {mayCreate.length > 0 ? (
             <Link className="button" href="/operations/new">
               Draft an event
             </Link>
-          </p>
-        ) : null}
+          ) : null}
+          <Link className="button button-quiet" href="/hostiles">
+            Hostile list
+          </Link>
+        </p>
       </Head>
 
       {drafts.length > 0 ? (

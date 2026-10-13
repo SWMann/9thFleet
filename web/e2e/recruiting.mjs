@@ -3179,6 +3179,295 @@ try {
     assert.equal(new URL(page.url()).pathname, "/sign-in");
   });
 
+  console.log("The hostile list");
+  const nix = { discordId: "12", name: "nix_on_discord" };
+  const hostileTab = tabOf("Parts of the hostile list");
+  const hostileBar = async () => (await page.locator('nav[aria-label="Parts of the hostile list"]:visible').innerText()).replace(/\s+/g, " ").trim();
+  // One entry of the list, by the name it is about.
+  const card = (name) => page.locator(".hostile:visible", { has: page.locator(".hostile-handle", { hasText: new RegExp(`^${name}$`) }) });
+  const cardText = async (name) => (await card(name).innerText()).replace(/\s+/g, " ").trim();
+  const hostileRow = (name) => one("select * from public.hostiles where handle = $1 order by reported_at desc limit 1", [name]);
+  const openHostiles = async (tabName) => {
+    await page.goto(`${site}/hostiles`);
+    await headingIs("Hostile list");
+    if (tabName) await hostileTab(tabName);
+  };
+  // Fill in the form that puts a name forward. It is the one form of its kind on the page.
+  const putForward = async ({ kind = "Individual", name, known = "", level, reason, evidence = "", outright = false }) => {
+    const form = page.locator("form.hostile-form:visible");
+    await form.getByRole("radio", { name: kind, exact: true }).check();
+    await form.getByLabel("Handle or organisation ID").fill(name);
+    await form.getByLabel("Also known as").fill(known);
+    if (level) await form.getByRole("radio", { name: new RegExp(`^${level}`) }).check();
+    await typeLines(form.getByLabel("What happened"), [reason]);
+    await form.getByLabel("Evidence").fill(evidence);
+    if (outright) await form.getByLabel(/List it now/).check();
+    await form.getByRole("button", { name: "Put it forward" }).click();
+  };
+  // Open one of an entry's confirmations, say why if asked, and confirm.
+  const confirmOn = async (name, summary, button, note) => {
+    await card(name).locator("summary", { hasText: new RegExp(`^${summary}$`) }).click();
+    const open = card(name).locator("details[open]");
+    if (note) await open.locator('input[name="note"]').fill(note);
+    await open.getByRole("button", { name: button }).click();
+  };
+
+  await check("the hostile list is for the serving fleet, and nobody else is shown a name", async () => {
+    await context.clearCookies();
+    await page.goto(`${site}/hostiles`);
+    assert.equal(new URL(page.url()).pathname, "/sign-in");
+    // Someone who has signed in and not joined.
+    await signInAs(nix);
+    await page.goto(`${site}/hostiles`);
+    await leadIs(/The hostile list is for the serving fleet\./);
+    assert.equal(await page.locator(".hostile:visible, form.hostile-form:visible, nav[aria-label='Parts of the hostile list']:visible").count(), 0);
+
+    await signInAs(rae);
+    assert.ok((await menuLabels()).includes("Hostile list"), "the menu offers the hostile list");
+    await page.goto(`${site}/operations`);
+    await page.locator(".page-head:visible").getByRole("link", { name: "Hostile list" }).click();
+    await headingIs("Hostile list");
+    await leadIs(/0 names are declared hostile and 0 on watch\./);
+    await page.getByText("Nobody is declared hostile.").waitFor();
+  });
+  await check("a member puts a name forward with what happened and where to see it, and it waits for command", async () => {
+    await openHostiles("Put forward");
+    await page.getByText("You have no name waiting with command.").waitFor();
+    // A member is not offered command's shortcut.
+    assert.equal(await page.getByLabel(/List it now/).count(), 0);
+
+    // Evidence is web addresses and nothing else. What was typed is handed back.
+    await putForward({ name: "Red_Raider", known: "Known as Red", level: "Watch", reason: "Attacked a mining ship at Yela with no warning.", evidence: "javascript:alert(1)" });
+    await page.locator(".form-result-bad:visible", { hasText: "Give each piece of evidence as a web address starting https://" }).waitFor();
+    const form = page.locator("form.hostile-form:visible");
+    assert.equal(await form.getByLabel("Handle or organisation ID").inputValue(), "Red_Raider");
+    assert.equal(await wordsIn(form.getByLabel("What happened")), "Attacked a mining ship at Yela with no warning.");
+    assert.equal(await form.getByRole("radio", { name: /^Watch/ }).isChecked(), true);
+    assert.equal(await hostileRow("Red_Raider"), undefined);
+
+    // Someone who serves in the fleet is not listed.
+    await putForward({ name: "kit_marlow", reason: "Took my seat in the mess without asking." });
+    await page.locator(".form-result-bad:visible", { hasText: "kit_marlow serves in this fleet. The hostile list is for players outside it." }).waitFor();
+
+    await putForward({
+      name: "Red_Raider",
+      known: "Known as Red",
+      level: "Watch",
+      reason: "Attacked a mining ship at Yela with no warning.",
+      evidence: "https://example.com/clips/yela\nhttps://example.com/shots/yela.png",
+    });
+    await page.locator(".form-result:visible", { hasText: "Red_Raider is put forward. Command decides whether it is listed." }).waitFor();
+    const row = await hostileRow("Red_Raider");
+    assert.equal(row.state, "proposed");
+    assert.equal(row.level, "watch");
+    assert.equal(row.reported_by, raeId);
+    assert.equal(row.expires_on, null);
+    assert.equal(row.evidence, "https://example.com/clips/yela\nhttps://example.com/shots/yela.png");
+
+    const text = await cardText("Red_Raider");
+    assert.match(text, /Known as Red/);
+    assert.match(text, /Individual Waiting for command/i);
+    assert.match(text, /Attacked a mining ship at Yela with no warning\./);
+    assert.match(text, /Put forward .* by Leading Starman Rae Okoye/i);
+    assert.match(await hostileBar(), /Put forward 1 waiting/);
+    // The same name is not put forward twice.
+    await putForward({ name: "red_raider", reason: "Saw the same player again near Daymar." });
+    await page.locator(".form-result-bad:visible", { hasText: "red_raider has already been put forward, or is on the list." }).waitFor();
+
+    // It is not on the list, and nobody but command is shown it waiting.
+    await signInAs(kit);
+    await openHostiles("Put forward");
+    await page.getByText("You have no name waiting with command.").waitFor();
+    assert.equal(await card("Red_Raider").count(), 0);
+    await hostileTab("Watch");
+    await page.getByText("Nobody is on watch.").waitFor();
+  });
+  await check("command is told a name is waiting, and lists it on watch with a word of why", async () => {
+    await signInAs(jo);
+    await page.goto(`${site}/admin`);
+    const told = page.locator(".attention:visible li", { hasText: "1 name waits for a decision on the hostile list" });
+    assert.equal(await told.getByRole("link").getAttribute("href"), "/hostiles?tab=forward");
+    await told.getByRole("link").click();
+    await headingIs("Hostile list");
+    await leadIs(/1 name waits for your decision\./);
+    await page.getByRole("heading", { name: "Waiting for your decision" }).waitFor();
+    assert.match(await cardText("Red_Raider"), /Suggested Watch/i);
+
+    await confirmOn("Red_Raider", "List on watch", "Yes, list it", "One clip so far.");
+    await hostileTab("Watch");
+    await card("Red_Raider").waitFor();
+    const row = await hostileRow("Red_Raider");
+    assert.equal(row.state, "listed");
+    assert.equal(row.decided_by, (await memberOf(jo)).id);
+    const text = await cardText("Red_Raider");
+    assert.match(text, /Individual Watch/i);
+    assert.match(text, /Stands 90 days left to /i);
+    assert.match(text, /Command said One clip so far\./i);
+    assert.match(await hostileBar(), /Watch 1 /);
+
+    // The evidence is linked, in a new tab, with nothing passed to the site it goes to.
+    const links = card("Red_Raider").locator(".hostile-evidence a");
+    assert.deepEqual(await links.evaluateAll((list) => list.map((link) => [link.getAttribute("href"), link.rel, link.target, link.textContent.trim()])), [
+      ["https://example.com/clips/yela", "noopener noreferrer nofollow", "_blank", "example.com/clips/yela"],
+      ["https://example.com/shots/yela.png", "noopener noreferrer nofollow", "_blank", "example.com/shots/yela.png"],
+    ]);
+
+    // The fleet reads it, with nothing to change it by.
+    await signInAs(kit);
+    await openHostiles("Watch");
+    assert.match(await cardText("Red_Raider"), /Report on contact|Attacked a mining ship/);
+    assert.equal(await card("Red_Raider").locator("summary, button").count(), 0);
+    await leadIs(/0 names are declared hostile and 1 on watch\.$/);
+
+    // A name on the list is there for everyone to see, so putting it forward again says so.
+    await hostileTab("Put forward");
+    await putForward({ name: "RED_RAIDER", reason: "Seen again, this time near Daymar." });
+    await page.locator(".form-result-bad:visible", { hasText: "RED_RAIDER is already on the list." }).waitFor();
+  });
+  await check("a link in what happened is read and not followed, and only the evidence is linked", async () => {
+    // Written straight to the database, as the form would not send it: a link that says one place and leads to another.
+    await supabase.sql(
+      `insert into public.hostiles (kind, handle, state, level, reason, evidence)
+       values ('individual', 'Link_Layer', 'listed', 'watch',
+               'See [the RSI page](https://evil.example/login), or write to [him](mailto:someone@example.com).',
+               'https://example.com/real-clip')`,
+    );
+    await openHostiles("Watch");
+    const words = card("Link_Layer").locator("> .rich");
+    assert.equal(await words.locator("a").count(), 0);
+    assert.equal((await words.innerText()).trim(), "See the RSI page (https://evil.example/login), or write to him (mailto:someone@example.com).");
+    assert.deepEqual(await card("Link_Layer").locator("a").evaluateAll((list) => list.map((link) => link.getAttribute("href"))), ["https://example.com/real-clip"]);
+    await supabase.sql("delete from public.hostiles where handle = 'Link_Layer'");
+  });
+  await check("command lists an organisation outright, which stands until it is lifted", async () => {
+    await signInAs(jo);
+    await openHostiles("Put forward");
+    await putForward({ kind: "Organisation", name: "SCRUBS", known: "The Scrub Collective", reason: "Camped the Grim HEX pads for a week, firing on anything that landed.", outright: true });
+    await page.locator(".form-result:visible", { hasText: "SCRUBS is on the list." }).waitFor();
+    await hostileTab("Hostile");
+    const text = await cardText("SCRUBS");
+    assert.match(text, /The Scrub Collective/);
+    assert.match(text, /Organisation Hostile/i);
+    assert.match(text, /Stands Until lifted/i);
+    assert.equal((await hostileRow("SCRUBS")).expires_on, null);
+    // There is no last day to renew.
+    assert.equal(await card("SCRUBS").getByRole("button", { name: /Renew/ }).count(), 0);
+  });
+  await check("command makes a watched name hostile, renews it before it lapses and rewrites what it says", async () => {
+    await hostileTab("Watch");
+    await confirmOn("Red_Raider", "Make hostile", "Yes, make hostile");
+    await hostileTab("Hostile");
+    await card("Red_Raider").waitFor();
+    assert.match(await cardText("Red_Raider"), /Individual Hostile/i);
+    assert.equal((await hostileRow("Red_Raider")).level, "hostile");
+
+    // Five days from lapsing: command is told on the list, and on the admin page.
+    await supabase.sql("update public.hostiles set expires_on = (now() at time zone 'utc')::date + 5 where handle = 'Red_Raider'");
+    await openHostiles();
+    await page.getByText("1 entry lapses within 14 days. Renew what should stand.").waitFor();
+    assert.match(await cardText("Red_Raider"), /Stands 5 days left/i);
+    await page.goto(`${site}/admin`);
+    await page.locator(".attention:visible li", { hasText: "Red_Raider lapses from the hostile list in 5 days" }).waitFor();
+
+    await openHostiles();
+    await card("Red_Raider").getByRole("button", { name: "Renew for 90 days" }).click();
+    await card("Red_Raider").getByText("90 days left").waitFor();
+    const renewed = await hostileRow("Red_Raider");
+    assert.equal(renewed.renewed_by, (await memberOf(jo)).id);
+    assert.equal(await page.getByText("lapses within 14 days").count(), 0);
+
+    await card("Red_Raider").locator("summary", { hasText: /^Rewrite$/ }).click();
+    const rewrite = card("Red_Raider").locator("details[open]");
+    await typeLines(rewrite.getByLabel("What happened"), ["Attacked a mining ship at Yela, and two more the week after."]);
+    await rewrite.getByRole("button", { name: "Save the entry" }).click();
+    await card("Red_Raider").locator(".form-result", { hasText: "Saved." }).waitFor();
+    assert.match(await card("Red_Raider").locator("> .rich").innerText(), /and two more the week after\./);
+    assert.equal((await hostileRow("Red_Raider")).reason, "Attacked a mining ship at Yela, and two more the week after.");
+    await shot("hostile-list");
+  });
+  await check("an entry that lapses leaves the fleet's list, and command renews it from the past entries", async () => {
+    await supabase.sql("update public.hostiles set expires_on = (now() at time zone 'utc')::date - 1 where handle = 'Red_Raider'");
+    // Someone serving who neither put it forward nor keeps the list.
+    await signInAs(kit);
+    await openHostiles();
+    assert.equal(await card("Red_Raider").count(), 0);
+    assert.doesNotMatch(await hostileBar(), /Past/);
+    await leadIs(/1 name is declared hostile and 0 on watch\.$/);
+
+    // Whoever put it forward still sees what became of it.
+    await signInAs(rae);
+    await openHostiles("Past");
+    assert.match(await cardText("Red_Raider"), /Lapsed.*Stands Lapsed yesterday/i);
+    assert.equal(await card("Red_Raider").locator("summary, button").count(), 0);
+
+    await signInAs(jo);
+    await openHostiles("Past");
+    await card("Red_Raider").getByRole("button", { name: "Renew for 90 days" }).click();
+    await hostileTab("Hostile");
+    await card("Red_Raider").getByText("90 days left").waitFor();
+  });
+  await check("command lifts an entry and declines a name, each with a word of why", async () => {
+    await confirmOn("SCRUBS", "Lift", "Yes, lift it", "Disbanded.");
+    await hostileTab("Past");
+    await card("SCRUBS").waitFor();
+    const text = await cardText("SCRUBS");
+    assert.match(text, /Organisation Lifted/i);
+    assert.match(text, /Lifted .* by .*Jo Reyes/i);
+    assert.match(text, /On lifting Disbanded\./i);
+    assert.equal(await card("SCRUBS").locator("summary, button").count(), 0, "a lifted entry is closed");
+    const lifted = await hostileRow("SCRUBS");
+    assert.equal(lifted.state, "lifted");
+    assert.equal(lifted.lifted_by, (await memberOf(jo)).id);
+
+    // A name that is declined: whoever put it forward reads the answer.
+    await signInAs(rae);
+    await openHostiles("Put forward");
+    await putForward({ name: "Quiet_One", reason: "Flew past the ship twice and said nothing." });
+    await page.locator(".form-result:visible", { hasText: "Quiet_One is put forward." }).waitFor();
+    await signInAs(jo);
+    await openHostiles("Put forward");
+    await confirmOn("Quiet_One", "Decline", "Yes, decline", "Flying past is not an offence.");
+    await page.getByText("No name is waiting.").waitFor();
+    await signInAs(rae);
+    await openHostiles("Past");
+    assert.match(await cardText("Quiet_One"), /Declined .*Command said Flying past is not an offence\./i);
+    // SCRUBS was command's own entry, so its end is not Rae's to see.
+    assert.equal(await card("SCRUBS").count(), 0);
+  });
+  await check("a name is taken back by whoever put it forward, while it waits", async () => {
+    await hostileTab("Put forward");
+    await putForward({ kind: "Organisation", name: "MISTAKE", reason: "Put forward by mistake, to be taken back." });
+    await page.locator(".form-result:visible", { hasText: "MISTAKE is put forward." }).waitFor();
+    await confirmOn("MISTAKE", "Take it back", "Yes, take it back");
+    await page.getByText("You have no name waiting with command.").waitFor();
+    assert.equal(await hostileRow("MISTAKE"), undefined);
+    // Nothing but taking it back was offered: listing is command's.
+    assert.equal(await page.locator(".hostile:visible summary", { hasText: /List|Decline|Lift|Renew/ }).count(), 0);
+  });
+  await check("every step on the hostile list is in the logs, in whose name it was taken", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/admin/logs?show=operations`);
+    await headingIs("Logs");
+    // The lines arrive a moment after the page's frame.
+    await page.locator(".log-line:visible").first().waitFor();
+    const lines = (await page.locator(".log-line:visible").allInnerTexts()).map((line) => line.replace(/\s+/g, " "));
+    const said = (pattern) => assert.ok(lines.some((line) => pattern.test(line)), `${pattern} is not in the logs`);
+    said(/Rae Okoye put Red_Raider forward for the hostile list/);
+    said(/Jo Reyes listed Red_Raider on watch.*Command said: One clip so far\./);
+    said(/Jo Reyes listed the organisation SCRUBS as hostile/);
+    said(/Jo Reyes made Red_Raider hostile, from watch/);
+    said(/Jo Reyes renewed Red_Raider on the hostile list/);
+    said(/Jo Reyes rewrote the hostile list's entry for Red_Raider/);
+    said(/Jo Reyes lifted the organisation SCRUBS from the hostile list.*Command said: Disbanded\./);
+    said(/Jo Reyes declined to list Quiet_One.*Command said: Flying past is not an offence\./);
+    said(/Rae Okoye took back the organisation MISTAKE/);
+    // What was refused is kept too.
+    await page.goto(`${site}/admin/logs?show=refused`);
+    await page.locator(".log-refused:visible").first().waitFor();
+    const refusals = (await page.locator(".log-line:visible").allInnerTexts()).map((line) => line.replace(/\s+/g, " "));
+    assert.ok(refusals.some((line) => /Rae Okoye was refused: tried to put a name forward for the hostile list\..*serves in this fleet/.test(line)), refusals.slice(0, 5).join("\n"));
+  });
+
   await check("no page raised a script error", async () => {
     assert.deepEqual(pageErrors, []);
   });

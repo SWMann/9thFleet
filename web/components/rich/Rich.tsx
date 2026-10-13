@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Icon, type IconName } from "@/components/Icon";
 import { calloutLabel, isOutside, safeHref, splitTimes, type Block, type CalloutKind, type Inline, type MentionKind } from "@/lib/rich/format";
-import { parseRich } from "@/lib/rich/markdown";
+import { linkAsWords, parseRich } from "@/lib/rich/markdown";
 import { ZuluTime } from "./ZuluTime";
 
 /**
@@ -19,6 +19,12 @@ type Options = {
   you?: string | null;
   /** Whether a mention links to the order of battle. Not on a page that visitors can read. */
   mentions?: boolean;
+  /**
+   * Whether a link is followed. Where it is not, a link is drawn as its words
+   * with its address after them, so that it cannot say one place and lead to
+   * another.
+   */
+  links?: boolean;
   /**
    * The serving members by id, as the fleet's own records name them. Given
    * this, a member who is named is shown by their real name, whatever was
@@ -52,6 +58,7 @@ function inline(nodes: Inline[], options: Options): ReactNode[] {
       case "code":
         return <code key={index}>{node.value}</code>;
       case "link": {
+        if (options.links === false) return <span key={index}>{inline(linkAsWords(node), options)}</span>;
         const href = safeHref(node.href);
         if (!href) return <span key={index}>{inline(node.children, options)}</span>;
         return isOutside(href) ? (

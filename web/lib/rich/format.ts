@@ -114,7 +114,8 @@ export function findTimes(value: string): { from: number; to: number }[] {
   return [...value.matchAll(ZULU)].map((match) => ({ from: match.index ?? 0, to: (match.index ?? 0) + match[0].length }));
 }
 
-const inlineText = (nodes: Inline[]): string =>
+/** The words of a run of text, with nothing of how they are set. */
+export const inlineText = (nodes: Inline[]): string =>
   nodes
     .map((node) => {
       switch (node.type) {
