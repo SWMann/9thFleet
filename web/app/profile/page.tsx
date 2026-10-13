@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { RichLine } from "@/components/rich/Rich";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { ServiceRecordView } from "@/components/record/ServiceRecord";
+import { TabPanel, Tabs } from "@/components/Tabs";
 import { getSession, isServing, isStaff, type Member, type Role, type Service, type Status } from "@/lib/member";
 import { getServiceRecord } from "@/lib/service-record";
 import { site } from "@/lib/site";
@@ -83,19 +84,13 @@ async function Record() {
 
   const { member, recruitmentOpen } = session;
   const status = statusNames[member.status];
-  // What a serving member has earned. Someone outside the fleet has neither.
-  const earned = isServing(member) ? await getServiceRecord(member.id) : { qualifications: [], mentions: [] };
-  const day = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  // Someone who has served has a record. A new applicant has only the day they signed in, which is not worth a tab.
+  // One who was sent back out still has what went before.
+  const read = await getServiceRecord(member.id, member.service);
+  const record = member.status !== "applicant" || read.posts.length > 0 || read.statusLines.length > 1 ? read : null;
 
-  return (
+  const standing = (
     <>
-      <PageHead
-        picture="members"
-        slim
-        title={<strong>{heading(member)}</strong>}
-        lead={member.postTitle ? `${member.postTitle}, ${member.unitName}.` : status.meaning}
-      />
-
       <section className="wrap band" aria-labelledby="standing">
         <h2 id="standing">Where you stand</h2>
         <dl className="facts">
@@ -128,61 +123,6 @@ async function Record() {
           )}
         </dl>
       </section>
-
-      {isServing(member) ? (
-        <section className="wrap band" aria-labelledby="earned">
-          <h2 id="earned">What you have earned</h2>
-          <div className="earned">
-            <div>
-              <h3 className="with-icon">
-                <Icon name="checks" size={16} />
-                Qualifications
-              </h3>
-              {earned.qualifications.length > 0 ? (
-                <ul>
-                  {earned.qualifications.map((qualification) => (
-                    <li key={qualification.name}>
-                      <strong>{qualification.name}</strong>
-                      <span>
-                        {day.format(new Date(qualification.awardedOn))}
-                        {qualification.event ? (
-                          <>
-                            , at <Link href={`/operations/${qualification.event.id}`}>{qualification.event.title}</Link>
-                          </>
-                        ) : null}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>None yet. An instructor signs each one off in training.</p>
-              )}
-            </div>
-            <div>
-              <h3 className="with-icon">
-                <Icon name="star" size={16} />
-                Mentions
-              </h3>
-              {earned.mentions.length > 0 ? (
-                <ul>
-                  {earned.mentions.map((mention) => (
-                    <li key={mention.event.id}>
-                      <strong>
-                        <RichLine text={mention.citation} />
-                      </strong>
-                      <span>
-                        <Link href={`/operations/${mention.event.id}`}>{mention.event.title}</Link>, {day.format(new Date(mention.mentionedAt))}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>None yet. Whoever runs an event can name a member in its after-action report.</p>
-              )}
-            </div>
-          </div>
-        </section>
-      ) : null}
 
       <section className="wrap band" aria-labelledby="names">
         <h2 id="names">Your names</h2>
@@ -242,7 +182,46 @@ async function Record() {
       </section>
     </>
   );
+
+  const head = (
+    <PageHead
+      picture="members"
+      slim
+      title={<strong>{heading(member)}</strong>}
+      lead={member.postTitle ? `${member.postTitle}, ${member.unitName}.` : status.meaning}
+    />
+  );
+
+  if (!record) {
+    return (
+      <>
+        {head}
+        {standing}
+      </>
+    );
+  }
+
+  // Attendance is on the record of someone serving. The database sends nobody else a line of it.
+  const posts = record.posts.length;
+  return (
+    <>
+      {head}
+      <Tabs
+        label="Parts of your record"
+        tabs={[
+          { id: "standing", label: "Standing", icon: "person" },
+          { id: "service", label: "Service record", icon: "list", badge: posts > 0 ? (posts === 1 ? "1 post" : `${posts} posts`) : undefined },
+        ]}
+      >
+        <TabPanel id="standing">{standing}</TabPanel>
+        <TabPanel id="service">
+          <ServiceRecordView record={record} own attendance={isServing(member)} />
+        </TabPanel>
+      </Tabs>
+    </>
+  );
 }
+
 
 function heading(member: Member): string {
   if (!member.characterName) return "Your record";

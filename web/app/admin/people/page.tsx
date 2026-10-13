@@ -11,7 +11,6 @@ import {
   joiners,
   loadFleet,
   qualificationHolders,
-  reaches,
   serviceNames,
   statusNames,
   strength,
@@ -51,10 +50,8 @@ async function People() {
   const force = strength(fleet);
   const count = (status: Status) => fleet.people.filter((person) => person.status === status).length;
   const temporary = acting(fleet);
-  // Attendance is for command. Staff see who is on the books and what they hold.
-  const withAttendance = reaches(tier, "command");
 
-  const rows = fleet.people.map((person): PersonRow => row(person, withAttendance));
+  const rows = fleet.people.map((person): PersonRow => row(person));
 
   return (
     <>
@@ -141,11 +138,7 @@ async function People() {
         <h2 id="everyone">
           Everyone on the <strong>books</strong>
         </h2>
-        <p className="intro">
-          {withAttendance
-            ? "Each person, what they hold, and the events they were returned present at."
-            : "Each person and what they hold. Attendance is on the pages command sees."}
-        </p>
+        <p className="intro">Each person, what they hold, and the events they were returned present at. A name opens that member&apos;s record.</p>
         <PeopleTable
           people={rows}
           statuses={(Object.keys(statusNames) as Status[]).map((key) => ({ key, name: statusNames[key] }))}
@@ -156,7 +149,7 @@ async function People() {
   );
 }
 
-function row(person: Person, withAttendance: boolean): PersonRow {
+function row(person: Person): PersonRow {
   const rank = person.rankName ? `${person.acting ? "Acting " : ""}${person.rankName} ` : "";
   return {
     id: person.id,
@@ -176,15 +169,13 @@ function row(person: Person, withAttendance: boolean): PersonRow {
     daysIn: person.daysIn,
     roles: person.roles.map((role) => roleNames[role]).join(", "),
     qualifications: person.qualifications,
-    attendance: withAttendance
-      ? {
-          in30: person.attended30,
-          in90: person.attended90,
-          all: person.attendedAll,
-          absent90: person.absentWithoutNotice90,
-          last: person.lastAttended ? formatDate(person.lastAttended) : "Never",
-          lastAt: person.lastAttended ?? "",
-        }
-      : null,
+    attendance: {
+      in30: person.attended30,
+      in90: person.attended90,
+      all: person.attendedAll,
+      absent90: person.absentWithoutNotice90,
+      last: person.lastAttended ? formatDate(person.lastAttended) : "Never",
+      lastAt: person.lastAttended ?? "",
+    },
   };
 }

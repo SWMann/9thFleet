@@ -6894,3 +6894,83 @@ a.mention:hover {
 .rich-menu button[aria-selected="true"] small {
   color: var(--ink);
 }
+
+/* The service record */
+
+/* Changes of status and of grade: the day, what happened, and a line about it. */
+.record-steps {
+  max-width: 46rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--seam);
+  border-radius: 6px;
+  background: var(--panel);
+  list-style: none;
+}
+
+.record-steps > li {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: 2px 18px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--seam);
+}
+
+.record-steps > li:first-child {
+  border-top: 0;
+}
+
+.record-steps time {
+  grid-row: 1 / span 2;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-steps strong {
+  color: var(--white);
+  font-weight: 600;
+}
+
+.record-steps .icon {
+  flex: none;
+  color: var(--gold-text);
+}
+
+.record-steps small {
+  grid-column: 2;
+  color: var(--text-2);
+  font-size: 0.9375rem;
+}
+
+/* The posts and the events of a record. A cell holds a date or a few words, so none is wide. */
+.data-record td {
+  white-space: nowrap;
+}
+
+.data-record .chip {
+  min-height: 24px;
+  font-size: 0.8125rem;
+}
+
+/* What command wrote on an appointment. */
+.data .record-note {
+  margin-top: 4px;
+  color: var(--text-2);
+  font-style: italic;
+  white-space: normal;
+}
+
+@media (max-width: 560px) {
+  .record-steps > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .record-steps time {
+    grid-row: auto;
+  }
+
+  .record-steps small {
+    grid-column: 1;
+  }
+}

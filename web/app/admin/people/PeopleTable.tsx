@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 export type PersonRow = {
@@ -21,7 +22,7 @@ export type PersonRow = {
   daysIn: number;
   roles: string;
   qualifications: string[];
-  /** Null when this reader is not shown attendance. */
+  /** Events the member was returned present at, and the last of them. */
   attendance: { in30: number; in90: number; all: number; absent90: number; last: string; lastAt: string } | null;
 };
 
@@ -43,8 +44,8 @@ const sorts = {
 type SortKey = keyof typeof sorts;
 
 /**
- * Everyone on the books, with a row of filters above. Without scripts the
- * whole table is shown.
+ * Everyone on the books, with a row of filters above. Each name opens that
+ * member's record. Without scripts the whole table is shown.
  */
 export function PeopleTable({
   people,
@@ -149,7 +150,7 @@ export function PeopleTable({
             {shown.map((person) => (
               <tr key={person.id}>
                 <th scope="row">
-                  {person.name}
+                  <Link href={`/admin/people/${person.id}`}>{person.name}</Link>
                   <small>
                     {person.handle} · {person.discord}
                   </small>

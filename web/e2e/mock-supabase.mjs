@@ -158,9 +158,10 @@ export function startMockSupabase(port) {
     for (const table of ["units", "positions", "position_qualifications", "qualifications"]) {
       if (url.pathname === `/rest/v1/${table}`) return send(200, serving ? orderOfBattle[table] : []);
     }
-    if (url.pathname === "/rest/v1/assignments") return send(200, serving ? state.duties : []);
-    // What a member has earned, on their record. This member has earned nothing yet.
-    for (const table of ["qualification_awards", "qualifications", "event_mentions"]) {
+    // The order of battle asks who holds each duty. A member's own record asks for their posts by their id.
+    if (url.pathname === "/rest/v1/assignments") return send(200, serving && !url.searchParams.has("member_id") ? state.duties : []);
+    // A member's service record. This member has held no post, been to no event and earned nothing yet.
+    for (const table of ["qualification_awards", "qualifications", "event_mentions", "assignment_grades", "assignment_notes", "member_status_changes", "grades", "attendance_returns", "event_types"]) {
       if (url.pathname === `/rest/v1/${table}` && request.method === "GET") return send(200, []);
     }
     if (url.pathname === "/rest/v1/member_accounts") {
