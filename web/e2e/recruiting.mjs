@@ -2963,7 +2963,12 @@ try {
     await page.keyboard.press("Enter");
     await page.keyboard.type("holds until 2015Z.");
     await form.getByRole("button", { name: "Issue the amendment" }).click();
-    for (let tries = 0; tries < 80 && (await amendments()) === 0; tries += 1) await page.waitForTimeout(100);
+    // As long as any other step is given. If it does not arrive, say what the form is showing, which is the reason.
+    for (let tries = 0; tries < 300 && (await amendments()) === 0; tries += 1) await page.waitForTimeout(100);
+    if ((await amendments()) === 0) {
+      const showing = (await page.locator("form:visible", { has: page.getByRole("button", { name: "Issue the amendment" }) }).innerText()).replace(/\s+/g, " ");
+      assert.fail(`The amendment was not issued. Its form shows: ${showing.slice(-400)}`);
+    }
     assert.equal(await amendments(), 1);
     const ship = await one("select id from public.units where name = 'Training Ship'");
     await tab("Orders");
