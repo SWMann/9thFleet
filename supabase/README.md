@@ -107,14 +107,21 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   even the report as it was sent. Command marks it handled or dismissed, in their own name, reopens
   it and deletes it. Nobody changes its words. Staff and members are sent none of it.
 - **The line has limits.** Five reports a day from one sender, and ten an hour and thirty a day
-  from everyone together. One sender is known by a mark of four characters that the site works out
-  from their network address and the day. The mark comes in with the report through the `sender`
-  column, is counted in `app.piracy_senders`, and is thrown away: a rule on the column keeps it
-  empty, so the mark is never stored with a report or written to the audit log. Someone who sends
-  to the database directly can choose their own mark, so only the limit on everyone holds them.
+  from everyone together, counted one report at a time. One sender is known by a mark of four
+  characters that the site works out from their network address and the day. The mark comes in
+  with the report through the `sender` column. A rule on that column keeps it empty, so the mark
+  is never stored with a report or written to the audit log. It is counted in
+  `app.piracy_senders`, with its day, and marks from earlier days are deleted whenever a report
+  arrives. Someone who sends to the database directly can choose their own mark, so only the
+  limit on everyone holds them, and they can keep the line full for as long as they keep sending.
+- **A report is read for twelve months.** The rule that sends reports to command leaves out one
+  that old, so nobody reads, changes or deletes it by hand. The database deletes it the next
+  time the line is used: when a report arrives, or command marks one. Nothing runs on a clock.
 - **A report holds plain words and names from the game.** Handles have the game's shape. Where it
-  happened is one line. What happened is text whose lines may break and which holds no other
-  control character and none of the marks that turn text right to left. Evidence is web addresses.
+  happened is one line. What happened is text of fifteen characters or more that are not space,
+  whose lines may break. Evidence is web addresses. None of them holds a control character or a
+  mark that hides or reorders what is written. The joiners that some scripts and emoji need are
+  let through.
 - **A report and what comes of it are linked.** Only command starts a hostile-list entry from a
   report, and the entry keeps the report's id. A report keeps the id of the Response event drafted
   from it. Deleting a report, an event or a member clears the link and changes nothing else, even

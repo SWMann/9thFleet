@@ -696,6 +696,13 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
         }
       }
       if (changed("level")) return line("operations", now.level === "watch" ? `${actor} moved ${name} from hostile to watch` : `${actor} made ${name} hostile, from watch`);
+      // The database's own housekeeping, when something the entry pointed to was deleted.
+      if (changed("report_id") && !now.report_id) {
+        return line("operations", `The piracy report that the hostile list's entry for ${name} was started from was deleted. The entry stays`);
+      }
+      if (["reported_by", "decided_by", "renewed_by", "lifted_by"].some((key) => changed(key) && !now[key]) && !["name", "reason", "evidence"].some(changed)) {
+        return line("operations", `A member named on the hostile list's entry for ${name} was deleted, and their name was cleared from it`);
+      }
       if (changed("renewed_at")) return line("operations", `${actor} renewed ${name} on the hostile list`, now.expires_on ? `It stands to ${String(now.expires_on)}.` : null);
       return line("operations", `${actor} rewrote the hostile list's entry for ${name}`, changes(row, names));
     }
@@ -704,8 +711,11 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       // What a report said stays on the reports page, for command. The log says that it came and what was done with it.
       if (row.action === "insert") return line("operations", `A piracy report arrived${now.urgent === true ? ", marked as happening now" : ""}`);
       if (row.action === "delete") {
-        const kept = Date.parse(row.at) - Date.parse(String(was.received_at ?? row.at));
-        return line("operations", kept > 360 * 24 * 60 * 60 * 1000 ? `A piracy report reached twelve months old and was cleared when ${actor} opened the reports` : `${actor} deleted a piracy report`);
+        // Nobody is sent a report twelve months old, so nobody deletes one by hand: the database cleared it.
+        const cleared = new Date(row.at);
+        cleared.setUTCMonth(cleared.getUTCMonth() - 12);
+        const old = Date.parse(String(was.received_at ?? row.at)) <= cleared.getTime();
+        return line("operations", old ? "A piracy report reached twelve months old and was deleted" : `${actor} deleted a piracy report`);
       }
       if (changed("state")) {
         const said = typeof now.outcome_note === "string" && now.outcome_note !== "" ? `Command said: ${now.outcome_note}` : null;
@@ -715,6 +725,9 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       }
       if (changed("event_id")) {
         return line("operations", now.event_id ? `${actor} drafted ${names.event(now.event_id)} from a piracy report` : "The Response event drafted from a piracy report was deleted");
+      }
+      if (changed("handled_by") && !now.handled_by) {
+        return line("operations", "The member who had handled a piracy report was deleted, and their name was cleared from it");
       }
       return line("operations", `${actor} changed a note on a piracy report`);
     }

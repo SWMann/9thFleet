@@ -63,18 +63,25 @@ export default function PrivacyPage() {
               what they did, and any web addresses you gave. With it, the time the report arrived.
             </li>
             <li>
-              <strong>What is not kept.</strong> Your network address and anything about your browser. So that one sender cannot flood
-              the line, the site works out a mark of four characters from your network address and the day, and the database counts how
-              many reports that mark has sent today. The mark is not kept with your report. About 65,000 addresses share each mark, so
-              it cannot be turned back into yours, and yours changes every day.
+              <strong>What is not kept.</strong> Your network address, and anything about your browser.
             </li>
             <li>
-              <strong>How long.</strong> A report is deleted {KEEP_MONTHS} months after it arrives, or sooner if command deletes it.
-              Its words go from the log of changes at the same time.
+              <strong>The sender&apos;s mark.</strong> So that one sender cannot flood the line, the site works out a mark of four
+              characters from your network address and the day. The database keeps the mark, the day and how many reports the mark
+              has sent that day. It does not keep the mark with your report. About 65,000 addresses share each mark and yours
+              changes every day, so a mark does not say whose it is. The marks of earlier days are deleted when the next report
+              arrives.
+            </li>
+            <li>
+              <strong>How long.</strong> A report can be read for {KEEP_MONTHS} months after it arrives, unless command deletes it
+              sooner. After that nobody can read it, and it is deleted from the database the next time the line is used. Its words
+              go from the log of changes at the same time.
             </li>
             <li>
               <strong>What may come of it.</strong> Command may put the player or organisation you named on the fleet&apos;s hostile
-              list, and may tell the fleet&apos;s members what they need to know in the game to answer your report.
+              list. That entry may repeat what you wrote and the links you gave, though not your handle unless command adds it. It
+              is read by the serving fleet and kept under the list&apos;s own rules, after your report is gone. Command may also tell
+              the fleet&apos;s members what they need to know in the game to answer your report.
             </li>
           </ul>
         </div>
@@ -95,7 +102,7 @@ export default function PrivacyPage() {
             </li>
             <li>
               <strong>Piracy reports.</strong> A report may give the handle of whoever its sender says attacked them. Command alone reads
-              it, and it is deleted {KEEP_MONTHS} months after it arrives.
+              it, and after {KEEP_MONTHS} months nobody can.
             </li>
           </ul>
         </div>

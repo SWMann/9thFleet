@@ -40,8 +40,9 @@ export default function ReportPiracyPage() {
           <div>
             <dt>Who answers</dt>
             <dd>
-              The fleet is run by players in their own time. Command sees a report the next time one of them opens this site. Nobody is
-              sent a message when a report arrives.
+              The fleet is run by players in their own time. Nobody is sent a message when a report arrives: command sees it the next
+              time one of them opens the fleet&apos;s pages on this site. The line takes a limited number of reports each hour and each
+              day, and says so when it is full.
             </dd>
           </div>
           <div>
@@ -62,8 +63,8 @@ export default function ReportPiracyPage() {
             <dt>Who reads it</dt>
             <dd>
               Fleet command and nobody else. If the fleet acts on a report, command tells its members what they need to know in the
-              game, such as the attacker&apos;s name. A report is never published, and it is deleted {KEEP_MONTHS} months after it
-              arrives. <Link href="/privacy#reporting">What this site records</Link> says the rest.
+              game: the attacker&apos;s name, what was done, and the links you gave. A report is never published, and after{" "}
+              {KEEP_MONTHS} months nobody can read it. <Link href="/privacy#reporting">What this site records</Link> says the rest.
             </dd>
           </div>
           <div>

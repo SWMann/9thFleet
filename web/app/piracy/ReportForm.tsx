@@ -19,7 +19,29 @@ export function ReportForm() {
   const suspect = suspects.some((entry) => entry.value === values.suspect_kind) ? values.suspect_kind : "unknown";
 
   return (
-    <form action={action} className="fields fields-wide report-form" key={result.stamp ?? 0}>
+    <div className="report-form">
+      <ReportFields key={result.stamp ?? 0} values={values} suspect={suspect} action={action} pending={pending} />
+      {/* The answer is kept outside the form. The form is drawn afresh for each answer, and an answer drawn afresh with it would not be read out by a screen reader. */}
+      <p className={result.ok ? "form-result report-answer" : "form-result form-result-bad report-answer"} role="status">
+        {result.message}
+      </p>
+    </div>
+  );
+}
+
+function ReportFields({
+  values,
+  suspect,
+  action,
+  pending,
+}: {
+  values: Record<string, string>;
+  suspect: string;
+  action: (formData: FormData) => void;
+  pending: boolean;
+}) {
+  return (
+    <form action={action} className="fields fields-wide">
       <div className="field">
         <label className="choice">
           <input type="checkbox" name="urgent" defaultChecked={values.urgent === "on"} />
@@ -64,7 +86,7 @@ export function ReportForm() {
       <div className="field">
         <label htmlFor="report_location">Where it happened</label>
         <p className="hint" id="report_location_hint">
-          The system and the nearest place, such as Stanton, the ring at Yela.
+          The system and the nearest place, in words, such as Stanton, the ring at Yela.
         </p>
         <input
           id="report_location"
@@ -119,7 +141,7 @@ export function ReportForm() {
           name="details"
           rows={6}
           required
-          minLength={20}
+          minLength={15}
           maxLength={2000}
           defaultValue={values.details ?? ""}
           aria-describedby="report_details_hint"
@@ -131,7 +153,8 @@ export function ReportForm() {
           Where to see it <span className="optional">Optional</span>
         </label>
         <p className="hint" id="report_evidence_hint">
-          Web addresses of a screenshot or a clip, one to a line, each starting https://
+          Web addresses of a screenshot or a clip, one to a line, each starting https://. If the fleet lists the attacker, its members
+          may be shown these, and a link to your own channel shows who you are.
         </p>
         <textarea
           id="report_evidence"
@@ -154,9 +177,6 @@ export function ReportForm() {
         <button className="button" type="submit" disabled={pending}>
           {pending ? "Sending" : "Send the report"}
         </button>
-        <p className={result.ok ? "form-result" : "form-result form-result-bad"} role="status">
-          {result.message}
-        </p>
       </div>
     </form>
   );

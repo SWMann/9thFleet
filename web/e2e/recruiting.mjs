@@ -3469,7 +3469,7 @@ try {
   });
 
   console.log("The piracy report line");
-  const piracyForm = () => page.locator("form.report-form:visible");
+  const piracyForm = () => page.locator(".report-form:visible form");
   const piracyRow = (handle) =>
     one("select *, happened_on::text as day from public.piracy_reports where reporter_handle = $1 order by received_at desc limit 1", [handle]);
   const piracyCount = async () => (await one("select count(*)::int as n from public.piracy_reports")).n;
@@ -3512,7 +3512,8 @@ try {
     const facts = (await page.locator("dl.facts:visible").innerText()).replace(/\s+/g, " ");
     assert.match(facts, /Nobody is sent a message when a report arrives/);
     assert.match(facts, /Fleet command and nobody else/);
-    assert.match(facts, /deleted 12 months after it arrives/);
+    assert.match(facts, /after 12 months nobody can read it/);
+    assert.match(facts, /says so when it is full/);
     await shot("piracy-report-form");
   });
   await check("a report with something wrong in it is handed back as it was typed, and nothing is sent", async () => {
@@ -3537,7 +3538,7 @@ try {
       details: minerSaid,
       evidence: "https://example.com/clips/prospector",
     });
-    await page.locator(".form-result:visible", { hasText: "Report received. Command sees it the next time one of them opens this site. Help is not guaranteed." }).waitFor();
+    await page.locator(".form-result:visible", { hasText: "Report received. Command sees it the next time one of them opens the fleet's pages on this site. Help is not guaranteed." }).waitFor();
     const row = await piracyRow("Lost_Miner");
     assert.equal(row.state, "new");
     assert.equal(row.urgent, true);
@@ -3599,6 +3600,16 @@ try {
     await headingIs("Piracy reports");
     await leadIs(/1 report waits for command, 1 marked as happening now\./);
     assert.ok((await adminTabs()).includes("Piracy reports"));
+    // Nobody is sent a message, so command is also told where it works. Nobody else is.
+    await page.goto(`${site}/operations`);
+    const flagged = page.locator(".page-head .notice:visible a", { hasText: "1 piracy report waits for command, 1 marked as happening now" });
+    assert.equal(await flagged.getAttribute("href"), "/admin/piracy");
+    await signInAs(rae);
+    await page.goto(`${site}/operations`);
+    await headingIs("Operations");
+    assert.equal(await page.locator(".page-head .notice:visible").count(), 0);
+    await signInAs(jo);
+    await openPiracy();
 
     const text = await piracyText("Lost_Miner");
     assert.match(text, /Stanton, the ring at Yela/);
@@ -3663,7 +3674,7 @@ try {
     await leadIs(/Started from the piracy report sent by Lost_Miner\./);
     const form = page.locator("form.event-form:visible");
     assert.equal(await form.locator("#kind").inputValue(), "response");
-    assert.equal(await form.locator('[name="title"]').inputValue(), "Response: Stanton, the ring at Yela");
+    assert.equal(await form.locator('[name="title"]').inputValue(), "Piracy at Stanton, the ring at Yela");
     assert.equal(await form.locator('[name="summary"]').inputValue(), "Answering a piracy report sent to the fleet.");
     assert.equal(await form.locator('[name="area"]').inputValue(), "Stanton, the ring at Yela");
     // Happening now, so it starts today: or tomorrow, in the last half hour of the day.
@@ -3676,16 +3687,16 @@ try {
     assert.equal((await piracyRow("Lost_Miner")).event_id, eventId);
     assert.deepEqual(await one("select kind, title, area, state from public.events where id = $1", [eventId]), {
       kind: "response",
-      title: "Response: Stanton, the ring at Yela",
+      title: "Piracy at Stanton, the ring at Yela",
       area: "Stanton, the ring at Yela",
       state: "draft",
     });
     // The event is for the whole fleet once announced, and names nobody who sent a report.
-    await headingIs("Response: Stanton, the ring at Yela");
+    await headingIs("Piracy at Stanton, the ring at Yela");
     assert.doesNotMatch(await page.locator("body").innerText(), /Lost_Miner/);
 
     await openPiracy();
-    assert.match(await piracyText("Lost_Miner"), /Response Response: Stanton, the ring at Yela/i);
+    assert.match(await piracyText("Lost_Miner"), /Response Piracy at Stanton, the ring at Yela/i);
     assert.equal(await piracyCard("Lost_Miner").getByRole("link", { name: "Draft a Response event" }).count(), 0);
   });
   await check("command marks a report handled with what came of it, and can reopen it", async () => {
@@ -3708,6 +3719,26 @@ try {
     assert.equal(row.state, "new");
     assert.equal(row.handled_by, null);
   });
+  await check("a report twelve months old is shown to nobody, and is deleted when the next report arrives", async () => {
+    const [{ id: old }] = await supabase.sql(
+      `insert into public.piracy_reports (reporter_handle, location, details, received_at, happened_on, suspect_kind, suspect_handle)
+       values ('Long_Ago', 'Stanton', 'Something that happened a long time ago.', now() - interval '12 months 2 days', (now() - interval '12 months 2 days')::date, 'individual', 'Old_Enemy')
+       returning id`,
+    );
+    await openPiracy();
+    await leadIs(/1 report waits for command/);
+    await piracyCard("Lost_Miner").waitFor();
+    assert.equal(await piracyCard("Long_Ago").count(), 0);
+    // Its address fills in nothing, for command as for anyone.
+    await page.goto(`${site}/hostiles?tab=forward&report=${old}`);
+    await headingIs("Hostile list");
+    const form = page.locator("form.hostile-form:visible");
+    await form.waitFor();
+    assert.equal(await form.getByLabel("Handle or organisation ID").inputValue(), "");
+    assert.equal(await form.locator('input[name="report"]').count(), 0);
+    // It is still in the database until the line is next used. The next check sends a report, and then it is gone.
+    assert.equal((await piracyRow("Long_Ago")).id, old);
+  });
   await check("a report the fleet will not act on is dismissed, and a report can be deleted for good", async () => {
     await context.clearCookies();
     await page.goto(`${site}/piracy`);
@@ -3721,6 +3752,7 @@ try {
       details: "He beat me in a duel that I asked for and I want him punished.",
     });
     await page.locator(".form-result:visible", { hasText: "Report received. Command reads every report. There is no reply through this site." }).waitFor();
+    assert.equal(await piracyRow("Long_Ago"), undefined, "the report twelve months old went when this one arrived");
     const row = await piracyRow("Sore_Loser");
     assert.equal(row.urgent, false);
     assert.equal(row.day, threeDaysAgo);
@@ -3749,21 +3781,10 @@ try {
     await page.goto(`${site}/piracy`);
     await fillPiracy({ handle: "Sixth_Time", where: "Stanton", details: "A sixth report in one day from the same sender." });
     await page
-      .locator(".form-result-bad:visible", { hasText: "You have sent five reports today. That is the most the line takes from one sender in a day." })
+      .locator(".form-result-bad:visible", { hasText: "Five reports have come from your connection today. That is the most the line takes from one in a day." })
       .waitFor();
     assert.equal(await piracyForm().getByLabel("What they did").inputValue(), "A sixth report in one day from the same sender.");
     assert.equal(await piracyRow("Sixth_Time"), undefined);
-  });
-  await check("a report twelve months old is cleared the next time command opens the reports", async () => {
-    await supabase.sql(
-      `insert into public.piracy_reports (reporter_handle, location, details, received_at, happened_on)
-       values ('Long_Ago', 'Stanton', 'Something that happened a long time ago.', now() - interval '12 months 2 days', (now() - interval '12 months 2 days')::date)`,
-    );
-    await signInAs(jo);
-    await openPiracy();
-    await piracyCard("Lost_Miner").waitFor();
-    assert.equal(await piracyCard("Long_Ago").count(), 0);
-    assert.equal(await piracyRow("Long_Ago"), undefined);
   });
   await check("what was done with each report is in the logs, without a word of what it said", async () => {
     await signInAs(founder);
@@ -3774,12 +3795,12 @@ try {
     const said = (pattern) => assert.ok(lines.some((line) => pattern.test(line)), `${pattern} is not in the logs`);
     said(/A piracy report arrived, marked as happening now/);
     said(/Jo Reyes listed the organisation BLACKSUN as hostile/);
-    said(/Jo Reyes drafted .*Response: Stanton, the ring at Yela.* from a piracy report/);
+    said(/Jo Reyes drafted .*Piracy at Stanton, the ring at Yela.* from a piracy report/);
     said(/Jo Reyes marked a piracy report as handled.*Command said: Sent the Nexus\. Listed the organisation\./);
     said(/Jo Reyes reopened a piracy report/);
     said(/Jo Reyes dismissed a piracy report/);
     said(/Jo Reyes deleted a piracy report/);
-    said(/A piracy report reached twelve months old and was cleared when .*Jo Reyes opened the reports/);
+    said(/A piracy report reached twelve months old and was deleted/);
     assert.ok(!lines.some((line) => /Lost_Miner|Sore_Loser|Long_Ago|Fair_Fighter/.test(line)), "a sender or a player a report named is in the logs");
   });
 

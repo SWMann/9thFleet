@@ -9,7 +9,7 @@ import { readEvidence, type HostileKind } from "@/lib/hostile-form";
 export type ReportState = "new" | "handled" | "dismissed";
 export const stateNames: Record<ReportState, string> = { new: "New", handled: "Handled", dismissed: "Dismissed" };
 
-/** How many months a report is kept after it arrives. */
+/** How many months a report can be read after it arrives. The database keeps the same number. */
 export const KEEP_MONTHS = 12;
 /** How far back a report may reach, in days. */
 export const REACHES_BACK = 90;
@@ -28,14 +28,20 @@ export type ReportFields = {
 const HANDLE = /^[A-Za-z0-9_-]{2,60}$/;
 const HANDLE_SHAPE = "2 to 60 letters, numbers, hyphens or underscores, with no spaces";
 
-// Characters that hide or reorder what is written: control characters, and
-// the marks that turn text right to left. They are made by number, so that
-// this file holds none of them.
+// Characters that hide or reorder what is written. They are made by number,
+// so that this file holds none of them: control characters, a space of no
+// width, the line and paragraph separators, the marks that embed, override or
+// isolate the direction of text, the word joiner and the byte order mark. The
+// joiners some scripts and emoji need, and the plain left-to-right and
+// right-to-left marks, are ordinary writing and are let through. The database
+// keeps the same list.
 const range = (from: number, to: number) => `${String.fromCharCode(from)}-${String.fromCharCode(to)}`;
-const TURNS = range(0x202a, 0x202e) + range(0x2066, 0x2069);
-const NOT_ONE_LINE = new RegExp(`[${range(0x00, 0x1f)}${range(0x7f, 0x9f)}${TURNS}]`);
+const HIDDEN = String.fromCharCode(0x200b) + range(0x2028, 0x202e) + range(0x2060, 0x2069) + String.fromCharCode(0xfeff);
+const NOT_ONE_LINE = new RegExp(`[${range(0x00, 0x1f)}${range(0x7f, 0x9f)}${HIDDEN}]`);
 /** As above, but a line may break. */
-const NOT_PLAIN_WORDS = new RegExp(`[${range(0x00, 0x09)}${range(0x0b, 0x1f)}${range(0x7f, 0x9f)}${TURNS}]`);
+const NOT_PLAIN_WORDS = new RegExp(`[${range(0x00, 0x09)}${range(0x0b, 0x1f)}${range(0x7f, 0x9f)}${HIDDEN}]`);
+/** The least a report says: this many characters that are not space. */
+const LEAST_WORDS = 15;
 
 const DAY = 24 * 60 * 60 * 1000;
 const isDay = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
@@ -55,6 +61,8 @@ export function readReport(get: (name: string) => string, today: string): { fiel
   if (location.length < 2) return { problem: "Say where it happened: the system and the nearest place." };
   if (location.length > 120) return { problem: "Keep where it happened under 120 characters." };
   if (NOT_ONE_LINE.test(location)) return { problem: "Keep where it happened to plain letters, numbers and marks." };
+  // The place may become the title of an event, which is posted to Discord. A web address belongs under the evidence.
+  if (/:\/\/|\bwww\./i.test(location)) return { problem: "Say where it happened in words. A web address goes under where to see it." };
 
   // Left empty, the day is today. So is the day of anything happening now.
   const typedDay = get("happened_on");
@@ -82,12 +90,13 @@ export function readReport(get: (name: string) => string, today: string): { fiel
     .replace(/ ?\n ?/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  if (details.length < 20) return { problem: "Say what happened, in a sentence or more." };
-  if (details.length > 2000) return { problem: "Keep what happened to 2,000 characters." };
   if (NOT_PLAIN_WORDS.test(details)) return { problem: "Keep what happened to plain text." };
+  if (details.replace(/\s/g, "").length < LEAST_WORDS) return { problem: "Say what happened, in a sentence or more." };
+  if (details.length > 2000) return { problem: "Keep what happened to 2,000 characters." };
 
   const evidence = readEvidence(get("evidence"));
   if ("problem" in evidence) return evidence;
+  if (evidence.lines.some((line) => NOT_ONE_LINE.test(line))) return { problem: "Give each piece of evidence as a plain web address." };
 
   return {
     fields: {
@@ -103,13 +112,6 @@ export function readReport(get: (name: string) => string, today: string): { fiel
   };
 }
 
-/** The day before which a report is no longer kept, given today in UTC. */
-export function keptSince(today: string): string {
-  const day = new Date(`${today}T00:00:00Z`);
-  day.setUTCMonth(day.getUTCMonth() - KEEP_MONTHS);
-  return day.toISOString().slice(0, 10);
-}
-
 /**
  * What a Response event drafted from a report starts with: where it happened,
  * and nothing about who sent the report. An event is read by the whole serving
@@ -117,7 +119,8 @@ export function keptSince(today: string): string {
  * sender to the fleet is command's choice to make, not the form's.
  */
 export function responseStart(report: { location: string }): { title: string; summary: string; area: string } {
-  const title = `Response: ${report.location}`;
+  // The event's type is shown beside its title wherever it is read, so the title does not repeat it.
+  const title = `Piracy at ${report.location}`;
   return {
     title: title.length > 80 ? `${title.slice(0, 79).trimEnd()}…` : title,
     summary: "Answering a piracy report sent to the fleet.",

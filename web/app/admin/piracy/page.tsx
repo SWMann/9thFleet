@@ -194,7 +194,7 @@ async function Reports() {
         </h2>
         <p className="intro">
           Anyone may send a report, and nothing in one has been checked. Treat it as one side of a story. Only command reads these, and
-          a report is deleted {KEEP_MONTHS} months after it arrives.
+          a report leaves this page {KEEP_MONTHS} months after it arrives.
         </p>
         {waiting.length > 0 ? <ul className="hostiles">{waiting.map(card)}</ul> : <p className="empty">Nothing is waiting.</p>}
       </section>

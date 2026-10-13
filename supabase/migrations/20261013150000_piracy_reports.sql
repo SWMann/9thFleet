@@ -11,14 +11,29 @@
 --   event. The entry and the report each keep a link to the other.
 --   The line takes five reports a day from one sender, and ten an hour and
 --   thirty a day from everyone together.
+--   A report can be read for twelve months. After that nobody is sent it, and
+--   it is deleted the next time the line is used.
 --
--- Nothing that identifies a sender is stored. The site works out a mark of
--- four characters from the sender's network address and the day, and sends it
--- with the report. The mark is counted here and thrown away: it is never kept
--- with the report. It cannot be turned back into an address, because about
--- sixty-five thousand addresses share each mark, and it changes every day.
+-- A sender's network address is never stored. The site works out a mark of
+-- four characters from the address and the day, and sends it with the report.
+-- The mark is never kept with the report. It is counted in a table of its
+-- own, with the day and how many reports it has sent, and that table is
+-- emptied of earlier days whenever a report arrives. About sixty-five thousand
+-- addresses share each mark, and a sender's mark changes every day.
 
 create type public.piracy_report_state as enum ('new', 'handled', 'dismissed');
+
+-- The hidden marks: characters that hide or reorder what is written. Each
+-- rule below that refuses them makes them by number, so that this file holds
+-- none of them:
+--   chr(8203)          U+200B, a space of no width
+--   chr(8232) to 8238  U+2028 to U+202E, the line and paragraph separators and
+--                      the marks that embed or override the direction of text
+--   chr(8288) to 8297  U+2060 to U+2069, the word joiner, the invisible
+--                      operators and the marks that isolate a run of text
+--   chr(65279)         U+FEFF, the byte order mark
+-- The joiners some scripts and emoji need, and the plain left-to-right and
+-- right-to-left marks, are not refused: they are part of ordinary writing.
 
 create table public.piracy_reports (
   id uuid primary key default gen_random_uuid(),
@@ -28,28 +43,33 @@ create table public.piracy_reports (
   -- Who is reporting: their handle in the game, so that command can find them there.
   reporter_handle text not null check (reporter_handle ~ '^[A-Za-z0-9_-]{2,60}$'),
   -- Where it happened, in the sender's words. One line, with nothing in it
-  -- that hides or reorders what is written.
+  -- that hides or reorders what is written: no control character and none of
+  -- the hidden marks.
   location text not null check (
     char_length(location) between 2 and 120 and location !~ '(^\s|\s$)'
-    -- U+202A to U+202E and U+2066 to U+2069, written by number so that this file holds none of them.
-    and location !~ ('[[:cntrl:]' || chr(8234) || '-' || chr(8238) || chr(8294) || '-' || chr(8297) || ']')
+    and location !~ ('[[:cntrl:]' || chr(8203) || chr(8232) || '-' || chr(8238) || chr(8288) || '-' || chr(8297) || chr(65279) || ']')
   ),
   happened_on date not null default ((now() at time zone 'utc')::date),
   -- Who did it, where the sender knows: a player or an organisation, by the name the game shows.
   suspect_kind public.hostile_kind,
   suspect_handle text not null default '' check (suspect_handle ~ '^([A-Za-z0-9_-]{2,60})?$'),
-  -- What happened, as plain text. Its lines may break. Nothing else in it
-  -- steers how it is shown: no other control characters (U+0001 to U+0009,
-  -- U+000B to U+001F and U+007F to U+009F), and none of the marks that turn
-  -- text right to left.
+  -- What happened, as plain text: fifteen characters or more that are not
+  -- space. Its lines may break. Nothing else in it steers how it is shown: no
+  -- other control character (U+0001 to U+0009, U+000B to U+001F and U+007F to
+  -- U+009F), and none of the hidden marks.
   details text not null check (
-    char_length(details) <= 2000 and char_length(btrim(details)) >= 20
-    and details !~ ('[' || chr(1) || '-' || chr(9) || chr(11) || '-' || chr(31) || chr(127) || '-' || chr(159) || chr(8234) || '-' || chr(8238) || chr(8294) || '-' || chr(8297) || ']')
+    char_length(details) <= 2000
+    and char_length(regexp_replace(details, '[[:space:]]', '', 'g')) >= 15
+    and details !~ ('[' || chr(1) || '-' || chr(9) || chr(11) || '-' || chr(31) || chr(127) || '-' || chr(159) || chr(8203) || chr(8232) || '-' || chr(8238) || chr(8288) || '-' || chr(8297) || chr(65279) || ']')
   ),
-  -- Where to see it: web addresses, one to a line.
+  -- Where to see it: web addresses, one to a line, with nothing hidden in them.
   evidence text not null default ''
-    check (char_length(evidence) <= 1000 and evidence ~ '^(https?://[^[:space:]]+(\n|$))*$'),
-  -- The door a sender's mark comes through. It is counted and thrown away.
+    check (
+      char_length(evidence) <= 1000 and evidence ~ '^(https?://[^[:space:]]+(\n|$))*$'
+      and evidence !~ ('[' || chr(1) || '-' || chr(9) || chr(11) || '-' || chr(31) || chr(127) || '-' || chr(159) || chr(8203) || chr(8232) || '-' || chr(8238) || chr(8288) || '-' || chr(8297) || chr(65279) || ']')
+    ),
+  -- The door a sender's mark comes through. The mark is counted in
+  -- app.piracy_senders and is never kept here.
   sender text check (sender is null),
   state public.piracy_report_state not null default 'new',
   -- Who marked it handled or dismissed, and what they said.
@@ -65,14 +85,27 @@ create index piracy_reports_received_idx on public.piracy_reports (received_at);
 create index piracy_reports_event_idx on public.piracy_reports (event_id) where event_id is not null;
 create index piracy_reports_handler_idx on public.piracy_reports (handled_by) where handled_by is not null;
 
--- How many reports each mark has sent on its latest day. A mark that comes
--- back on a later day starts again from one, so the table never holds more
--- than one row for each of the 65,536 marks.
+-- How many reports each mark has sent today. Rows from earlier days are
+-- deleted whenever a report arrives, so the table holds today's senders and,
+-- while the line is quiet, those of the last day it was used.
 create table app.piracy_senders (
   mark text primary key check (mark ~ '^[a-f0-9]{4}$'),
   day date not null,
   reports integer not null
 );
+
+-- The line's housekeeping, done whenever the line is used: a report arrives,
+-- or command marks one. A report twelve months old is deleted, and so is the
+-- count against every mark from an earlier day. Nothing reads a report that
+-- old in the meantime: the rule that sends reports to command leaves it out.
+create function app.clear_old_piracy_reports() returns void
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  delete from app.piracy_senders where day < (now() at time zone 'utc')::date;
+  delete from public.piracy_reports where received_at <= now() - interval '12 months';
+end;
+$$;
 
 -- What a sender decides and what they do not, how much the line takes, and
 -- what command can do with a report.
@@ -111,9 +144,16 @@ begin
       raise exception 'A report is sent through the fleet''s own form.' using errcode = '23514';
     end if;
 
+    -- One report is counted at a time, so that reports arriving together
+    -- cannot each be counted before the others are there.
+    perform pg_advisory_xact_lock(hashtext('public.piracy_reports'));
+    perform app.clear_old_piracy_reports();
+
     -- The line as a whole.
-    if (select count(*) from public.piracy_reports r where r.received_at > now() - interval '1 hour') >= 10
-       or (select count(*) from public.piracy_reports r where r.received_at > now() - interval '1 day') >= 30 then
+    if (select count(*) from public.piracy_reports r where r.received_at > now() - interval '1 day') >= 30 then
+      raise exception 'The report line is full for today. Try again tomorrow.' using errcode = '23514';
+    end if;
+    if (select count(*) from public.piracy_reports r where r.received_at > now() - interval '1 hour') >= 10 then
       raise exception 'The report line is full for now. Try again in an hour.' using errcode = '23514';
     end if;
 
@@ -124,7 +164,7 @@ begin
           day = excluded.day
     returning s.reports into sent;
     if sent > 5 then
-      raise exception 'You have sent five reports today. That is the most the line takes from one sender in a day.'
+      raise exception 'Five reports have come from your connection today. That is the most the line takes from one in a day.'
         using errcode = '23514';
     end if;
 
@@ -145,6 +185,7 @@ begin
   if not app.has_role('command') then
     raise exception 'Command handles piracy reports.' using errcode = '42501';
   end if;
+  perform app.clear_old_piracy_reports();
 
   if new.state is distinct from old.state then
     if new.state = 'new' then
@@ -417,8 +458,11 @@ alter table app.piracy_senders enable row level security;
 -- The trigger has already set these, so this only confirms what arrives.
 create policy "Anyone sends a piracy report" on public.piracy_reports
   for insert to anon with check (state = 'new' and handled_by is null and event_id is null);
-create policy "Command reads piracy reports" on public.piracy_reports
-  for select to authenticated using ((select app.has_role('command')));
+-- A report is read for twelve months and no longer. One that old cannot be
+-- changed or deleted by hand either, since it is not sent to anyone.
+create policy "Command reads piracy reports, for twelve months" on public.piracy_reports
+  for select to authenticated
+  using ((select app.has_role('command')) and received_at > now() - interval '12 months');
 create policy "Command handles piracy reports" on public.piracy_reports
   for update to authenticated
   using ((select app.has_role('command'))) with check ((select app.has_role('command')));

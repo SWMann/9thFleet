@@ -6,9 +6,15 @@ import { createHash } from "node:crypto";
  *
  * The mark is four characters, worked out from the sender's network address
  * and the day. About sixty-five thousand addresses share each mark, so a mark
- * cannot be turned back into an address, and a sender's mark changes every
- * day. The database counts the mark and throws it away: it is never stored
- * with a report. The address itself is not sent anywhere or written down.
+ * does not say which address it came from, and a sender's mark changes every
+ * day. The database never stores the mark with a report. It keeps it in a
+ * table of its own, with the day and a count, and empties that table of
+ * earlier days whenever a report arrives. The address itself is not sent
+ * anywhere or written down.
+ *
+ * There is no secret in the mark: someone who suspects an address can work
+ * out the mark it would have had on a day. That tells them one chance in
+ * sixty-five thousand, and only while the day's count is still kept.
  */
 
 /** The part of a network address that stands for one sender: an IPv4 address whole, the first half of an IPv6 one. */

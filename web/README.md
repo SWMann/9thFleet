@@ -184,8 +184,8 @@ handle in the game, where and when it happened, who did it if they know, what wa
 addresses of a screenshot or a clip. A report can be marked as happening now.
 
 - **It is not an emergency line, and the page says so first.** Nobody is sent a message when a
-  report arrives. Command learns of one on the admin overview, the next time one of them opens
-  the site.
+  report arrives. Command is told on the admin overview and at the top of the operations page, so
+  learns of one the next time one of them opens either.
 - **Command alone reads a report,** at `/admin/piracy`. From one, command starts a hostile-list
   entry or drafts a Response event, marks the report handled or dismisses it with a word of what
   came of it, reopens it, or deletes it.
@@ -194,24 +194,37 @@ addresses of a screenshot or a clip. A report can be marked as happening now.
   and labelled with its real site, as on the hostile list. When command starts an entry from a
   report, `fromPlainText` in `lib/rich/markdown.ts` writes the words so that the editor reads
   none of them as formatting.
-- **Who sent a report stays with command.** The hostile list and an announced event are read by
-  the whole serving fleet. So an entry or an event started from a report is filled in with what
-  happened and where, and not with the sender's handle. Command adds it where the ships need it.
-- **Nothing about a sender is stored.** `lib/piracy-sender.ts` works out a mark of four characters
-  from the sender's network address and the day, and the action sends it with the report. The
-  database counts the mark and throws it away. About 65,000 addresses share each mark, and a
-  sender's mark changes every day. The address is not written down anywhere.
+- **Who sent a report stays with command, unless command passes it on.** The hostile list and an
+  announced event are read by the whole serving fleet. So an entry or an event started from a
+  report is filled in with what happened and where, and not with the sender's handle. The
+  sender's own words and links are filled in, for command to rewrite: a link to the sender's own
+  channel shows who they are, and the form says so to both of them.
+- **A sender's address is never stored. A mark is, for a day.** `lib/piracy-sender.ts` works out a
+  mark of four characters from the sender's network address and the day, and the action sends it
+  with the report. The database never keeps the mark with a report. It keeps the mark, the day and
+  a count in a table of its own, and deletes earlier days' marks whenever a report arrives. About
+  65,000 addresses share each mark, and a sender's mark changes every day. There is no secret in
+  it: someone with the database who suspects an address can test it against a day's marks.
 - **The line has limits, and the database keeps them:** five reports a day from one sender, and
-  ten an hour and thirty a day from everyone together. A hidden field that no person reaches
-  catches a robot that fills in every field: it is told its report went, and nothing is sent.
-- **The limit on one sender only binds the form.** The database key in the page is public, as it
-  must be, so someone can send reports to the database directly and choose their own mark. The
-  limit on everyone together still holds them, and the worst they can do is fill the line for a
-  day. Command deletes what they sent.
-- **A report is kept for twelve months.** `getPiracyReports` in `lib/piracy.ts` deletes any that
-  are older each time command opens the page, before it reads anything. Deleting a report takes
-  its words out of the log of changes too. `KEEP_MONTHS` in `lib/piracy-form.ts` sets the time, and
-  the privacy page and the form read it from there.
+  ten an hour and thirty a day from everyone together. Reports are counted one at a time, so a
+  burst cannot slip past. A hidden field that no person reaches catches a robot that fills in
+  every field: it is told its report went, and nothing is sent.
+- **The limit on one sender only binds the form, and the line can be held shut.** The database key
+  in the page is public, as it must be, so someone can send reports to the database directly and
+  choose their own mark. The limit on everyone together still holds them, but ten junk reports an
+  hour keep the line full for as long as they are sent. Command sees the junk and deletes it,
+  which frees the line. If it becomes a habit, the form needs a gate the site does not have yet.
+- **Everyone behind one address shares a mark.** People on one network are one sender to the
+  line, so the refusal says five reports have come "from your connection". Where the host sets no
+  address at all, which Vercel always does, every sender would share one mark.
+- **A report is read for twelve months.** After that the database sends it to nobody, command
+  included, and deletes it the next time the line is used: when a report arrives, or command
+  marks one. Deleting a report takes its words out of the log of changes too. An entry on the
+  hostile list that was started from it stays, with whatever words command kept. `KEEP_MONTHS`
+  in `lib/piracy-form.ts` is the number the pages say, and the migration holds the rule.
+- **A stranger's words are not posted to Discord as a link.** A place may become an event's title.
+  `lib/discord-text.ts` takes apart anything Discord would read as formatting, a mention or a
+  link before an announcement is posted, and the form refuses a web address as a place.
 - **The form's checks are in `lib/piracy-form.ts`,** which reads nothing and is tested by
   `npm test`. The database makes the same checks for itself.
 

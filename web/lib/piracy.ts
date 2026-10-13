@@ -1,14 +1,15 @@
 import "server-only";
 import { levelNames, standing, type HostileKind, type HostileLevel, type HostileState } from "@/lib/hostile-form";
-import { keptSince, type ReportState } from "@/lib/piracy-form";
+import type { ReportState } from "@/lib/piracy-form";
+import { getSession, isServing } from "@/lib/member";
 import { createClient } from "@/lib/supabase/server";
 
 /**
  * The piracy reports, read as command. The database sends them to command and
  * to nobody else, so for anyone else every list here comes back empty.
  *
- * A report is kept for twelve months. Whatever is older is deleted here,
- * before anything is read, so no page ever shows one.
+ * A report is read for twelve months. The database sends nobody one that is
+ * older, and deletes it the next time the line is used.
  */
 
 /** A hostile-list entry, as far as a report's card needs it. */
@@ -88,14 +89,29 @@ export async function getPiracyReport(id: string): Promise<ReportStart | null> {
   };
 }
 
+/**
+ * How many reports wait, for the pages command works from. Nobody is sent a
+ * message when a report arrives, so this is how command learns of one. It asks
+ * the database only for someone who commands, and is nothing for anyone else.
+ */
+export async function getWaitingReports(): Promise<{ waiting: number; now: number }> {
+  const none = { waiting: 0, now: 0 };
+  const session = await getSession();
+  if (session.state !== "member" || !isServing(session.member)) return none;
+  if (!session.member.roles.some((role) => role === "command" || role === "admin")) return none;
+  const supabase = await createClient();
+  if (!supabase) return none;
+  const { data, error } = await supabase.from("piracy_reports").select("id, urgent").eq("state", "new");
+  if (error) throw new Error(`The piracy reports could not be read: ${error.message}`);
+  const rows = (data ?? []) as Row[];
+  return { waiting: rows.length, now: rows.filter((row) => row.urgent === true).length };
+}
+
 export async function getPiracyReports(): Promise<PiracyReports> {
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
 
   const today = new Date().toISOString().slice(0, 10);
-  const swept = await supabase.from("piracy_reports").delete().lt("received_at", `${keptSince(today)}T00:00:00Z`);
-  if (swept.error) throw new Error(`Old piracy reports could not be cleared: ${swept.error.message}`);
-
   const [reports, hostiles, roster] = await Promise.all([
     supabase.from("piracy_reports").select(COLUMNS).order("received_at", { ascending: false }),
     supabase.from("hostiles").select("id, kind, handle, state, level, expires_on, report_id"),

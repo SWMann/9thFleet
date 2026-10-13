@@ -3,7 +3,8 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { keptSince, readReport, responseStart } from "./piracy-form";
+import { discordPlain } from "./discord-text";
+import { readReport, responseStart } from "./piracy-form";
 import { senderKey, senderMark } from "./piracy-sender";
 
 const TODAY = "2026-10-13";
@@ -61,6 +62,16 @@ test("the place is one tidy line", () => {
   assert.match(problem({ location: "x" }) ?? "", /where it happened/);
   assert.match(problem({ location: "x".repeat(121) }) ?? "", /under 120/);
   assert.match(problem({ location: `Over${String.fromCharCode(0x202e)}ride` }) ?? "", /plain letters/);
+  assert.match(problem({ location: `No${String.fromCharCode(0x200b)}width` }) ?? "", /plain letters/);
+  // A line separator is white space, so it is tidied into a space like any other.
+  assert.equal(fields({ location: `Two${String.fromCharCode(0x2028)}lines` }).location, "Two lines");
+  // The place may become an event's title, so it is words and not a web address.
+  for (const place of ["https://evil.example/free-ship", "[Yela](https://evil.example)", "see www.evil.example"]) {
+    assert.match(problem({ location: place }) ?? "", /in words/, place);
+  }
+  // A place written right to left keeps the mark that says so.
+  const marked = `Pyro ${String.fromCharCode(0x200f)}gate`;
+  assert.equal(fields({ location: marked }).location, marked);
 });
 
 test("the day is today when left empty or happening now, and within the last 90 days", () => {
@@ -81,7 +92,15 @@ test("what happened is plain words, with its line breaks kept", () => {
     "They opened fire. No warning.\n\nI lost the ship\nand the cargo.",
   );
   assert.match(problem({ details: "Too short." }) ?? "", /a sentence or more/);
+  // What counts is what is not space.
+  assert.match(problem({ details: "a b c d e f g h i j k l m n" }) ?? "", /a sentence or more/);
+  assert.equal(fields({ details: "Shot at near Yela." }).details, "Shot at near Yela.");
+  assert.match(problem({ details: String.fromCharCode(0x200b).repeat(30) }) ?? "", /plain text/);
+  assert.match(problem({ details: `A word joiner ${String.fromCharCode(0x2060)} in the middle of the words.` }) ?? "", /plain text/);
   assert.match(problem({ details: "x".repeat(2001) }) ?? "", /2,000 characters/);
+  // The joiners that emoji and some scripts are written with are ordinary writing.
+  const family = [0x1f468, 0x1f469, 0x1f467].map((code) => String.fromCodePoint(code)).join(String.fromCharCode(0x200d));
+  assert.ok(fields({ details: `A family ${family} of pirates took everything.` }).details.includes(family));
   assert.match(problem({ details: `An over${String.fromCharCode(0x202e)}ride in the middle of the words.` }) ?? "", /plain text/);
   assert.match(problem({ details: `A bell ${String.fromCharCode(7)} in the middle of the words.` }) ?? "", /plain text/);
   // Marks that would be formatting elsewhere are only marks here.
@@ -93,16 +112,12 @@ test("evidence is web addresses, one to a line", () => {
   assert.equal(fields({ evidence: "https://example.com/clip\n\nHTTPS://example.com/shot.png" }).evidence, "https://example.com/clip\nhttps://example.com/shot.png");
   assert.match(problem({ evidence: "see my stream" }) ?? "", /web address/);
   assert.match(problem({ evidence: "javascript:alert(1)" }) ?? "", /web address/);
-});
-
-test("a report is kept for twelve months", () => {
-  assert.equal(keptSince("2026-10-13"), "2025-10-13");
-  assert.equal(keptSince("2027-03-31"), "2026-03-31");
+  assert.match(problem({ evidence: `https://example.com/${String.fromCharCode(0x202e)}gnp.exe` }) ?? "", /plain web address/);
 });
 
 test("a Response event starts from where it happened, and does not name who sent the report", () => {
   assert.deepEqual(responseStart({ location: "Stanton, the ring at Yela" }), {
-    title: "Response: Stanton, the ring at Yela",
+    title: "Piracy at Stanton, the ring at Yela",
     summary: "Answering a piracy report sent to the fleet.",
     area: "Stanton, the ring at Yela",
   });
@@ -131,4 +146,18 @@ test("a sender's mark is four characters, the same all day and different the nex
   // Two machines in one household's half of a long address are one sender.
   assert.equal(senderMark("2001:db8:85a3::1", "2026-10-13"), senderMark("2001:db8:85a3:0:ffff::2", "2026-10-13"));
   assert.match(senderMark(null, "2026-10-13"), /^[a-f0-9]{4}$/);
+});
+
+test("words posted to Discord hold no formatting, no mention and no link", () => {
+  assert.equal(discordPlain("Piracy at Stanton, the ring at Yela"), "Piracy at Stanton, the ring at Yela");
+  assert.equal(discordPlain("**Bold** _and_ ~~struck~~ `code` ||hidden|| > quote # heading"), "Bold and struck code hidden quote heading");
+  assert.equal(discordPlain("@everyone and <@123> and <#456>"), "everyone and 123 and 456");
+  // A link written Discord's way is taken apart, and an address loses the start that would make it one.
+  assert.equal(discordPlain("[Stanton, Yela](https://evil.example/free-ship)"), "Stanton, Yela(evil.example/free-ship)");
+  assert.equal(discordPlain("Meet at https://evil.example now"), "Meet at evil.example now");
+  assert.equal(discordPlain("HTTP://EVIL.example and www.evil.example and discord://x"), "EVIL.example and evil.example and x");
+  assert.equal(discordPlain("<https://evil.example>"), "evil.example");
+  assert.equal(discordPlain("  spaced \n out  "), "spaced out");
+  // An ordinary title is left as it is.
+  assert.equal(discordPlain("Patrol 014 (Stanton): gate to gate, 19:00"), "Patrol 014 (Stanton): gate to gate, 19:00");
 });

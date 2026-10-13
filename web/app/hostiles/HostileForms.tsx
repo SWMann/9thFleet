@@ -39,7 +39,8 @@ export function ProposeForm({ command, start = {}, from }: { command: boolean; s
           <Icon name="flag" size={16} />
           <span>
             Filled in from the piracy report sent by {from}. A report is one side of a story: check it, and put it in the fleet&apos;s
-            words, before you send this.
+            words, before you send this. The whole serving fleet reads the list, and a link to the sender&apos;s own channel shows who
+            they are.
           </span>
         </p>
       ) : null}

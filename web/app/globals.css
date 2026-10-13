@@ -7178,7 +7178,6 @@ a.mention:hover {
 
 /* A warning at the top of a band: an icon, then the words. */
 .band > .notice,
-.report-form > .notice,
 .hostile-form > .notice {
   display: flex;
   align-items: flex-start;
@@ -7188,10 +7187,18 @@ a.mention:hover {
 }
 
 .band > .notice .icon,
-.report-form > .notice .icon,
 .hostile-form > .notice .icon {
   flex: none;
   margin-top: 3px;
+}
+
+/* What the line answered, under the button that sent the report. */
+.report-answer {
+  margin: 14px 0 0;
+}
+
+.report-answer:empty {
+  display: none;
 }
 
 /* The field no person sees or reaches. It is off the page, not hidden, because a robot skips what is hidden. */

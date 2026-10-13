@@ -17,7 +17,8 @@ import { supabaseEnv } from "@/lib/supabase/env";
  *
  * A report is always sent as a visitor, so it never carries a member's
  * session, and nothing is read back. The sender's network address is used
- * once, here, to work out the mark the database counts. It is not stored.
+ * once, here, to work out the mark the database counts. The address is not
+ * stored or sent on. See lib/piracy-sender.ts for what the mark is.
  */
 
 export type ReportResult = {
@@ -35,7 +36,7 @@ const TRAP = "fleet_check";
 const sent = (urgent: boolean): ReportResult => ({
   ok: true,
   message: urgent
-    ? "Report received. Command sees it the next time one of them opens this site. Help is not guaranteed."
+    ? "Report received. Command sees it the next time one of them opens the fleet's pages on this site. Help is not guaranteed."
     : "Report received. Command reads every report. There is no reply through this site.",
   stamp: Date.now(),
 });
