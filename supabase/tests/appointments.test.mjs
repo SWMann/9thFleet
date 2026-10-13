@@ -22,7 +22,7 @@ const appoint = (actor, memberId, positionId, extra = {}) => {
   const columns = Object.keys(row);
   const marks = columns.map((_, index) => `$${index + 1}`).join(", ");
   return fleet.as(actor).one(
-    `insert into public.assignments (${columns.join(", ")}) values (${marks}) returning *`,
+    `insert into public.assignments (${columns.join(", ")}) values (${marks}) returning id, member_id, position_id, kind, grade_code, acting, started_on, ended_on, appointed_by, recorded_at`,
     Object.values(row),
   );
 };

@@ -3097,6 +3097,7 @@ try {
 
     // In post for 40 days. At the rank for 80: the move to a new post within 30 days did not start the count again.
     assert.equal(await stat("In post"), `5 weeks ${free[1].title}, since ${daysAgo(40)}`);
+    // The 15 days between the two posts are fewer than the 30 the database keeps a grade for.
     assert.equal(await stat("At this rank"), `2 months ${e3}, since ${daysAgo(80)}`);
     assert.equal(await stat("Events, 30 days"), "0 Returned present");
 
@@ -3127,7 +3128,7 @@ try {
     const patrolRow = recordRow("Events attended", "Patrol 001");
     assert.deepEqual((await cells(patrolRow)).filter((_, index) => index !== 1), ["Patrol", "Absent without notice"]);
     assert.equal(await patrolRow.getByRole("link", { name: "Patrol 001" }).getAttribute("href"), `/operations/${(await patrol()).id}`);
-    await page.getByText("Only you and staff see where you were absent.").waitFor();
+    await page.getByText("Where you were absent is seen by you, by staff and by whoever ran the event.").waitFor();
 
     await signInAs(kit);
     await recordTab("Service record");
@@ -3154,7 +3155,7 @@ try {
 
     // Attendance is on a record for staff as well as for the member.
     await page.goto(`${site}/admin/people/${(await memberOf(jo)).id}`);
-    await page.getByText("Only the member and staff see this.").waitFor();
+    await page.getByText("This is seen by the member, by staff and by whoever ran each event.").waitFor();
     assert.deepEqual((await cells(recordRow("Events attended", "Patrol 001"))).at(-1), "Absent without notice");
 
     await page.goto(`${site}/admin/people/00000000-0000-4000-8000-000000000000`);

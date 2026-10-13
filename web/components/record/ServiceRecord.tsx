@@ -5,12 +5,11 @@ import { RichLine } from "@/components/rich/Rich";
 import {
   activity,
   currentPost,
-  daysBetween,
   gradeChanges,
   gradePeriods,
   gradeSince,
   latestFirst,
-  lengthOf,
+  lengthBetween,
   returnedNames,
   statusLabel,
   statusSteps,
@@ -70,16 +69,17 @@ export function ServiceRecordView({
   const steps = [
     ...statusSteps(record.statusLines).map((step) => ({
       on: step.on,
-      key: `status-${step.on}-${step.status}-${step.before ?? "first"}`,
+      key: `status-${step.id}`,
       icon: "person" as const,
       what: statusLabel(step),
-      detail: step.before && step.daysBefore !== null && step.before !== "applicant" ? `After ${lengthOf(step.daysBefore).toLowerCase()} ${beforeWords[step.before]}.` : "",
+      detail: step.before && step.beforeSince && step.before !== "applicant" ? `After ${lengthBetween(step.beforeSince, step.on).toLowerCase()} ${beforeWords[step.before]}.` : "",
     })),
-    ...gradeChanges(record.posts, record.gradeLines, record.gradeOrder).map((change, index) => ({
+    ...gradeChanges(record.posts, record.gradeLines, record.gradeOrder).map((change) => ({
       on: change.on,
-      key: `grade-${change.assignmentId}-${index}`,
+      key: `grade-${change.id}`,
       icon: "chevrons" as const,
-      what: `${changeWords[change.kind]} ${rank(change.gradeCode)}`,
+      // "Made acting" says it already. Any other change names the rank as it is now held, acting or not.
+      what: `${changeWords[change.kind]} ${rank(change.gradeCode, change.kind !== "made-acting" && change.acting)}`,
       detail: `${change.gradeCode}, as ${titleOf.get(change.assignmentId) ?? "a post"}.`,
     })),
   ]
@@ -95,10 +95,10 @@ export function ServiceRecordView({
         <Stats
           items={[
             post
-              ? { label: "In post", value: lengthOf(daysBetween(post.startedOn, on)), note: `${post.title}, since ${day(post.startedOn)}` }
+              ? { label: "In post", value: lengthBetween(post.startedOn, on), note: `${post.title}, since ${day(post.startedOn)}` }
               : { label: "In post", value: "None", note: own ? "You hold no post at the moment" : "Holds no post at the moment" },
             grade
-              ? { label: "At this rank", value: lengthOf(daysBetween(grade.since, on)), note: `${rank(grade.gradeCode, grade.acting)}, since ${day(grade.since)}` }
+              ? { label: "At this rank", value: lengthBetween(grade.since, on), note: `${rank(grade.gradeCode, grade.acting)}, since ${day(grade.since)}` }
               : { label: "At this rank", value: "None", note: "Counted while a post is held" },
             ...(attendance
               ? [
@@ -140,7 +140,7 @@ export function ServiceRecordView({
                     </td>
                     <td>{day(entry.startedOn)}</td>
                     <td>{entry.endedOn ? day(entry.endedOn) : <span className="chip chip-on">Now</span>}</td>
-                    <td>{lengthOf(daysBetween(entry.startedOn, entry.endedOn ?? on))}</td>
+                    <td>{lengthBetween(entry.startedOn, entry.endedOn ?? on)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -182,7 +182,8 @@ export function ServiceRecordView({
             <>
               <p className="intro">
                 {seen.all === 1 ? "Present at 1 event" : `Present at ${seen.all} events`}
-                {seen.absent > 0 ? `, absent from ${seen.absent}` : ""}. {own ? "Only you and staff see where you were absent." : "Only the member and staff see this."}
+                {seen.absent > 0 ? `, absent from ${seen.absent}` : ""}.{" "}
+                {own ? "Where you were absent is seen by you, by staff and by whoever ran the event." : "This is seen by the member, by staff and by whoever ran each event."}
               </p>
               <Scroll label="Events attended">
                 <table className="data data-record">
@@ -228,7 +229,7 @@ export function ServiceRecordView({
             {record.qualifications.length > 0 ? (
               <ul>
                 {record.qualifications.map((qualification) => (
-                  <li key={qualification.name}>
+                  <li key={`${qualification.name}-${qualification.awardedOn}`}>
                     <strong>{qualification.name}</strong>
                     <span>
                       {day(qualification.awardedOn)}

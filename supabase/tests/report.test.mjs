@@ -36,7 +36,7 @@ const mark = (as, id, member, returned) =>
 const award = (as, member, code, eventId = null) =>
   fleet.as(as).one(
     `insert into public.qualification_awards (member_id, qualification_id, awarded_by, event_id)
-     values ($1, $2, $3, $4) returning *`,
+     values ($1, $2, $3, $4) returning id, member_id, qualification_id, awarded_by, awarded_on, event_id`,
     [member, qualification[code], as, eventId],
   );
 /** An announced event that has started, with an objective, which the gunner and the spare hand attended. */

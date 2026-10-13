@@ -26,10 +26,17 @@ const appoint = (actor, memberId, positionId, extra = {}) => {
   const columns = Object.keys(row);
   const marks = columns.map((_, index) => `$${index + 1}`).join(", ");
   return fleet.as(actor).one(
-    `insert into public.assignments (${columns.join(", ")}) values (${marks}) returning *`,
+    `insert into public.assignments (${columns.join(", ")}) values (${marks}) returning id, member_id, position_id, kind, grade_code, acting, started_on, ended_on, appointed_by, recorded_at`,
     Object.values(row),
   );
 };
+
+/** A post on the training ship, emptied of whoever an earlier test left in it. */
+async function openPost(title) {
+  const id = await fleet.positionId("Training Ship", title);
+  await fleet.sql("update public.assignments set ended_on = current_date where position_id = $1 and ended_on is null", [id]);
+  return id;
+}
 
 const statusLines = (id) =>
   fleet.rows(
@@ -217,6 +224,119 @@ test("deleting a member takes their record with them", async () => {
   await fleet.sql("delete from auth.users where id = $1", [id]);
   assert.equal(await count(fleet, "member_status_changes", "member_id = $1", [id]), 0);
   assert.equal(await count(fleet, "assignment_grades", "assignment_id = $1", [made.id]), 0);
+});
+
+test("putting right the grade of a post that was left corrects its last line, and is not a promotion today", async () => {
+  const id = await crewMember("Corrected");
+  const post = await openPost("Gunner 2");
+  // Held from 100 days ago to 60 days ago, at E2. Only the database owner can date a post or change one that has ended.
+  const made = await fleet.one(
+    `insert into public.assignments (member_id, position_id, kind, started_on)
+     values ($1, $2, 'primary', current_date - 100) returning id`,
+    [id, post],
+  );
+  await fleet.sql("update public.assignments set ended_on = current_date - 60 where id = $1", [made.id]);
+  await fleet.sql("update public.assignments set grade_code = 'E3' where id = $1", [made.id]);
+  assert.deepEqual(
+    await fleet.rows(
+      "select grade_code, since = current_date - 100 as first_day from public.assignment_grades where assignment_id = $1",
+      [made.id],
+    ),
+    [{ grade_code: "E3", first_day: true }],
+  );
+});
+
+test("what command writes on an appointment is read by staff, and by nobody else", async () => {
+  const id = await crewMember("Noted");
+  const made = await appoint(who.command, id, await openPost("Gunner 3"), { note: "Watch closely: late twice." });
+  const noteAs = async (reader) => (await fleet.as(reader).rows("select note from public.assignment_notes where assignment_id = $1", [made.id])).map((row) => row.note);
+
+  for (const staff of [who.staff, who.command, who.admin]) {
+    assert.deepEqual(await noteAs(staff), ["Watch closely: late twice."]);
+  }
+  // Not the member it is about, and not anyone else who serves.
+  for (const reader of [id, who.member]) {
+    assert.deepEqual(await noteAs(reader), []);
+  }
+  await assert.rejects(fleet.visitor().query("select * from public.assignment_notes"), /permission denied/);
+
+  // The appointment itself no longer carries the note to anyone, staff included.
+  for (const reader of [id, who.member, who.staff, who.command, who.admin]) {
+    await assert.rejects(fleet.as(reader).query("select note from public.assignments where id = $1", [made.id]), /permission denied/);
+    await assert.rejects(fleet.as(reader).query("select * from public.assignments where id = $1", [made.id]), /permission denied/);
+  }
+  // Who holds the post is still read by the fleet.
+  assert.equal(await count(fleet.as(who.member), "assignments", "id = $1", [made.id]), 1);
+
+  // Command rewrites the note, and takes it off.
+  const command = fleet.as(who.command);
+  assert.equal(await command.changed("update public.assignments set note = 'Settled in.' where id = $1", [made.id]), 1);
+  assert.deepEqual(await noteAs(who.staff), ["Settled in."]);
+  assert.equal(await command.changed("update public.assignments set note = '' where id = $1", [made.id]), 1);
+  assert.deepEqual(await noteAs(who.staff), [""]);
+
+  // Nobody writes the copy for themselves.
+  for (const actor of [id, who.staff, who.command, who.admin]) {
+    await assert.rejects(
+      fleet.as(actor).query("update public.assignment_notes set note = 'Forged.' where assignment_id = $1", [made.id]),
+      /permission denied/,
+    );
+    await assert.rejects(
+      fleet.as(actor).query("insert into public.assignment_notes (assignment_id, member_id, note) values ($1, $2, 'Forged.')", [made.id, id]),
+      /permission denied/,
+    );
+  }
+});
+
+test("an appointment with no note keeps no copy of one", async () => {
+  const id = await crewMember("Unremarked");
+  const made = await appoint(who.command, id, await openPost("Gunner 4"));
+  assert.equal(await count(fleet, "assignment_notes", "assignment_id = $1", [made.id]), 0);
+});
+
+test("what an instructor writes on an award is sent to nobody", async () => {
+  const id = await fresh("Qualified", { status: "recruit" });
+  const instructor = await fresh("Teacher", { roles: ["instructor"] });
+  await fleet.as(instructor).query(
+    `insert into public.qualification_awards (member_id, qualification_id, awarded_by, note)
+     select $1, id, $2, 'Passed on the second attempt.' from public.qualifications where code = 'radio-user'`,
+    [id, instructor],
+  );
+  for (const reader of [id, who.member, instructor, who.staff, who.command, who.admin]) {
+    await assert.rejects(fleet.as(reader).query("select note from public.qualification_awards where member_id = $1", [id]), /permission denied/);
+    // That the award was made, by whom and when, is read as before.
+    assert.equal(await count(fleet.as(reader), "qualification_awards", "member_id = $1 and awarded_by = $2", [id, instructor]), 1);
+  }
+  assert.equal((await fleet.one("select note from public.qualification_awards where member_id = $1", [id])).note, "Passed on the second attempt.");
+});
+
+test("the record's days are days in UTC, whatever time zone a request asks for", async () => {
+  const id = await crewMember("Far east");
+  const post = await openPost("Helmsman");
+  // Kiritimati is 14 hours ahead of UTC and Niue 11 behind, so one of the two is always on another day.
+  for (const zone of ["Pacific/Kiritimati", "Pacific/Niue"]) {
+    const asStaff = (actor, text, params) =>
+      fleet.db.transaction(async (tx) => {
+        await tx.query("set local role authenticated");
+        await tx.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: actor, role: "authenticated" })]);
+        await tx.query("select set_config('timezone', $1, true)", [zone]);
+        return tx.query(text, params);
+      });
+    await asStaff(who.staff, "update public.members set status = 'reserve' where id = $1", [id]);
+    await asStaff(who.staff, "update public.members set status = 'member' where id = $1", [id]);
+    const made = await asStaff(who.command, "insert into public.assignments (member_id, position_id, kind) values ($1, $2, 'primary') returning id", [id, post]);
+    await asStaff(who.command, "update public.assignments set grade_code = 'E3' where id = $1", [made.rows[0].id]);
+    await asStaff(who.command, "update public.assignments set ended_on = current_date where id = $1", [made.rows[0].id]);
+
+    const utc = "(now() at time zone 'utc')::date";
+    const statuses = await fleet.rows(`select changed_on = ${utc} as utc_day from public.member_status_changes where member_id = $1`, [id]);
+    assert.ok(statuses.every((line) => line.utc_day), `${zone}: status`);
+    const promoted = await fleet.one(
+      `select since = ${utc} as utc_day from public.assignment_grades where assignment_id = $1 and grade_code = 'E3'`,
+      [made.rows[0].id],
+    );
+    assert.equal(promoted.utc_day, true, `${zone}: grade`);
+  }
 });
 
 // The migration fills the record in for what happened before it, from the

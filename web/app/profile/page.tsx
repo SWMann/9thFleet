@@ -84,8 +84,10 @@ async function Record() {
 
   const { member, recruitmentOpen } = session;
   const status = statusNames[member.status];
-  // Someone who has served has a record. An applicant has only the day they signed in.
-  const record = member.status === "applicant" ? null : await getServiceRecord(member.id, member.service);
+  // Someone who has served has a record. A new applicant has only the day they signed in, which is not worth a tab.
+  // One who was sent back out still has what went before.
+  const read = await getServiceRecord(member.id, member.service);
+  const record = member.status !== "applicant" || read.posts.length > 0 || read.statusLines.length > 1 ? read : null;
 
   const standing = (
     <>

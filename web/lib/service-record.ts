@@ -8,8 +8,10 @@ import type { EventLine, GradeLine, PostHeld, RecordStatus, Returned, StatusLine
  * at, the days their status and grade changed, and what they have earned.
  *
  * It is read as whoever is asking, so the database returns only what they may
- * see. A member reads their own. Staff read anyone's. Anyone else gets an
- * empty record, whatever page asked.
+ * see. A member reads their own. Staff read anyone's, with the note command
+ * left on each appointment. Anyone else is sent none of the history, whatever
+ * page asked: no post that was left, no day a status or a grade changed, and
+ * no attendance.
  */
 
 export type ServiceRecord = {
@@ -44,9 +46,10 @@ export async function getServiceRecord(memberId: string, service: Service | null
   const supabase = await createClient();
   if (!supabase) return emptyRecord();
 
-  const [assignments, positions, units, gradeLines, statusLines, grades, ranks, returns, eventTypes, awards, qualifications, mentions] = await Promise.all([
-    supabase.from("assignments").select("id, position_id, kind, grade_code, acting, started_on, ended_on, note").eq("member_id", memberId),
-    supabase.from("positions").select("id, unit_id, title"),
+  const [assignments, notes, units, gradeLines, statusLines, grades, ranks, returns, eventTypes, awards, qualifications, mentions] = await Promise.all([
+    supabase.from("assignments").select("id, position_id, kind, grade_code, acting, started_on, ended_on").eq("member_id", memberId),
+    // What command wrote on each appointment. The database sends these to staff and to nobody else.
+    supabase.from("assignment_notes").select("assignment_id, note").eq("member_id", memberId),
     supabase.from("units").select("id, name"),
     supabase.from("assignment_grades").select("id, assignment_id, grade_code, acting, since").eq("member_id", memberId),
     supabase.from("member_status_changes").select("id, status, changed_on").eq("member_id", memberId),
@@ -58,10 +61,20 @@ export async function getServiceRecord(memberId: string, service: Service | null
     supabase.from("qualifications").select("id, name"),
     supabase.from("event_mentions").select("event_id, citation, mentioned_at").eq("member_id", memberId),
   ]);
-  for (const result of [assignments, positions, units, gradeLines, statusLines, grades, ranks, returns, eventTypes, awards, qualifications, mentions]) {
+  for (const result of [assignments, notes, units, gradeLines, statusLines, grades, ranks, returns, eventTypes, awards, qualifications, mentions]) {
     if (result.error) throw new Error(`The record could not be read: ${result.error.message}`);
   }
   const rows = (result: { data: unknown }) => (result.data ?? []) as Row[];
+  /** Rows by id, asked for a hundred at a time, so a long record never makes an address too long to send. */
+  const byIds = async (table: string, columns: string, ids: string[]) => {
+    const found: Row[] = [];
+    for (let start = 0; start < ids.length; start += 100) {
+      const part = await supabase.from(table).select(columns).in("id", ids.slice(start, start + 100));
+      if (part.error) throw new Error(`The record could not be read: ${part.error.message}`);
+      found.push(...((part.data ?? []) as unknown as Row[]));
+    }
+    return found;
+  };
 
   const returnRows = rows(returns) as { event_id: string; returned: Returned }[];
   const awardRows = rows(awards) as { qualification_id: string; awarded_on: string; event_id: string | null }[];
@@ -71,18 +84,22 @@ export async function getServiceRecord(memberId: string, service: Service | null
   const eventIds = [
     ...new Set([...returnRows.map((row) => row.event_id), ...awardRows.map((row) => row.event_id), ...mentionRows.map((row) => row.event_id)].filter((id): id is string => Boolean(id))),
   ];
-  const events = eventIds.length > 0 ? await supabase.from("events").select("id, title, starts_at, kind").in("id", eventIds) : { data: [], error: null };
-  if (events.error) throw new Error(`The record could not be read: ${events.error.message}`);
-  const eventOf = new Map((rows(events) as { id: string; title: string; starts_at: string; kind: string }[]).map((event) => [event.id, event]));
+  const assignmentRows = rows(assignments) as { id: string; position_id: string; kind: "primary" | "duty"; grade_code: string | null; acting: boolean; started_on: string; ended_on: string | null }[];
+  const [events, positions] = await Promise.all([
+    byIds("events", "id, title, starts_at, kind", eventIds),
+    byIds("positions", "id, unit_id, title", [...new Set(assignmentRows.map((row) => row.position_id))]),
+  ]);
+  const eventOf = new Map((events as { id: string; title: string; starts_at: string; kind: string }[]).map((event) => [event.id, event]));
   const typeName = new Map((rows(eventTypes) as { key: string; name: string }[]).map((type) => [type.key, type.name]));
 
   const unitName = new Map((rows(units) as { id: string; name: string }[]).map((unit) => [unit.id, unit.name]));
-  const positionOf = new Map((rows(positions) as { id: string; unit_id: string; title: string }[]).map((position) => [position.id, position]));
+  const positionOf = new Map((positions as { id: string; unit_id: string; title: string }[]).map((position) => [position.id, position]));
+  const noteOf = new Map((rows(notes) as { assignment_id: string; note: string }[]).map((entry) => [entry.assignment_id, entry.note]));
   const qualificationName = new Map((rows(qualifications) as { id: string; name: string }[]).map((entry) => [entry.id, entry.name]));
 
   return {
     readAt: Date.now(),
-    posts: (rows(assignments) as { id: string; position_id: string; kind: "primary" | "duty"; grade_code: string | null; acting: boolean; started_on: string; ended_on: string | null; note: string }[]).map((row) => {
+    posts: assignmentRows.map((row) => {
       const position = positionOf.get(row.position_id);
       return {
         id: row.id,
@@ -93,7 +110,7 @@ export async function getServiceRecord(memberId: string, service: Service | null
         gradeCode: row.grade_code,
         startedOn: row.started_on,
         endedOn: row.ended_on,
-        note: row.note ?? "",
+        note: noteOf.get(row.id) ?? "",
       };
     }),
     gradeLines: (rows(gradeLines) as { id: number; assignment_id: string; grade_code: string; acting: boolean; since: string }[]).map((row) => ({

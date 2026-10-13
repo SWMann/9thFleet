@@ -137,14 +137,17 @@ staff, command and admins.
 - **The rules are in `lib/record.ts`,** which reads nothing and is tested on its own by `npm test`.
   `lib/service-record.ts` reads the rows and `components/record/ServiceRecord.tsx` lays them out,
   the same for the member and for staff.
-- **Time at a rank carries across posts.** A move to another post at the same grade within 30 days
-  does not start the count again, because the database keeps a grade for 30 days. An acting grade
-  and the same grade held outright are counted apart.
+- **Time at a rank carries across posts.** A move to another post at the same grade, fewer than 30
+  days after leaving the last, does not start the count again, because the database keeps a grade
+  that long. An acting grade is not kept between posts, and it and the same grade held outright are
+  counted apart.
 - **The database decides who reads it.** A member is sent their own lines and staff are sent
-  anyone's. A page that asked for someone else's would get an empty record.
-- **What command wrote on an appointment** is shown to staff. It is left off the member's own page,
-  but it is not secret from them: the database would send a member the note on their own
-  appointment if a page asked for it.
+  anyone's. A page that asked for someone else's would be sent none of their history: no post that
+  was left, no day a status or grade changed, and no attendance.
+- **What command wrote on an appointment** is shown to staff, and the database sends it to nobody
+  else, the member included. It is read from `assignment_notes`, not from the appointment.
+- **Lines are taken in the order the database wrote them,** whatever day each is dated, and no
+  change is shown before the one it followed or outside the days its post was held.
 
 ## Editors
 

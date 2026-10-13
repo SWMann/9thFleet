@@ -13,7 +13,7 @@ const appoint = (actor, memberId, positionId, extra = {}) => {
   const row = { member_id: memberId, position_id: positionId, kind: "primary", ...extra };
   const columns = Object.keys(row);
   return fleet.as(actor).one(
-    `insert into public.assignments (${columns.join(", ")}) values (${columns.map((_, index) => `$${index + 1}`).join(", ")}) returning *`,
+    `insert into public.assignments (${columns.join(", ")}) values (${columns.map((_, index) => `$${index + 1}`).join(", ")}) returning id, member_id, position_id, kind, grade_code, acting, started_on, ended_on, appointed_by, recorded_at`,
     Object.values(row),
   );
 };

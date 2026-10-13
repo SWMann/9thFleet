@@ -8,7 +8,7 @@ import {
   gradePeriods,
   gradeSince,
   latestFirst,
-  lengthOf,
+  lengthBetween,
   statusLabel,
   statusSteps,
   type EventLine,
@@ -46,16 +46,24 @@ test("days are counted between two days, and never below nothing", () => {
 });
 
 test("a length of time is given in the largest unit that fits", () => {
-  assert.equal(lengthOf(0), "Under a day");
-  assert.equal(lengthOf(1), "1 day");
-  assert.equal(lengthOf(13), "13 days");
-  assert.equal(lengthOf(14), "2 weeks");
-  assert.equal(lengthOf(69), "9 weeks");
-  assert.equal(lengthOf(70), "2 months");
-  assert.equal(lengthOf(364), "11 months");
-  assert.equal(lengthOf(366), "1 year");
-  assert.equal(lengthOf(440), "1 year 2 months");
-  assert.equal(lengthOf(800), "2 years 2 months");
+  assert.equal(lengthBetween("2026-10-13", "2026-10-13"), "Under a day");
+  assert.equal(lengthBetween("2026-10-12", "2026-10-13"), "1 day");
+  assert.equal(lengthBetween("2026-09-30", "2026-10-13"), "13 days");
+  assert.equal(lengthBetween("2026-09-29", "2026-10-13"), "2 weeks");
+  assert.equal(lengthBetween("2026-08-05", "2026-10-13"), "9 weeks");
+  assert.equal(lengthBetween("2026-08-04", "2026-10-13"), "2 months");
+});
+
+test("months and years are counted on the calendar, so a year to the day is a year", () => {
+  assert.equal(lengthBetween("2026-01-01", "2026-04-01"), "3 months");
+  assert.equal(lengthBetween("2026-01-13", "2026-07-13"), "6 months");
+  assert.equal(lengthBetween("2026-01-13", "2026-07-12"), "5 months");
+  assert.equal(lengthBetween("2025-10-14", "2026-10-13"), "11 months");
+  assert.equal(lengthBetween("2025-10-13", "2026-10-13"), "1 year");
+  assert.equal(lengthBetween("2024-10-13", "2026-10-13"), "2 years");
+  assert.equal(lengthBetween("2025-08-10", "2026-10-13"), "1 year 2 months");
+  // Leaving on the last day of a shorter month does not lose the month before it.
+  assert.equal(lengthBetween("2026-01-31", "2026-04-30"), "2 months");
 });
 
 test("posts are listed latest first, and the one held now is found", () => {
@@ -90,19 +98,63 @@ test("a post with no line of its own is taken at the grade it holds", () => {
   assert.deepEqual(gradePeriods([post("d", "2026-01-10", null, { kind: "duty", gradeCode: null })], []), []);
 });
 
+test("a line dated out of step is taken in the order it was written", () => {
+  // The second line was written later and dated a day earlier. The grade held now is the later line's.
+  const posts = [post("a", "2026-10-01", null, { gradeCode: "E3" })];
+  const lines = [line("a", "E2", "2026-10-01"), line("a", "E2", "2026-10-14", true), line("a", "E3", "2026-10-13")];
+  const periods = gradePeriods(posts, lines);
+  assert.deepEqual(periods.map((period) => [period.gradeCode, period.acting, period.from, period.to]), [
+    ["E2", false, "2026-10-01", "2026-10-14"],
+    ["E2", true, "2026-10-14", "2026-10-14"],
+    ["E3", false, "2026-10-14", null],
+  ]);
+  assert.deepEqual(gradeSince(periods), { gradeCode: "E3", acting: false, since: "2026-10-14" });
+  assert.deepEqual(gradeChanges(posts, lines, order).map((change) => [change.on, change.kind, change.gradeCode]), [
+    ["2026-10-14", "made-acting", "E2"],
+    ["2026-10-14", "promoted", "E3"],
+  ]);
+});
+
+test("a line dated after its post was left is kept inside the post", () => {
+  const posts = [post("a", "2026-01-10", "2026-04-01", { gradeCode: "E3" }), post("b", "2026-04-05", null, { gradeCode: "E3" })];
+  const lines = [line("a", "E2", "2026-01-10"), line("a", "E3", "2026-10-13"), line("b", "E3", "2026-04-05")];
+  const periods = gradePeriods(posts, lines);
+  assert.deepEqual(periods[1], { assignmentId: "a", gradeCode: "E3", acting: false, from: "2026-04-01", to: "2026-04-01" });
+  // The rank held now is counted from the post held now, not from the day history was put right.
+  assert.equal(gradeSince(periods)?.since, "2026-04-01");
+  assert.deepEqual(gradeChanges(posts, lines, order).map((change) => change.on), ["2026-04-01"]);
+});
+
+test("two posts taken up on one day are taken in the order they were held", () => {
+  // Moved the same day: the post that was left comes first, whichever id sorts first.
+  for (const [left, held] of [["a", "b"], ["z", "b"]]) {
+    const posts = [post(held, "2026-03-02", null, { gradeCode: "E3" }), post(left, "2026-03-02", "2026-03-02", { gradeCode: "E3" }), post("0", "2026-01-01", "2026-03-02", { gradeCode: "E3" })];
+    const lines = [line("0", "E3", "2026-01-01"), line(left, "E3", "2026-03-02"), line(held, "E3", "2026-03-02")];
+    assert.equal(gradeSince(gradePeriods(posts, lines))?.since, "2026-01-01", `${left} then ${held}`);
+    assert.deepEqual(latestFirst(posts).map((entry) => entry.id), [held, left, "0"]);
+  }
+});
+
 test("time at a grade carries across a move to another post at the same grade", () => {
   const posts = [post("a", "2026-01-10", "2026-04-01"), post("b", "2026-04-20", null, { gradeCode: "E3" })];
   const lines = [line("a", "E2", "2026-01-10"), line("a", "E3", "2026-02-20"), line("b", "E3", "2026-04-20")];
   assert.deepEqual(gradeSince(gradePeriods(posts, lines)), { gradeCode: "E3", acting: false, since: "2026-02-20" });
 });
 
-test("more than 30 days out of a post starts the count again", () => {
-  const posts = [post("a", "2026-01-10", "2026-04-01", { gradeCode: "E3" }), post("b", "2026-05-02", null, { gradeCode: "E3" })];
-  const lines = [line("a", "E3", "2026-01-10"), line("b", "E3", "2026-05-02")];
-  assert.deepEqual(gradeSince(gradePeriods(posts, lines)), { gradeCode: "E3", acting: false, since: "2026-05-02" });
-  // Thirty days exactly still carries.
-  const close = [post("a", "2026-01-10", "2026-04-01", { gradeCode: "E3" }), post("b", "2026-05-01", null, { gradeCode: "E3" })];
-  assert.equal(gradeSince(gradePeriods(close, [line("a", "E3", "2026-01-10"), line("b", "E3", "2026-05-01")]))?.since, "2026-01-10");
+test("thirty days out of a post starts the count again, as the database stops keeping the grade", () => {
+  const sinceWhen = (taken: string) => {
+    const posts = [post("a", "2026-01-10", "2026-04-01", { gradeCode: "E3" }), post("b", taken, null, { gradeCode: "E3" })];
+    return gradeSince(gradePeriods(posts, [line("a", "E3", "2026-01-10"), line("b", "E3", taken)]))?.since;
+  };
+  assert.equal(sinceWhen("2026-05-02"), "2026-05-02", "31 days");
+  assert.equal(sinceWhen("2026-05-01"), "2026-05-01", "30 days");
+  assert.equal(sinceWhen("2026-04-30"), "2026-01-10", "29 days");
+});
+
+test("an acting grade is not kept between posts", () => {
+  const posts = [post("a", "2026-01-10", "2026-04-01", { gradeCode: "O2", acting: true }), post("b", "2026-04-03", null, { gradeCode: "O2", acting: true })];
+  const lines = [line("a", "O2", "2026-01-10", true), line("b", "O2", "2026-04-03", true)];
+  assert.deepEqual(gradeSince(gradePeriods(posts, lines)), { gradeCode: "O2", acting: true, since: "2026-04-03" });
 });
 
 test("an acting grade and the same grade held outright are counted apart", () => {
@@ -138,6 +190,12 @@ test("each change of grade in a post is named for what it was", () => {
   assert.deepEqual(gradeChanges(posts, [line("a", "E2", "2026-01-10")], order), []);
 });
 
+test("a promotion to an acting grade says that the new grade is acting", () => {
+  const posts = [post("a", "2026-01-10", null, { gradeCode: "E4", acting: true })];
+  const changes = gradeChanges(posts, [line("a", "E3", "2026-01-10"), line("a", "E4", "2026-02-01", true)], order);
+  assert.deepEqual(changes.map((change) => [change.kind, change.gradeCode, change.acting]), [["promoted", "E4", true]]);
+});
+
 test("each change of status says what it was and how long the last one lasted", () => {
   const steps = statusSteps([
     { id: 3, status: "auxiliary", changedOn: "2026-02-01" },
@@ -157,15 +215,39 @@ test("each change of status says what it was and how long the last one lasted", 
     "Back from reserve: full member",
     "Discharged",
   ]);
-  assert.deepEqual(steps.map((step) => step.daysBefore), [null, 9, 22, 7, 113, 19, 73]);
+  assert.deepEqual(steps.map((step) => step.beforeSince), [null, "2026-01-01", "2026-01-10", "2026-02-01", "2026-02-08", "2026-06-01", "2026-06-20"]);
 });
 
-test("two changes on one day stay in the order they were made", () => {
-  const steps = statusSteps([
+test("changes of status stay in the order they were made, whatever day each is dated", () => {
+  const sameDay = statusSteps([
     { id: 2, status: "member", changedOn: "2026-01-01" },
     { id: 1, status: "applicant", changedOn: "2026-01-01" },
   ]);
-  assert.deepEqual(steps.map((step) => step.status), ["applicant", "member"]);
+  assert.deepEqual(sameDay.map((step) => step.status), ["applicant", "member"]);
+  // Written second and dated a day earlier: it still comes second, and is not shown before the first.
+  const outOfStep = statusSteps([
+    { id: 1, status: "applicant", changedOn: "2026-01-02" },
+    { id: 2, status: "recruit", changedOn: "2026-01-01" },
+  ]);
+  assert.deepEqual(outOfStep.map((step) => [step.status, step.on]), [["applicant", "2026-01-02"], ["recruit", "2026-01-02"]]);
+});
+
+test("a step back, a return and a reinstatement are each named for what they are", () => {
+  const label = (before: Parameters<typeof statusLabel>[0]["before"], status: Parameters<typeof statusLabel>[0]["status"]) =>
+    statusLabel({ id: 1, on: "2026-01-01", status, before, beforeSince: before ? "2026-01-01" : null });
+  assert.equal(label("member", "auxiliary"), "Moved back to auxiliary");
+  assert.equal(label("member", "recruit"), "Moved back to recruit");
+  assert.equal(label("auxiliary", "recruit"), "Moved back to recruit");
+  assert.equal(label("recruit", "applicant"), "Sent back to applicant");
+  assert.equal(label("reserve", "auxiliary"), "Back from reserve: auxiliary");
+  assert.equal(label("discharged", "recruit"), "Reinstated: recruit");
+  assert.equal(label("discharged", "member"), "Reinstated: full member");
+  assert.equal(label("discharged", "reserve"), "Reinstated, to reserve");
+  // The founder is made a full member as they sign in, and staff may skip a step.
+  assert.equal(label("applicant", "member"), "Full member");
+  assert.equal(label("applicant", "auxiliary"), "Auxiliary");
+  assert.equal(label("member", "discharged"), "Discharged");
+  assert.equal(label("member", "reserve"), "Moved to reserve");
 });
 
 test("activity counts the events a member was returned present at", () => {

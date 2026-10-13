@@ -71,10 +71,18 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   with the appointment.
 - **Signing in creates an applicant.** Accepting their application makes them a recruit.
 - **A member's history is their service record.** The database writes down the day a member's
-  status changes, and the day their grade changes while they hold a position, which is a
-  promotion. Nobody writes or changes those lines through the API. A member reads their own
-  history: the positions they have left, those days, and their attendance. Staff read anyone's.
-  Everyone else serving reads only who holds a position now.
+  status changes, and the day their grade changes while they hold a position: a promotion, a
+  reduction, or an acting grade given or confirmed. The days are days in UTC. Nobody writes or
+  changes those lines through the API. A member reads their own history: the positions they have
+  left, those days, and their attendance. Staff read anyone's. Everyone else serving reads only who
+  holds a position now.
+- **A grade put right after a position was left is a correction.** Only the database's owner can
+  change a position that has ended. Doing so changes its last line and adds none, so the record
+  does not show a promotion made today.
+- **A note on a member is for staff.** What command writes on an appointment is kept on the
+  appointment, where the API cannot read it, and copied to its own table, which only staff are
+  sent. What an instructor writes on an award is kept and sent to nobody. A page that asks for
+  every column of an appointment or an award is refused, so name the columns.
 - **Nobody decides anything about themselves:** not their application, their qualification, their
   appointment, their promotion or their status. The admin is the one exception, so the fleet can
   start.
@@ -184,7 +192,7 @@ tables and Supabase's own default privileges. It is only for the tests.
 
 The migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
 database is compared with the tested copy after each one is applied: its functions, rules, columns,
-grants, triggers, constraints and views. It matched after the latest, `service_record`.
+grants, triggers, constraints and views. It matched after the latest, `record_notes`.
 
 Each file name starts with the version number Supabase recorded when it was applied, so this folder
 and the database's own migration history agree.
