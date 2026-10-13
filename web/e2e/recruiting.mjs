@@ -77,6 +77,19 @@ try {
   const { context, page, pageErrors, shot, headingIs } = opened;
   /** What a field with formatting holds, as its words. It is an editor, not a plain field, so it is read as the page reads. */
   const wordsIn = async (field) => (await field.innerText()).trim();
+  /**
+   * Empty a field with formatting: select everything in it, then delete. When a form is refused the editor takes the
+   * cursor back, and for a moment after that it puts a selection back as it was. A selection made in that moment
+   * deletes nothing, so look whether the field is empty and go again if it is not.
+   */
+  const emptyField = async (field) => {
+    for (let tries = 0; tries < 20; tries += 1) {
+      await field.fill("");
+      if ((await wordsIn(field)) === "") return;
+      await page.waitForTimeout(100);
+    }
+    assert.fail(`The field could not be emptied. It holds: ${(await wordsIn(field)).slice(0, 80)}`);
+  };
   /** Type lines into a field with formatting, with a line break between them: Shift and Enter, as its writer would. */
   const typeLines = async (field, lines) => {
     // The plain field comes first and the editor takes its place a moment later. Wait for the editor.
@@ -2953,7 +2966,7 @@ try {
     assert.equal(await amendments(), 0);
 
     // A unit is named the same way as a member.
-    await field.fill("");
+    await emptyField(field);
     await field.click();
     // The bar's own button opens the same list as typing @.
     await page.locator(".rich-editor", { has: page.getByLabel("Issue an amendment") }).getByRole("button", { name: "Name a member, unit or post" }).click();
@@ -2982,7 +2995,7 @@ try {
     const gunner = await openRecord("Gunner");
     const summary = editorOf("Summary", gunner);
     await summary.waitFor();
-    await summary.fill("");
+    await emptyField(summary);
     await summary.click();
     // Formatting typed the Markdown way is formatted as it is typed.
     await page.keyboard.type("Mans a turret and **keeps it firing**.");
