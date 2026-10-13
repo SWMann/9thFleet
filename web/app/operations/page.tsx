@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { Icon, type IconName } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { getOperations, type Summary } from "@/lib/operations";
+import { getWaitingReports } from "@/lib/piracy";
 import { cycle, formatWhen, stateNames, weaponsName } from "@/lib/operations-form";
 
 export const metadata: Metadata = {
@@ -47,9 +48,19 @@ async function Operations() {
   }
 
   const { coming, drafts, past, mayCreate } = result;
+  // Nobody is sent a message when a piracy report arrives. Command is told here, where it works.
+  const reports = await getWaitingReports();
   return (
     <>
       <Head lead="Training and operation nights: the orders, who is attending, and what was learned.">
+        {reports.waiting > 0 ? (
+          <p className="notice">
+            <Link href="/admin/piracy">
+              {reports.waiting} piracy {reports.waiting === 1 ? "report waits" : "reports wait"} for command
+              {reports.now > 0 ? `, ${reports.now} marked as happening now` : ""}
+            </Link>
+          </p>
+        ) : null}
         <p className="actions">
           {mayCreate.length > 0 ? (
             <Link className="button" href="/operations/new">

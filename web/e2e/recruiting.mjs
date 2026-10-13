@@ -77,6 +77,19 @@ try {
   const { context, page, pageErrors, shot, headingIs } = opened;
   /** What a field with formatting holds, as its words. It is an editor, not a plain field, so it is read as the page reads. */
   const wordsIn = async (field) => (await field.innerText()).trim();
+  /**
+   * Empty a field with formatting: select everything in it, then delete. When a form is refused the editor takes the
+   * cursor back, and for a moment after that it puts a selection back as it was. A selection made in that moment
+   * deletes nothing, so look whether the field is empty and go again if it is not.
+   */
+  const emptyField = async (field) => {
+    for (let tries = 0; tries < 20; tries += 1) {
+      await field.fill("");
+      if ((await wordsIn(field)) === "") return;
+      await page.waitForTimeout(100);
+    }
+    assert.fail(`The field could not be emptied. It holds: ${(await wordsIn(field)).slice(0, 80)}`);
+  };
   /** Type lines into a field with formatting, with a line break between them: Shift and Enter, as its writer would. */
   const typeLines = async (field, lines) => {
     // The plain field comes first and the editor takes its place a moment later. Wait for the editor.
@@ -799,7 +812,7 @@ try {
   });
 
   console.log("Admin");
-  const adminPages = ["/admin", "/admin/people", "/admin/recruiting", "/admin/operations"];
+  const adminPages = ["/admin", "/admin/people", "/admin/recruiting", "/admin/operations", "/admin/piracy"];
   // A page left by a link stays in the document, hidden, so every one of these looks only at what is shown.
   const adminTabs = async () =>
     (await page.locator('nav[aria-label="Fleet admin"]:visible a').allInnerTexts()).map((label) => label.trim());
@@ -946,7 +959,7 @@ try {
     assert.ok((await menuLabels()).includes("Fleet admin"), "the menu does not offer the admin pages");
     await page.goto(`${site}/admin`);
     await leadIs(/Stage 1: Cadre\. 3 active/);
-    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations"]);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports"]);
     assert.equal(await stat("Events in 30 days"), "1 0 coming up");
     assert.match(await stat("Average turnout"), /^67% /);
 
@@ -1009,7 +1022,7 @@ try {
     await signInAs(founder);
     await page.goto(`${site}/admin`);
     await leadIs(/Stage 1: Cadre/);
-    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Structure", "Logs"]);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports", "Structure", "Logs"]);
     await adminTab("Logs").click();
     await headingIs("Logs");
     await page.locator(".log:visible").first().waitFor();
@@ -2953,7 +2966,7 @@ try {
     assert.equal(await amendments(), 0);
 
     // A unit is named the same way as a member.
-    await field.fill("");
+    await emptyField(field);
     await field.click();
     // The bar's own button opens the same list as typing @.
     await page.locator(".rich-editor", { has: page.getByLabel("Issue an amendment") }).getByRole("button", { name: "Name a member, unit or post" }).click();
@@ -2963,7 +2976,12 @@ try {
     await page.keyboard.press("Enter");
     await page.keyboard.type("holds until 2015Z.");
     await form.getByRole("button", { name: "Issue the amendment" }).click();
-    for (let tries = 0; tries < 80 && (await amendments()) === 0; tries += 1) await page.waitForTimeout(100);
+    // As long as any other step is given. If it does not arrive, say what the form is showing, which is the reason.
+    for (let tries = 0; tries < 300 && (await amendments()) === 0; tries += 1) await page.waitForTimeout(100);
+    if ((await amendments()) === 0) {
+      const showing = (await page.locator("form:visible", { has: page.getByRole("button", { name: "Issue the amendment" }) }).innerText()).replace(/\s+/g, " ");
+      assert.fail(`The amendment was not issued. Its form shows: ${showing.slice(-400)}`);
+    }
     assert.equal(await amendments(), 1);
     const ship = await one("select id from public.units where name = 'Training Ship'");
     await tab("Orders");
@@ -2977,7 +2995,7 @@ try {
     const gunner = await openRecord("Gunner");
     const summary = editorOf("Summary", gunner);
     await summary.waitFor();
-    await summary.fill("");
+    await emptyField(summary);
     await summary.click();
     // Formatting typed the Markdown way is formatted as it is typed.
     await page.keyboard.type("Mans a turret and **keeps it firing**.");
@@ -3466,6 +3484,342 @@ try {
     await page.locator(".log-refused:visible").first().waitFor();
     const refusals = (await page.locator(".log-line:visible").allInnerTexts()).map((line) => line.replace(/\s+/g, " "));
     assert.ok(refusals.some((line) => /Rae Okoye was refused: tried to put a name forward for the hostile list\..*serves in this fleet/.test(line)), refusals.slice(0, 5).join("\n"));
+  });
+
+  console.log("The piracy report line");
+  const piracyForm = () => page.locator(".report-form:visible form");
+  const piracyRow = (handle) =>
+    one("select *, happened_on::text as day from public.piracy_reports where reporter_handle = $1 order by received_at desc limit 1", [handle]);
+  const piracyCount = async () => (await one("select count(*)::int as n from public.piracy_reports")).n;
+  // One report on command's page, by the handle of whoever sent it.
+  const piracyCard = (handle) => page.locator(".hostile:visible", { has: page.locator(".hostile-head .hostile-handle", { hasText: new RegExp(`^${handle}$`) }) });
+  const piracyText = async (handle) => (await piracyCard(handle).innerText()).replace(/\s+/g, " ").trim();
+  const openPiracy = async () => {
+    await page.goto(`${site}/admin/piracy`);
+    await headingIs("Piracy reports");
+  };
+  const fillPiracy = async ({ now = false, handle, where, day = "", who = "I do not know", suspect = "", details, evidence = "" }) => {
+    const form = piracyForm();
+    await form.getByLabel("It is happening now").setChecked(now);
+    await form.getByLabel("Your handle in the game").fill(handle);
+    await form.getByLabel("Where it happened").fill(where);
+    await form.getByLabel("The day it happened").fill(day);
+    await form.getByRole("radio", { name: who, exact: true }).check();
+    await form.getByLabel("Their handle or organisation ID").fill(suspect);
+    await form.getByLabel("What they did").fill(details);
+    await form.getByLabel("Where to see it").fill(evidence);
+    await form.getByRole("button", { name: "Send the report" }).click();
+  };
+  // Open one of a report's confirmations, say what came of it if asked, and confirm.
+  const actOn = async (handle, summary, button, note) => {
+    await piracyCard(handle).locator("summary", { hasText: new RegExp(`^${summary}$`) }).click();
+    const open = piracyCard(handle).locator("details[open]");
+    if (note) await open.locator('input[name="note"]').fill(note);
+    await open.getByRole("button", { name: button }).click();
+  };
+  const minerSaid = "Two ships jumped my Prospector while it was mining.\n<b>They</b> said [pay up](https://evil.example/pay) or burn.";
+
+  await check("anyone is offered the report line, and told plainly that it is not an emergency line", async () => {
+    await context.clearCookies();
+    assert.ok((await menuLabels()).includes("Report piracy"), "the menu offers it to a visitor");
+    await page.goto(`${site}/`);
+    await page.locator("footer").getByRole("link", { name: "Report piracy" }).click();
+    await headingIs("Report piracy");
+    assert.equal(new URL(page.url()).pathname, "/piracy");
+    await page.locator(".notice:visible", { hasText: "This is not an emergency line. Help is not guaranteed" }).waitFor();
+    const facts = (await page.locator("dl.facts:visible").innerText()).replace(/\s+/g, " ");
+    assert.match(facts, /Nobody is sent a message when a report arrives/);
+    assert.match(facts, /Fleet command and nobody else/);
+    assert.match(facts, /after 12 months nobody can read it/);
+    assert.match(facts, /says so when it is full/);
+    await shot("piracy-report-form");
+  });
+  await check("a report with something wrong in it is handed back as it was typed, and nothing is sent", async () => {
+    const mine = { handle: "Lost_Miner", where: "Stanton, the ring at Yela", details: "Two ships jumped my Prospector while it was mining." };
+    await fillPiracy({ ...mine, who: "An organisation" });
+    await page.locator(".form-result-bad:visible", { hasText: "Give their handle or organisation ID, or choose that you do not know who it was." }).waitFor();
+    assert.equal(await piracyForm().getByLabel("Your handle in the game").inputValue(), "Lost_Miner");
+    assert.equal(await piracyForm().getByRole("radio", { name: "An organisation", exact: true }).isChecked(), true);
+    assert.equal(await piracyForm().getByLabel("What they did").inputValue(), mine.details);
+
+    await fillPiracy({ ...mine, who: "An organisation", suspect: "BLACKSUN", evidence: "javascript:alert(1)" });
+    await page.locator(".form-result-bad:visible", { hasText: "Give each piece of evidence as a web address starting https://" }).waitFor();
+    assert.equal(await piracyCount(), 0);
+  });
+  await check("a visitor reports something happening now, is told what to expect, and nothing about them is kept", async () => {
+    await fillPiracy({
+      now: true,
+      handle: "Lost_Miner",
+      where: "Stanton, the ring at Yela",
+      who: "An organisation",
+      suspect: "BLACKSUN",
+      details: minerSaid,
+      evidence: "https://example.com/clips/prospector",
+    });
+    await page.locator(".form-result:visible", { hasText: "Report received. Command sees it the next time one of them opens the fleet's pages on this site. Help is not guaranteed." }).waitFor();
+    const row = await piracyRow("Lost_Miner");
+    assert.equal(row.state, "new");
+    assert.equal(row.urgent, true);
+    assert.equal(row.location, "Stanton, the ring at Yela");
+    assert.equal(row.suspect_kind, "organisation");
+    assert.equal(row.suspect_handle, "BLACKSUN");
+    assert.equal(row.details, minerSaid);
+    assert.equal(row.evidence, "https://example.com/clips/prospector");
+    assert.equal(row.day, new Date().toISOString().slice(0, 10));
+    assert.equal(row.handled_by, null);
+    // The mark that came with it was counted and thrown away.
+    assert.equal(row.sender, null);
+    const marks = await supabase.sql("select mark, reports from app.piracy_senders");
+    assert.equal(marks.length, 1);
+    assert.match(marks[0].mark, /^[a-f0-9]{4}$/);
+    assert.equal(marks[0].reports, 1);
+    // The form is empty again.
+    assert.equal(await piracyForm().getByLabel("Your handle in the game").inputValue(), "");
+  });
+  await check("a robot that fills in the field no person sees is told the report went, and nothing is kept", async () => {
+    const trap = piracyForm().locator('input[name="fleet_check"]');
+    assert.equal(await trap.getAttribute("tabindex"), "-1");
+    assert.equal(await piracyForm().locator(".trap").getAttribute("aria-hidden"), "true");
+    await trap.evaluate((field) => {
+      field.value = "https://spam.example";
+    });
+    await fillPiracy({ handle: "Spam_Bot", where: "Everywhere", details: "Buy cheap credits at the best prices today." });
+    await page.locator(".form-result:visible", { hasText: "Report received." }).waitFor();
+    assert.equal(await piracyCount(), 1);
+    assert.equal(await piracyRow("Spam_Bot"), undefined);
+  });
+  await check("a report is for command: a member and staff are shown nothing of it", async () => {
+    const { id } = await piracyRow("Lost_Miner");
+    await signInAs(rae);
+    await page.goto(`${site}/admin/piracy`);
+    await leadIs(/The admin pages are for the people who run the fleet/);
+    assert.equal(await page.locator(".hostile:visible").count(), 0);
+    // The address command starts an entry from fills in nothing for anyone else.
+    await page.goto(`${site}/hostiles?tab=forward&report=${id}`);
+    await headingIs("Hostile list");
+    const form = page.locator("form.hostile-form:visible");
+    await form.waitFor();
+    assert.equal(await form.getByLabel("Handle or organisation ID").inputValue(), "");
+    assert.equal(await form.locator('input[name="report"]').count(), 0);
+    assert.equal(await page.getByText(/Filled in from the piracy report/).count(), 0);
+
+    await signInAs(kit);
+    await page.goto(`${site}/admin/piracy`);
+    await leadIs(/This page is for command\./);
+    assert.equal(await page.locator(".hostile:visible").count(), 0);
+    assert.ok(!(await adminTabs()).includes("Piracy reports"));
+  });
+  await check("command is told a report is waiting, and reads it as the plain words it is", async () => {
+    await signInAs(jo);
+    await page.goto(`${site}/admin`);
+    const told = page.locator(".attention:visible li", { hasText: "1 piracy report waits for command, 1 marked as happening now" });
+    assert.equal(await told.getByRole("link").getAttribute("href"), "/admin/piracy");
+    await told.getByRole("link").click();
+    await headingIs("Piracy reports");
+    await leadIs(/1 report waits for command, 1 marked as happening now\./);
+    assert.ok((await adminTabs()).includes("Piracy reports"));
+    // Nobody is sent a message, so command is also told where it works. Nobody else is.
+    await page.goto(`${site}/operations`);
+    const flagged = page.locator(".page-head .notice:visible a", { hasText: "1 piracy report waits for command, 1 marked as happening now" });
+    assert.equal(await flagged.getAttribute("href"), "/admin/piracy");
+    await signInAs(rae);
+    await page.goto(`${site}/operations`);
+    await headingIs("Operations");
+    assert.equal(await page.locator(".page-head .notice:visible").count(), 0);
+    await signInAs(jo);
+    await openPiracy();
+
+    const text = await piracyText("Lost_Miner");
+    assert.match(text, /Stanton, the ring at Yela/);
+    assert.match(text, /Marked as happening now/i);
+    assert.match(text, /Names Organisation BLACKSUN/i);
+    // A stranger's words are shown as they were typed: nothing in them is markup or a link.
+    const words = piracyCard("Lost_Miner").locator(".report-words");
+    assert.equal(await words.innerText(), minerSaid);
+    assert.equal(await words.locator("a, b").count(), 0);
+    const links = piracyCard("Lost_Miner").locator(".hostile-evidence a");
+    assert.deepEqual(await links.evaluateAll((list) => list.map((link) => [link.getAttribute("href"), link.rel, link.target, link.textContent.trim()])), [
+      ["https://example.com/clips/prospector", "noopener noreferrer nofollow", "_blank", "example.com/clips/prospector"],
+    ]);
+    await shot("piracy-reports-command");
+  });
+  await check("command starts a hostile-list entry from a report, filled in without the sender's name, and the two are linked", async () => {
+    const { id } = await piracyRow("Lost_Miner");
+    await piracyCard("Lost_Miner").getByRole("link", { name: "Start a hostile-list entry" }).click();
+    await headingIs("Hostile list");
+    assert.equal(new URL(page.url()).searchParams.get("report"), id);
+    const form = page.locator("form.hostile-form:visible");
+    await form.locator(".notice", { hasText: "Filled in from the piracy report sent by Lost_Miner." }).waitFor();
+    assert.equal(await form.getByRole("radio", { name: "Organisation", exact: true }).isChecked(), true);
+    assert.equal(await form.getByLabel("Handle or organisation ID").inputValue(), "BLACKSUN");
+    const reason = await wordsIn(form.getByLabel("What happened"));
+    assert.match(reason, /Two ships jumped my Prospector while it was mining\./);
+    assert.match(reason, /<b>They<\/b> said \[pay up\]\(https:\/\/evil\.example\/pay\) or burn\./);
+    assert.match(reason, /From a report to the fleet's piracy line\. Where: Stanton, the ring at Yela\./);
+    // The list is read by the whole fleet, so who sent the report is left for command to add or not.
+    assert.doesNotMatch(reason, /Lost_Miner/);
+    assert.equal(await form.getByLabel("Evidence").inputValue(), "https://example.com/clips/prospector");
+
+    await form.getByLabel(/List it now/).check();
+    await form.getByRole("button", { name: "Put it forward" }).click();
+    await page.locator(".form-result:visible", { hasText: "BLACKSUN is on the list." }).waitFor();
+    const entry = await hostileRow("BLACKSUN");
+    assert.equal(entry.state, "listed");
+    assert.equal(entry.report_id, id);
+
+    // On the list the stranger's words are still only words, and command is shown where the entry came from.
+    await hostileTab("Hostile");
+    assert.match(await cardText("BLACKSUN"), /<b>They<\/b> said \[pay up\]\(https:\/\/evil\.example\/pay\) or burn\./);
+    assert.equal(await card("BLACKSUN").locator(".rich a, .rich b").count(), 0);
+    assert.match(await cardText("BLACKSUN"), /Started from A piracy report/i);
+    await card("BLACKSUN").getByRole("link", { name: "A piracy report" }).click();
+    await headingIs("Piracy reports");
+    const text = await piracyText("Lost_Miner");
+    assert.match(text, /Entries started BLACKSUN Hostile/i);
+    assert.match(text, /Hostile on the hostile list/i);
+
+    // A member reads the entry, and is not shown that a report was behind it.
+    await signInAs(rae);
+    await openHostiles();
+    assert.match(await cardText("BLACKSUN"), /Two ships jumped my Prospector/);
+    assert.doesNotMatch(await cardText("BLACKSUN"), /Started from|piracy report sent/i);
+  });
+  await check("command drafts a Response event from a report, which starts from where it happened", async () => {
+    await signInAs(jo);
+    await openPiracy();
+    await piracyCard("Lost_Miner").getByRole("link", { name: "Draft a Response event" }).click();
+    await headingIs("Draft an event");
+    await leadIs(/Started from the piracy report sent by Lost_Miner\./);
+    const form = page.locator("form.event-form:visible");
+    assert.equal(await form.locator("#kind").inputValue(), "response");
+    assert.equal(await form.locator('[name="title"]').inputValue(), "Piracy at Stanton, the ring at Yela");
+    assert.equal(await form.locator('[name="summary"]').inputValue(), "Answering a piracy report sent to the fleet.");
+    assert.equal(await form.locator('[name="area"]').inputValue(), "Stanton, the ring at Yela");
+    // Happening now, so it starts today: or tomorrow, in the last half hour of the day.
+    const date = await form.locator('[name="date"]').inputValue();
+    assert.ok([0, 1].map((days) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)).includes(date), date);
+
+    await form.getByRole("button", { name: "Save as a draft" }).click();
+    await page.waitForURL(/\/operations\/[0-9a-f-]{36}$/);
+    const eventId = new URL(page.url()).pathname.split("/").pop();
+    assert.equal((await piracyRow("Lost_Miner")).event_id, eventId);
+    assert.deepEqual(await one("select kind, title, area, state from public.events where id = $1", [eventId]), {
+      kind: "response",
+      title: "Piracy at Stanton, the ring at Yela",
+      area: "Stanton, the ring at Yela",
+      state: "draft",
+    });
+    // The event is for the whole fleet once announced, and names nobody who sent a report.
+    await headingIs("Piracy at Stanton, the ring at Yela");
+    assert.doesNotMatch(await page.locator("body").innerText(), /Lost_Miner/);
+
+    await openPiracy();
+    assert.match(await piracyText("Lost_Miner"), /Response Piracy at Stanton, the ring at Yela/i);
+    assert.equal(await piracyCard("Lost_Miner").getByRole("link", { name: "Draft a Response event" }).count(), 0);
+  });
+  await check("command marks a report handled with what came of it, and can reopen it", async () => {
+    await actOn("Lost_Miner", "Mark as handled", "Yes, it is handled", "Sent the Nexus. Listed the organisation.");
+    await leadIs(/No report is waiting\./);
+    let row = await piracyRow("Lost_Miner");
+    assert.equal(row.state, "handled");
+    assert.equal(row.handled_by, (await memberOf(jo)).id);
+    assert.equal(row.outcome_note, "Sent the Nexus. Listed the organisation.");
+    const text = await piracyText("Lost_Miner");
+    assert.match(text, /Was marked as happening now/i);
+    assert.match(text, /Handled \d+ \w+ \d{4}, by .*Jo Reyes/i);
+    assert.match(text, /Command said Sent the Nexus\. Listed the organisation\./i);
+    // Closed, it offers nothing but reopening and deleting.
+    assert.equal(await piracyCard("Lost_Miner").getByRole("link", { name: /Start a hostile-list entry|Draft a Response event/ }).count(), 0);
+
+    await piracyCard("Lost_Miner").getByRole("button", { name: "Reopen" }).click();
+    await leadIs(/1 report waits for command/);
+    row = await piracyRow("Lost_Miner");
+    assert.equal(row.state, "new");
+    assert.equal(row.handled_by, null);
+  });
+  await check("a report twelve months old is shown to nobody, and is deleted when the next report arrives", async () => {
+    const [{ id: old }] = await supabase.sql(
+      `insert into public.piracy_reports (reporter_handle, location, details, received_at, happened_on, suspect_kind, suspect_handle)
+       values ('Long_Ago', 'Stanton', 'Something that happened a long time ago.', now() - interval '12 months 2 days', (now() - interval '12 months 2 days')::date, 'individual', 'Old_Enemy')
+       returning id`,
+    );
+    await openPiracy();
+    await leadIs(/1 report waits for command/);
+    await piracyCard("Lost_Miner").waitFor();
+    assert.equal(await piracyCard("Long_Ago").count(), 0);
+    // Its address fills in nothing, for command as for anyone.
+    await page.goto(`${site}/hostiles?tab=forward&report=${old}`);
+    await headingIs("Hostile list");
+    const form = page.locator("form.hostile-form:visible");
+    await form.waitFor();
+    assert.equal(await form.getByLabel("Handle or organisation ID").inputValue(), "");
+    assert.equal(await form.locator('input[name="report"]').count(), 0);
+    // It is still in the database until the line is next used. The next check sends a report, and then it is gone.
+    assert.equal((await piracyRow("Long_Ago")).id, old);
+  });
+  await check("a report the fleet will not act on is dismissed, and a report can be deleted for good", async () => {
+    await context.clearCookies();
+    await page.goto(`${site}/piracy`);
+    const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
+    await fillPiracy({
+      handle: "Sore_Loser",
+      where: "Pyro, near Ruin Station",
+      day: threeDaysAgo,
+      who: "A player",
+      suspect: "Fair_Fighter",
+      details: "He beat me in a duel that I asked for and I want him punished.",
+    });
+    await page.locator(".form-result:visible", { hasText: "Report received. Command reads every report. There is no reply through this site." }).waitFor();
+    assert.equal(await piracyRow("Long_Ago"), undefined, "the report twelve months old went when this one arrived");
+    const row = await piracyRow("Sore_Loser");
+    assert.equal(row.urgent, false);
+    assert.equal(row.day, threeDaysAgo);
+    assert.equal(row.suspect_kind, "individual");
+
+    await signInAs(jo);
+    await openPiracy();
+    await leadIs(/2 reports wait for command, 1 marked as happening now\./);
+    // The one marked as happening now is first.
+    assert.deepEqual(await page.locator("section[aria-labelledby='waiting'] .hostile-head .hostile-handle").allInnerTexts(), ["Lost_Miner", "Sore_Loser"]);
+    await actOn("Sore_Loser", "Dismiss", "Yes, dismiss it", "A duel he asked for.");
+    await leadIs(/1 report waits for command/);
+    assert.match(await piracyText("Sore_Loser"), /Dismissed .*Command said A duel he asked for\./i);
+    assert.equal((await piracyRow("Sore_Loser")).state, "dismissed");
+
+    await actOn("Sore_Loser", "Delete", "Yes, delete it");
+    await piracyCard("Sore_Loser").waitFor({ state: "detached" });
+    assert.equal(await piracyRow("Sore_Loser"), undefined);
+    // Its words went from the log of changes with it.
+    const kept = JSON.stringify(await supabase.sql("select old_row, new_row from public.audit_log where table_name = 'piracy_reports'"));
+    assert.doesNotMatch(kept, /Sore_Loser|Fair_Fighter|duel|Ruin Station/);
+  });
+  await check("one sender is held to five reports a day", async () => {
+    await supabase.sql("update app.piracy_senders set reports = 5");
+    await context.clearCookies();
+    await page.goto(`${site}/piracy`);
+    await fillPiracy({ handle: "Sixth_Time", where: "Stanton", details: "A sixth report in one day from the same sender." });
+    await page
+      .locator(".form-result-bad:visible", { hasText: "Five reports have come from your connection today. That is the most the line takes from one in a day." })
+      .waitFor();
+    assert.equal(await piracyForm().getByLabel("What they did").inputValue(), "A sixth report in one day from the same sender.");
+    assert.equal(await piracyRow("Sixth_Time"), undefined);
+  });
+  await check("what was done with each report is in the logs, without a word of what it said", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/admin/logs?show=operations`);
+    await headingIs("Logs");
+    await page.locator(".log-line:visible").first().waitFor();
+    const lines = (await page.locator(".log-line:visible").allInnerTexts()).map((line) => line.replace(/\s+/g, " "));
+    const said = (pattern) => assert.ok(lines.some((line) => pattern.test(line)), `${pattern} is not in the logs`);
+    said(/A piracy report arrived, marked as happening now/);
+    said(/Jo Reyes listed the organisation BLACKSUN as hostile/);
+    said(/Jo Reyes drafted .*Piracy at Stanton, the ring at Yela.* from a piracy report/);
+    said(/Jo Reyes marked a piracy report as handled.*Command said: Sent the Nexus\. Listed the organisation\./);
+    said(/Jo Reyes reopened a piracy report/);
+    said(/Jo Reyes dismissed a piracy report/);
+    said(/Jo Reyes deleted a piracy report/);
+    said(/A piracy report reached twelve months old and was deleted/);
+    assert.ok(!lines.some((line) => /Lost_Miner|Sore_Loser|Long_Ago|Fair_Fighter/.test(line)), "a sender or a player a report named is in the logs");
   });
 
   await check("no page raised a script error", async () => {

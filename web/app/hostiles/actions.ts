@@ -91,13 +91,19 @@ export async function proposeHostile(_previous: HostileResult, formData: FormDat
   const outright = formData.get("outright") === "on";
   // An address in the words is kept as words. The evidence is where links go.
   const fields = { ...read.fields, reason: withoutLinks(read.fields.reason) };
+  // The piracy report the entry was started from. The database lets command name one, and nobody else.
+  const report = uuid(formData.get("report"));
 
-  const { error } = await session.supabase.from("hostiles").insert({ ...fields, state: outright ? "listed" : "proposed" });
+  const { error } = await session.supabase
+    .from("hostiles")
+    .insert({ ...fields, state: outright ? "listed" : "proposed", ...(report ? { report_id: report } : {}) });
   if (error) {
     const shown =
       error.code === "23505"
         ? `${fields.handle} has already been put forward, or is on the list.`
-        : explainRefusal(error, "That could not be put forward. Check the name, what happened and the evidence, and try again.");
+        : error.code === "23503"
+          ? "The piracy report this was started from is no longer there. Open the hostile list afresh and put the name forward without it."
+          : explainRefusal(error, "That could not be put forward. Check the name, what happened and the evidence, and try again.");
     return { ok: false, message: await turnedDown(session.supabase, "hostile.propose", error, shown), ...again };
   }
 

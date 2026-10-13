@@ -183,6 +183,11 @@ export async function createEvent(_previous: OpsResult, formData: FormData): Pro
     return { ...(await failed(session, "event.draft", error, shown)), ...again };
   }
   if (!data) return { ok: false, message: "The event could not be drafted. Try again.", ...again };
+
+  // Drafted from a piracy report: the report keeps a link to its Response. Only command can read or mark a
+  // report, so for anyone else this changes nothing. A report that already has a Response keeps the first.
+  const report = uuid(formData.get("report"));
+  if (report) await session.supabase.from("piracy_reports").update({ event_id: data.id }).eq("id", report).is("event_id", null);
   redirect(`/operations/${data.id}`);
 }
 

@@ -24,6 +24,7 @@ export const menu: MenuGroup[] = [
       { href: "/", label: "Front page" },
       { href: "/standards", label: "Standards" },
       { href: "/ranks", label: "Ranks and structure" },
+      { href: "/piracy", label: "Report piracy" },
     ],
   },
   {

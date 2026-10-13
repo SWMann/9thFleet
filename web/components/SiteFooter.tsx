@@ -49,6 +49,9 @@ export function SiteFooter() {
               <Link href="/roles">Roles</Link>
             </li>
             <li>
+              <Link href="/piracy">Report piracy</Link>
+            </li>
+            <li>
               <Link href="/credits">Picture credits</Link>
             </li>
             <li>

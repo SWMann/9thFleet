@@ -7167,3 +7167,58 @@ a.mention:hover {
   color: var(--text-3);
   font-size: 0.9375rem;
 }
+
+/* ---------------------------------------------------------------------------
+   The piracy report line
+   --------------------------------------------------------------------------- */
+
+.report-form {
+  max-width: 46rem;
+}
+
+/* A warning at the top of a band: an icon, then the words. */
+.band > .notice,
+.hostile-form > .notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 46rem;
+  margin: 0 0 22px;
+}
+
+.band > .notice .icon,
+.hostile-form > .notice .icon {
+  flex: none;
+  margin-top: 3px;
+}
+
+/* What the line answered, under the button that sent the report. */
+.report-answer {
+  margin: 14px 0 0;
+}
+
+.report-answer:empty {
+  display: none;
+}
+
+/* The field no person sees or reaches. It is off the page, not hidden, because a robot skips what is hidden. */
+.trap {
+  position: absolute;
+  left: -200vw;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* A report's card is the hostile list's card. Its words are a stranger's plain text, kept as it was typed. */
+.report-words {
+  max-width: 46rem;
+  margin: 14px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.hostile-facts .hostile-handle {
+  display: inline;
+  font-size: inherit;
+}

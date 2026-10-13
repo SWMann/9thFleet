@@ -93,7 +93,7 @@ const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
     "events", "event_orders", "event_units", "event_key_posts", "event_posts", "event_objectives", "event_elements",
     "event_timings", "event_ships", "event_nets", "event_amendments", "event_acknowledgements", "attendance",
     "attendance_returns", "after_action_reports", "event_objective_outcomes", "event_losses", "event_opfor",
-    "event_opfor_members", "event_unit_tasks", "hostiles",
+    "event_opfor_members", "event_unit_tasks", "hostiles", "piracy_reports",
   ],
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
@@ -696,8 +696,40 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
         }
       }
       if (changed("level")) return line("operations", now.level === "watch" ? `${actor} moved ${name} from hostile to watch` : `${actor} made ${name} hostile, from watch`);
+      // The database's own housekeeping, when something the entry pointed to was deleted.
+      if (changed("report_id") && !now.report_id) {
+        return line("operations", `The piracy report that the hostile list's entry for ${name} was started from was deleted. The entry stays`);
+      }
+      if (["reported_by", "decided_by", "renewed_by", "lifted_by"].some((key) => changed(key) && !now[key]) && !["name", "reason", "evidence"].some(changed)) {
+        return line("operations", `A member named on the hostile list's entry for ${name} was deleted, and their name was cleared from it`);
+      }
       if (changed("renewed_at")) return line("operations", `${actor} renewed ${name} on the hostile list`, now.expires_on ? `It stands to ${String(now.expires_on)}.` : null);
       return line("operations", `${actor} rewrote the hostile list's entry for ${name}`, changes(row, names));
+    }
+
+    case "piracy_reports": {
+      // What a report said stays on the reports page, for command. The log says that it came and what was done with it.
+      if (row.action === "insert") return line("operations", `A piracy report arrived${now.urgent === true ? ", marked as happening now" : ""}`);
+      if (row.action === "delete") {
+        // Nobody is sent a report twelve months old, so nobody deletes one by hand: the database cleared it.
+        const cleared = new Date(row.at);
+        cleared.setUTCMonth(cleared.getUTCMonth() - 12);
+        const old = Date.parse(String(was.received_at ?? row.at)) <= cleared.getTime();
+        return line("operations", old ? "A piracy report reached twelve months old and was deleted" : `${actor} deleted a piracy report`);
+      }
+      if (changed("state")) {
+        const said = typeof now.outcome_note === "string" && now.outcome_note !== "" ? `Command said: ${now.outcome_note}` : null;
+        if (now.state === "handled") return line("operations", `${actor} marked a piracy report as handled`, said);
+        if (now.state === "dismissed") return line("operations", `${actor} dismissed a piracy report`, said);
+        return line("operations", `${actor} reopened a piracy report`);
+      }
+      if (changed("event_id")) {
+        return line("operations", now.event_id ? `${actor} drafted ${names.event(now.event_id)} from a piracy report` : "The Response event drafted from a piracy report was deleted");
+      }
+      if (changed("handled_by") && !now.handled_by) {
+        return line("operations", "The member who had handled a piracy report was deleted, and their name was cleared from it");
+      }
+      return line("operations", `${actor} changed a note on a piracy report`);
     }
 
     case "event_opfor": {

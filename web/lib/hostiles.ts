@@ -31,6 +31,8 @@ export type Hostile = {
   liftedBy: string | null;
   liftedAt: string | null;
   liftNote: string;
+  /** The piracy report it was started from, if it was and the report is still kept. */
+  reportId: string | null;
   /** Whether it is the reader's own: they put it forward. */
   mine: boolean;
   /** Whether it lapses at all, how long it has left, and whether it has lapsed. */
@@ -78,7 +80,7 @@ export async function getHostiles(): Promise<HostileList> {
   const [entries, roster, sources] = await Promise.all([
     supabase
       .from("hostiles")
-      .select("id, kind, handle, name, level, state, reason, evidence, reported_by, reported_at, decided_by, decided_at, decision_note, expires_on, renewed_at, lifted_by, lifted_at, lift_note")
+      .select("id, kind, handle, name, level, state, reason, evidence, reported_by, reported_at, decided_by, decided_at, decision_note, expires_on, renewed_at, lifted_by, lifted_at, lift_note, report_id")
       .order("handle", { ascending: true }),
     supabase.from("roster").select("member_id, character_name, rank_name, acting"),
     fleetSources(),
@@ -118,6 +120,7 @@ export async function getHostiles(): Promise<HostileList> {
       liftedBy: (row.lifted_by as string | null) ?? null,
       liftedAt: (row.lifted_at as string | null) ?? null,
       liftNote: (row.lift_note as string) ?? "",
+      reportId: (row.report_id as string | null) ?? null,
       mine: row.reported_by === me,
       lapses: lapses(kind, level),
       standing: standing(expiresOn, today),

@@ -1,4 +1,5 @@
 import "server-only";
+import { discordPlain } from "@/lib/discord-text";
 
 /**
  * Tell the fleet's Discord channel that an event has been announced.
@@ -18,8 +19,8 @@ const THIS_MACHINE = /^http:\/\/(?:127\.0\.0\.1|localhost):\d+\/api\/webhooks\/[
 
 export type Announcement = { type: string; title: string; startsAt: string; link: string };
 
-/** What an admin typed, with the characters Discord reads as formatting or as a mention taken out. */
-const plain = (text: string) => text.replace(/[*_~`|>@#]/g, "").replace(/\s+/g, " ").trim();
+/** What was typed, with whatever Discord reads as formatting, a mention or a link taken out. */
+const plain = discordPlain;
 
 /** Whether a webhook address is set, so the site can say whether an announcement will be posted. */
 export const discordIsOn = () => Boolean(process.env.DISCORD_ANNOUNCE_WEBHOOK?.trim());

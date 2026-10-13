@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { findTimes, plainOf, safeHref, splitTimes, type Block } from "./format";
 import * as markdown from "./markdown";
-import { parseRich, plainText, writeRich } from "./markdown";
+import { fromPlainText, parseRich, plainText, writeRich } from "./markdown";
 
 const MEMBER = "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed";
 const again = (markdown: string) => writeRich(parseRich(markdown));
@@ -217,4 +217,33 @@ test("a mention can be taken out of text that visitors will read", () => {
   assert.equal(withoutMentions("- [@A Flight](unit:" + MEMBER + ") leads"), "- A Flight leads");
   // Text with nobody named in it is left exactly as it was written.
   assert.equal(withoutMentions("Mans a turret  and *keeps* it firing."), "Mans a turret  and *keeps* it firing.");
+});
+
+test("plain words become formatted text that reads the same, with nothing taken for formatting", () => {
+  const words = [
+    "*Not bold* and _not slanted_, ~~not struck~~ and `not code`.",
+    "# Not a heading",
+    "- not a list\n- at all",
+    "1. Not a numbered list",
+    "> Not a quote",
+    "[Not a link](https://example.com/x) and <b>not markup</b>.",
+    "[!WARNING] Not a warning box",
+    "Ask @Kit_Marlow, or [@Kit](member:1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed).",
+    "See https://example.com/clip for it.",
+    "---",
+    "Back\\slash and a | bar.",
+  ];
+  for (const typed of words) {
+    const blocks = parseRich(fromPlainText(typed));
+    assert.deepEqual(types(blocks), ["paragraph"], typed);
+    assert.equal(plainOf(blocks), typed, typed);
+    // Nothing in it is a link, a mention or any other mark.
+    const paragraph = blocks[0] as Extract<Block, { type: "paragraph" }>;
+    assert.ok(paragraph.children.every((node) => node.type === "text" || node.type === "break"), typed);
+  }
+  // Paragraphs stay paragraphs, and a line break stays a break.
+  const two = parseRich(fromPlainText("They opened fire.\nNo warning.\n\n\nI lost the ship."));
+  assert.deepEqual(types(two), ["paragraph", "paragraph"]);
+  assert.equal(plainOf(two), "They opened fire.\nNo warning.\nI lost the ship.");
+  assert.equal(fromPlainText("  \n\n "), "");
 });

@@ -57,7 +57,8 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/roles` | The areas of work, the roles in each, and a page for each role: what it is, what it does, what it needs, where it leads and the ships it is found on. Read from the database, where an admin keeps them. Open to everyone. It never shows who holds a post |
 | `/manual` | The fleet manual: the doctrine volumes that have been reviewed, section by section. Open to everyone |
 | `/credits` | Who took each picture on the site, and its licence |
-| `/privacy` | What the site records about visitors and members, who can read it and how to have it removed. Change it whenever the logging or the sign-in changes |
+| `/privacy` | What the site records about visitors, members, people who send a piracy report and players the fleet names, who can read it and how to have it removed. Change it whenever the logging, the sign-in, the report line or the hostile list changes |
+| `/piracy` | The public report line: anyone may tell the fleet about piracy, without signing in. It says plainly that it is not an emergency line. Command reads the reports at `/admin/piracy`. See The piracy report line below |
 | `/visit` | Not a page. A public page posts its address here once it has been read, to be counted |
 | `/menu` | The menu as a page, for a browser that is not running scripts |
 
@@ -106,6 +107,7 @@ The figures of the fleet, for the people who run it. A role decides which pages 
 | `/admin/people` | Staff, command and admins | Everyone on the books, by status, service and grade, with qualifications and attendance. A name opens that member's service record, at `/admin/people/<id>` |
 | `/admin/recruiting` | Staff, command and admins | How far applications get, how long decisions take, and which are still open |
 | `/admin/operations` | Command and admins | Every event, turnout, late reports, and attendance member by member |
+| `/admin/piracy` | Command and admins | The piracy reports sent through the public form: those that wait, and those handled or dismissed |
 | `/admin/structure` | Admins | The editors: areas, roles, units, posts, qualifications, event types, and ranks and grades. See Editors below |
 | `/admin/logs` | Admins | Everything that has happened: changes to records, sign-ins and sign-outs, anything refused or failed, and how often each public page is read |
 
@@ -174,6 +176,57 @@ engaged, and who is only to be reported.
   will lapse within 14 days.
 - **It is a members' page,** so it is in `MEMBER_PAGES` in `lib/supabase/proxy.ts` and in the
   matcher in `proxy.ts`. A new members' page goes in both.
+
+## The piracy report line
+
+`/piracy` is the fleet's public request line. Anyone may send a report without signing in: their
+handle in the game, where and when it happened, who did it if they know, what was done, and web
+addresses of a screenshot or a clip. A report can be marked as happening now.
+
+- **It is not an emergency line, and the page says so first.** Nobody is sent a message when a
+  report arrives. Command is told on the admin overview and at the top of the operations page, so
+  learns of one the next time one of them opens either.
+- **Command alone reads a report,** at `/admin/piracy`. From one, command starts a hostile-list
+  entry or drafts a Response event, marks the report handled or dismisses it with a word of what
+  came of it, reopens it, or deletes it.
+- **A stranger's words stay plain words.** A report is shown as the text that was typed: nothing
+  in it is formatting or a link. Only the web addresses given as evidence are linked, each checked
+  and labelled with its real site, as on the hostile list. When command starts an entry from a
+  report, `fromPlainText` in `lib/rich/markdown.ts` writes the words so that the editor reads
+  none of them as formatting.
+- **Who sent a report stays with command, unless command passes it on.** The hostile list and an
+  announced event are read by the whole serving fleet. So an entry or an event started from a
+  report is filled in with what happened and where, and not with the sender's handle. The
+  sender's own words and links are filled in, for command to rewrite: a link to the sender's own
+  channel shows who they are, and the form says so to both of them.
+- **A sender's address is never stored. A mark is, for a day.** `lib/piracy-sender.ts` works out a
+  mark of four characters from the sender's network address and the day, and the action sends it
+  with the report. The database never keeps the mark with a report. It keeps the mark, the day and
+  a count in a table of its own, and deletes earlier days' marks whenever a report arrives. About
+  65,000 addresses share each mark, and a sender's mark changes every day. There is no secret in
+  it: someone with the database who suspects an address can test it against a day's marks.
+- **The line has limits, and the database keeps them:** five reports a day from one sender, and
+  ten an hour and thirty a day from everyone together. Reports are counted one at a time, so a
+  burst cannot slip past. A hidden field that no person reaches catches a robot that fills in
+  every field: it is told its report went, and nothing is sent.
+- **The limit on one sender only binds the form, and the line can be held shut.** The database key
+  in the page is public, as it must be, so someone can send reports to the database directly and
+  choose their own mark. The limit on everyone together still holds them, but ten junk reports an
+  hour keep the line full for as long as they are sent. Command sees the junk and deletes it,
+  which frees the line. If it becomes a habit, the form needs a gate the site does not have yet.
+- **Everyone behind one address shares a mark.** People on one network are one sender to the
+  line, so the refusal says five reports have come "from your connection". Where the host sets no
+  address at all, which Vercel always does, every sender would share one mark.
+- **A report is read for twelve months.** After that the database sends it to nobody, command
+  included, and deletes it the next time the line is used: when a report arrives, or command
+  marks one. Deleting a report takes its words out of the log of changes too. An entry on the
+  hostile list that was started from it stays, with whatever words command kept. `KEEP_MONTHS`
+  in `lib/piracy-form.ts` is the number the pages say, and the migration holds the rule.
+- **A stranger's words are not posted to Discord as a link.** A place may become an event's title.
+  `lib/discord-text.ts` takes apart anything Discord would read as formatting, a mention or a
+  link before an announcement is posted, and the form refuses a web address as a place.
+- **The form's checks are in `lib/piracy-form.ts`,** which reads nothing and is tested by
+  `npm test`. The database makes the same checks for itself.
 
 ## Editors
 
@@ -308,6 +361,7 @@ to be tracked.
 | The picture and colour of each type of log line | `lookIcons` in `app/admin/logs/page.tsx`, and the `log-kind-` colours in `app/globals.css`. The type's name is always written beside them |
 | Formatted text: its format, how it is shown and how it is edited | `lib/rich/` and `components/rich/`. See Formatted text above |
 | The site's icons, and the symbol for each kind of unit | `components/Icon.tsx` and `components/UnitSymbol.tsx`. An icon goes with words and never stands in for them |
+| The piracy report line | `app/piracy/` for the public form, `app/admin/piracy/` for command's page, and the checks, the limits' words and how long a report is kept in `lib/piracy-form.ts` |
 | What the site says it records | `app/privacy/page.tsx` |
 | The menu | `lib/menu.ts` |
 | The pictures | `lib/pictures.ts`. See Pictures below |
