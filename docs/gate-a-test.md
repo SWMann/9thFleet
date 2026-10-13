@@ -38,6 +38,34 @@ Part 1 needs no helpers and answers the two riskiest questions first. Allow 30 m
 
 Press **Save…** and keep the file whatever the result.
 
+### Part 1 result: passed on 13 October 2026
+
+Tom ran Part 1 on his own PC. All four inputs were seen with Star Citizen loaded and in focus,
+and the app did not need **Run as administrator**. The saved record is
+[`records/gate-a-part-1-2026-10-13.txt`](records/gate-a-part-1-2026-10-13.txt).
+
+| | Result |
+| --- | --- |
+| Keys (Numpad1, Numpad2) | 6 presses, 6 releases, none cut. The shortest press, 45 ms, was caught with its release |
+| Stick (buttons 6 and 5) | 6 presses, 6 releases, none cut, including four taps of about 100 ms |
+| Stick reading in the background | Not slowed: the stick's times are 10 ms apart, as they are with the app in front |
+| Second key | Net 2 was refused while Net 1 was held, as designed |
+
+The record says the app was in the background. It cannot say which program was in front: that
+the game was is Tom's word, given the same day.
+
+Part 1 is one PC, with nothing sent. Gate A is still decided by Part 2.
+
+Two things the record showed that the script did not ask about. Neither stops the gate.
+
+- **Two sticks of the same model.** Both report the same name, so the app tells them apart by
+  the order Windows lists them: the binds are on "#2". If that order changes after a stick is
+  unplugged or the PC is restarted, a bind would move to the other stick. To be checked: close
+  the app, unplug both sticks and plug them in again, and see whether the binds still answer to
+  the same hand.
+- **32 buttons.** The app saw 32 buttons on each stick, which is the most the Gamepad API
+  reports. A button numbered above 32 cannot be bound. A native stick reader would lift this.
+
 ## Part 2: the session
 
 Allow 60 minutes. Before it starts:
@@ -74,10 +102,10 @@ At the end everyone presses **Save…** and sends you the file.
 
 | | PC 1 (you) | PC 2 | PC 3 (streaming) |
 | --- | --- | --- | --- |
-| Name | | | |
+| Name | Tom | | |
 | Game runs | Locally | Locally | Through: |
-| Stick model | | | |
-| Needed Run as administrator | | | |
+| Stick model | Two VKBSim Gunfighter MCG Ultimate Twist | | |
+| Needed Run as administrator | No | | |
 | 1 Radio check | | | |
 | 2 Net separation | | | |
 | 3 First syllable | | | |

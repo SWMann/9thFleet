@@ -1,0 +1,46 @@
+9th Fleet Voice: test record
+Saved: 2026-10-13T10:21:26.753Z
+App: 0.1.0 on win32 x64, Electron 44.6.0
+Name in room: not connected
+Key hook: Global key hook running
+Sticks:  VKBSim Gunfighter MCG Ultimate Twist  (Vendor: 231d Product: 0125) (32 buttons);  VKBSim Gunfighter MCG Ultimate Twist  (Vendor: 231d Product: 0125) (32 buttons)
+Net 1: key Numpad1; stick VKBSim Gunfighter MCG Ultimate Twist #2, button 6
+Net 2: key Numpad2; stick VKBSim Gunfighter MCG Ultimate Twist #2, button 5
+
+Sent from this PC  Presses  Releases  Cut by app  Key to live  Release to closed
+Net 1, key         3        3         0           —            —
+Net 1, stick       5        5         0           —            —
+Net 2, key         3        3         0           —            —
+Net 2, stick       1        1         0           —            —
+
+Heard on this PC  Transmissions  Longest
+
+Log
+11:18:33.814  APP 0.1.0 on win32 x64, Electron 44.6.0. Global key hook running.
+11:19:02.839  BIND Net 1 key set to Numpad1
+11:19:06.503  BIND Net 2 key set to Numpad2
+11:20:51.554  BIND Net 1 stick set to VKBSim Gunfighter MCG Ultimate Twist #2, button 6
+11:20:57.304  BIND Net 2 stick set to VKBSim Gunfighter MCG Ultimate Twist #2, button 5
+11:21:08.465  KEY DOWN Net 2 by stick (app in background, not connected so nothing is sent)
+11:21:10.465  KEY UP Net 2
+11:21:10.854  KEY DOWN Net 1 by stick (app in background, not connected so nothing is sent)
+11:21:12.064  KEY UP Net 1
+11:21:12.304  KEY DOWN Net 1 by stick (app in background, not connected so nothing is sent)
+11:21:12.424  KEY UP Net 1
+11:21:12.535  KEY DOWN Net 1 by stick (app in background, not connected so nothing is sent)
+11:21:12.614  KEY UP Net 1
+11:21:12.725  KEY DOWN Net 1 by stick (app in background, not connected so nothing is sent)
+11:21:12.814  KEY UP Net 1
+11:21:12.914  KEY DOWN Net 1 by stick (app in background, not connected so nothing is sent)
+11:21:13.014  KEY UP Net 1
+11:21:15.249  KEY DOWN Net 1 by key (app in background, not connected so nothing is sent)
+11:21:15.514  KEY UP Net 1
+11:21:15.684  KEY DOWN Net 2 by key (app in background, not connected so nothing is sent)
+11:21:15.814  KEY UP Net 2
+11:21:15.874  KEY DOWN Net 2 by key (app in background, not connected so nothing is sent)
+11:21:15.964  KEY UP Net 2
+11:21:16.039  KEY DOWN Net 1 by key (app in background, not connected so nothing is sent)
+11:21:16.124  KEY UP Net 1
+11:21:16.199  KEY DOWN Net 1 by key (app in background, not connected so nothing is sent)
+11:21:16.230  REFUSED Net 2 by key: Net 1 is transmitting
+11:21:16.244  KEY UP Net 1
