@@ -172,6 +172,8 @@ export type Fleet = {
   reports: { event_id: string; filed_at: string }[];
   /** The hostile list, as far as the reader is sent it: all of it for command, what stands today for anyone else. */
   hostiles: { id: string; handle: string; state: "proposed" | "listed" | "declined" | "lifted"; expires_on: string | null }[];
+  /** The piracy reports, which the database sends to command and nobody else. */
+  piracy: { id: string; state: "new" | "handled" | "dismissed"; urgent: boolean }[];
 };
 
 export type Loaded = { state: "no-database" } | { state: "ready"; fleet: Fleet };
@@ -181,7 +183,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
 
-  const [settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles] =
+  const [settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles, piracy] =
     await Promise.all([
       supabase.from("fleet_settings").select("current_stage, recruitment_open").maybeSingle(),
       supabase
@@ -211,8 +213,9 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       supabase.from("event_key_posts").select("event_id, position_id"),
       supabase.from("event_posts").select("id, event_id, title, must_fill"),
       supabase.from("hostiles").select("id, handle, state, expires_on"),
+      supabase.from("piracy_reports").select("id, state, urgent"),
     ]);
-  const results = { settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles };
+  const results = { settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles, piracy };
   for (const [name, result] of Object.entries(results)) {
     if (result.error) throw new Error(`The ${name} could not be read: ${result.error.message}`);
   }
@@ -317,6 +320,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       returns: fleetReturns,
       reports: rows<Fleet["reports"][number]>(reports),
       hostiles: rows<Fleet["hostiles"][number]>(hostiles),
+      piracy: rows<Fleet["piracy"][number]>(piracy),
     },
   };
 });
@@ -759,6 +763,17 @@ export function attention(fleet: Fleet, tier: Tier): Attention[] {
           href: `/operations/${event.id}`,
         });
       }
+    }
+
+    // Reports from the public line. Nobody is sent a message when one arrives, so this is where command learns of it.
+    const reports = fleet.piracy.filter((report) => report.state === "new");
+    if (reports.length > 0) {
+      const now = reports.filter((report) => report.urgent).length;
+      list.push({
+        what: `${reports.length} piracy ${reports.length === 1 ? "report waits" : "reports wait"} for command${now > 0 ? `, ${now} marked as happening now` : ""}`,
+        detail: "Anyone may send one. Start a hostile-list entry or a Response event from it, then mark it handled or dismiss it.",
+        href: "/admin/piracy",
+      });
     }
 
     // The hostile list is command's to keep: names waiting for an answer, and entries about to lapse.

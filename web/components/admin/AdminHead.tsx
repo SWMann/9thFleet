@@ -4,7 +4,7 @@ import { Icon, type IconName } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { reaches, type Gate, type Tier } from "@/lib/admin";
 
-export type AdminPage = "overview" | "people" | "recruiting" | "operations" | "structure" | "logs";
+export type AdminPage = "overview" | "people" | "recruiting" | "operations" | "piracy" | "structure" | "logs";
 
 /** The admin pages, in the order of their tabs, and the tier each one is for. */
 const pages: { key: AdminPage; href: string; label: string; icon: IconName; needs: Tier }[] = [
@@ -12,6 +12,7 @@ const pages: { key: AdminPage; href: string; label: string; icon: IconName; need
   { key: "people", href: "/admin/people", label: "People", icon: "people", needs: "staff" },
   { key: "recruiting", href: "/admin/recruiting", label: "Recruiting", icon: "inbox", needs: "staff" },
   { key: "operations", href: "/admin/operations", label: "Operations", icon: "calendar", needs: "command" },
+  { key: "piracy", href: "/admin/piracy", label: "Piracy reports", icon: "flag", needs: "command" },
   { key: "structure", href: "/admin/structure", label: "Structure", icon: "layers", needs: "admin" },
   { key: "logs", href: "/admin/logs", label: "Logs", icon: "list", needs: "admin" },
 ];

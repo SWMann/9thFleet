@@ -220,6 +220,9 @@ export default function FrontPage() {
             We engage declared hostile organisations, known pirates on evidence, and wanted players who refuse a
             challenge. Against everyone else we fire only in self-defence.
           </p>
+          <p className="small">
+            Attacked by pirates? <Link href="/piracy">Report it to the fleet</Link>. You do not need to be a member.
+          </p>
         </div>
         <div className="split-pic">
           <Picture name="work" sizes="(max-width: 960px) 100vw, 50vw" credit="top-left" />

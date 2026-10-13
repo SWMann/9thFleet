@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { PageHead } from "@/components/PageHead";
 import { getDraftingState } from "@/lib/operations";
+import { getPiracyReport } from "@/lib/piracy";
+import { responseStart } from "@/lib/piracy-form";
 import { EventForm } from "../OpsForms";
 
 export const metadata: Metadata = {
@@ -11,10 +13,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function NewEventPage() {
+type Asked = Promise<{ report?: string | string[] }>;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export default function NewEventPage({ searchParams }: { searchParams: Asked }) {
   return (
     <Suspense fallback={<Head lead="Reading the fleet." />}>
-      <NewEvent />
+      <NewEvent asked={searchParams} />
     </Suspense>
   );
 }
@@ -39,8 +44,8 @@ function Head({ lead }: { lead: string }) {
   );
 }
 
-async function NewEvent() {
-  const result = await getDraftingState();
+async function NewEvent({ asked }: { asked: Asked }) {
+  const [result, { report: askedReport }] = await Promise.all([getDraftingState(), asked]);
   if (result.state === "signed-out") redirect("/sign-in");
   if (result.state === "no-record") redirect("/profile");
   if (result.state === "no-database") return <Head lead="This site is not connected to the fleet's database yet." />;
@@ -49,11 +54,24 @@ async function NewEvent() {
     return <Head lead="Command drafts events, and instructors draft the types open to them. Ask one of them to set this up." />;
   }
 
-  // The form opens on the first type this member may draft, with that type's usual length and weapons state.
-  const first = result.mayCreate[0];
+  // Opened from a piracy report, the form starts as a Response to it. The report is read by its id, as the reader:
+  // the database sends it to command and to nobody else, so for anyone else the form opens as it always does.
+  const response = result.mayCreate.find((type) => type.key === "response");
+  const report = response && typeof askedReport === "string" && UUID.test(askedReport) ? await getPiracyReport(askedReport) : null;
+  const start = report ? responseStart(report) : null;
+  const when = report?.urgent ? report.soon : result.suggested;
+
+  // Otherwise it opens on the first type this member may draft. Either way, with that type's usual length and weapons state.
+  const first = report && response ? response : result.mayCreate[0];
   return (
     <>
-      <Head lead="A draft is seen only by you, its commander and command until it is announced." />
+      <Head
+        lead={
+          report
+            ? `Started from the piracy report sent by ${report.reporterHandle}. Once announced, an event is read by the whole serving fleet: say there only what its ships need. Until then a draft is seen only by you, its commander and command.`
+            : "A draft is seen only by you, its commander and command until it is announced."
+        }
+      />
       <section className="wrap band band-last" aria-labelledby="details">
         <h2 id="details">
           The <strong>details</strong>
@@ -61,10 +79,10 @@ async function NewEvent() {
         <EventForm
           event={{
             kind: first.key,
-            title: "",
-            summary: "",
-            date: result.suggested.date,
-            time: result.suggested.time,
+            title: start?.title ?? "",
+            summary: start?.summary ?? "",
+            date: when.date,
+            time: when.time,
             duration: first.defaultDuration,
             commander: result.member.id,
             second: "",
@@ -78,12 +96,13 @@ async function NewEvent() {
             places: "",
             minimumAttending: "",
             musterAt: "",
-            area: "",
+            area: start?.area ?? "",
             teachesQualification: "",
           }}
           types={result.mayCreate}
           people={result.people}
           qualifications={result.qualifications}
+          report={report?.id}
         />
       </section>
     </>

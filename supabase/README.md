@@ -24,6 +24,10 @@ or let someone promote themselves.
 | `migrations/…_event_opfor.sql` | Command's approval for the types of event that need it, and the opposing force: its plan and who is on it, kept from the side being exercised |
 | `migrations/…_event_unit_tasks.sql` | A task for each unit of an event and who reads it, and which post commands each unit and which posts lead |
 | `migrations/…_unit_brings.sql` | What each unit brings to an event, a short list an admin keeps, and a picture for it |
+| `migrations/…_service_record.sql` | A member's history: each change of status and of grade, kept as it happens, and who may read a member's past posts |
+| `migrations/…_record_notes.sql` | The note on an appointment and on an award, kept for staff and out of the member's own view |
+| `migrations/…_hostile_list.sql` | The hostile list: names put forward by members, listed, declined, renewed and lifted by command |
+| `migrations/…_piracy_reports.sql` | The public piracy report line: what a visitor may send, how much the line takes, and what command does with a report |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -47,12 +51,12 @@ Staff look after people, command makes appointments, and the admin owns the stru
 
 | Who | Can see | Can do |
 | --- | --- | --- |
-| Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: areas, roles, units, positions and the qualifications each requires. Never who holds one | Nothing |
+| Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: areas, roles, units, positions and the qualifications each requires. Never who holds one | Send a piracy report, and read nothing back |
 | Applicant | The same, and their own record and their own application | Set a character name and an RSI handle, apply while recruitment is open, withdraw |
 | Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position now and which qualification, every announced event with its orders, roll and report, their own service record, and the hostile list as it stands today | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. A full member can apply for the cadet course |
 | Instructor | The same | Award a qualification to someone else, in their own name. Draft an event of a type that is open to instructors, which at the start is training |
 | Staff | Everyone, every application and the interview notes, and any member's service record | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
-| Command | The same as staff, and every entry of the hostile list: waiting, declined, lifted and lapsed | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event. Keep the hostile list |
+| Command | The same as staff, every entry of the hostile list: waiting, declined, lifted and lapsed, and the piracy reports | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event. Keep the hostile list. Handle and delete piracy reports |
 | Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, the areas and roles, the qualifications and the rank names. Grant roles on the site, open recruitment, open a service, move the fleet to a new stage |
 
 Roles add up: an admin holds every role. Things the database decides for itself:
@@ -98,6 +102,25 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   who has since joined can only be declined or lifted. The list is never sent to a visitor or to
   someone who has not joined. What an entry says is still for command to read before listing it:
   the database checks its shape, not whether it is fair.
+- **Anyone sends a piracy report, and only command reads one.** A visitor sends the words of a
+  report and nothing else: the database dates it, files it as new, and gives nothing back, not
+  even the report as it was sent. Command marks it handled or dismissed, in their own name, reopens
+  it and deletes it. Nobody changes its words. Staff and members are sent none of it.
+- **The line has limits.** Five reports a day from one sender, and ten an hour and thirty a day
+  from everyone together. One sender is known by a mark of four characters that the site works out
+  from their network address and the day. The mark comes in with the report through the `sender`
+  column, is counted in `app.piracy_senders`, and is thrown away: a rule on the column keeps it
+  empty, so the mark is never stored with a report or written to the audit log. Someone who sends
+  to the database directly can choose their own mark, so only the limit on everyone holds them.
+- **A report holds plain words and names from the game.** Handles have the game's shape. Where it
+  happened is one line. What happened is text whose lines may break and which holds no other
+  control character and none of the marks that turn text right to left. Evidence is web addresses.
+- **A report and what comes of it are linked.** Only command starts a hostile-list entry from a
+  report, and the entry keeps the report's id. A report keeps the id of the Response event drafted
+  from it. Deleting a report, an event or a member clears the link and changes nothing else, even
+  on an entry that is closed.
+- **Deleting a report or a hostile-list entry takes its words out of the audit log.** That it
+  existed, when, and who did what stay.
 - **Deleting an entry takes its words out of the audit log.** An admin deletes an entry to put
   right a mistake, or to take out something that should not have been written. The log keeps that
   the entry existed, who it named and who did what, and loses what it said.

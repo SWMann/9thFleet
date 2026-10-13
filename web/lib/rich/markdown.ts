@@ -291,6 +291,21 @@ export function writeRich(blocks: Block[]): string {
   return writer.stringify(root).trim();
 }
 
+/**
+ * Plain words as formatted text that reads the same: each paragraph a
+ * paragraph, each line break a break, and nothing in the words taken for
+ * formatting, a mention or a link.
+ */
+export function fromPlainText(text: string): string {
+  const blocks: Block[] = text
+    .replace(/\r\n?/g, "\n")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph !== "")
+    .map((paragraph) => ({ type: "paragraph", children: textOf(paragraph) }));
+  return writeRich(blocks);
+}
+
 /** The words alone of a piece of formatted text. */
 export const plainText = (markdown: string | null | undefined) => plainOf(parseRich(markdown));
 

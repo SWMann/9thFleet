@@ -9,6 +9,8 @@ import { RichSourcesProvider } from "@/components/rich/RichSources";
 import { TabLink, TabPanel, Tabs, type TabSpec } from "@/components/Tabs";
 import { kindNames, levelMeaning, levelNames, linkLabel } from "@/lib/hostile-form";
 import { getHostiles, type Hostile } from "@/lib/hostiles";
+import { getPiracyReport } from "@/lib/piracy";
+import { fromPlainText } from "@/lib/rich/markdown";
 import { DecideForms, KeepForms, ProposeForm, WithdrawForm } from "./HostileForms";
 
 export const metadata: Metadata = {
@@ -22,12 +24,40 @@ const title = (
   </>
 );
 
-export default function HostilesPage() {
+type Asked = Promise<{ report?: string | string[] }>;
+
+export default function HostilesPage({ searchParams }: { searchParams: Asked }) {
   return (
     <Suspense fallback={<Head lead="Reading the list." />}>
-      <Hostiles />
+      <Hostiles asked={searchParams} />
     </Suspense>
   );
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * What the form starts with when command opens it from a piracy report. The
+ * report is read by its id, as the reader: the database sends it to command
+ * and to nobody else, so for anyone else this is nothing.
+ */
+async function startFrom(reportId: string | undefined): Promise<{ start: Record<string, string>; from: string } | null> {
+  if (!reportId || !UUID.test(reportId)) return null;
+  const report = await getPiracyReport(reportId);
+  if (!report) return null;
+  // A stranger's plain words, written so that none of them is taken for formatting, a mention or a link. Who
+  // sent the report is left out: the list is read by the whole serving fleet, and a report by command alone.
+  const words = fromPlainText(`${report.details}\n\nFrom a report to the fleet's piracy line. Where: ${report.location}.`);
+  return {
+    from: report.reporterHandle,
+    start: {
+      report: report.id,
+      kind: report.suspectKind ?? "individual",
+      handle: report.suspectHandle,
+      reason: words.length <= 2000 ? words : fromPlainText(report.details),
+      evidence: report.evidence.join("\n"),
+    },
+  };
 }
 
 function Head({ lead, children }: { lead: string; children?: ReactNode }) {
@@ -42,8 +72,8 @@ const dayFormat = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "sho
 const day = (date: string) => dayFormat.format(new Date(date.length === 10 ? `${date}T00:00:00Z` : date));
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-async function Hostiles() {
-  const result = await getHostiles();
+async function Hostiles({ asked }: { asked: Asked }) {
+  const [result, { report: askedReport }] = await Promise.all([getHostiles(), asked]);
 
   if (result.state === "signed-out") redirect("/sign-in");
   if (result.state === "no-record") redirect("/profile");
@@ -61,6 +91,7 @@ async function Hostiles() {
   }
 
   const { member, command, hostile, watch, waiting, past, names, sources } = result;
+  const started = command ? await startFrom(typeof askedReport === "string" ? askedReport : undefined) : null;
   const who = (id: string | null) => (id ? (names[id] ?? "someone who has left") : "nobody on record");
   const soon = [...hostile, ...watch].filter((entry) => entry.standing.soon).length;
 
@@ -167,6 +198,14 @@ async function Hostiles() {
             <dd>{item.liftNote}</dd>
           </div>
         ) : null}
+        {command && item.reportId ? (
+          <div>
+            <dt>Started from</dt>
+            <dd>
+              <Link href={`/admin/piracy#report-${item.reportId}`}>A piracy report</Link>
+            </dd>
+          </div>
+        ) : null}
       </dl>
 
       {tools}
@@ -251,7 +290,7 @@ async function Hostiles() {
               ) : null}
               .
             </p>
-            <ProposeForm command={command} />
+            <ProposeForm command={command} start={started?.start} from={started?.from} />
           </div>
         </TabPanel>
 

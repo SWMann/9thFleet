@@ -96,12 +96,15 @@ export function EventForm({
   types,
   people,
   qualifications,
+  report,
 }: {
   event: EventFields;
   /** The types this member may choose: the ones they may draft, and the event's own. */
   types: EventType[];
   people: Named[];
   qualifications: { id: string; name: string }[];
+  /** The piracy report a new event answers, when command drafted it from one. */
+  report?: string;
 }) {
   const [result, action, pending] = useActionState(event.id ? updateEvent : createEvent, untouched);
   // After a save is turned down the form shows what was typed. Otherwise it shows the event.
@@ -128,6 +131,7 @@ export function EventForm({
   return (
     <form action={action} className="event-form" key={result.stamp ?? 0}>
       {event.id ? <input type="hidden" name="id" value={event.id} /> : null}
+      {report && !event.id ? <input type="hidden" name="report" value={report} /> : null}
 
       <div className="panes">
         <fieldset className="pane">

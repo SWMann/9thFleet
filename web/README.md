@@ -57,7 +57,8 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/roles` | The areas of work, the roles in each, and a page for each role: what it is, what it does, what it needs, where it leads and the ships it is found on. Read from the database, where an admin keeps them. Open to everyone. It never shows who holds a post |
 | `/manual` | The fleet manual: the doctrine volumes that have been reviewed, section by section. Open to everyone |
 | `/credits` | Who took each picture on the site, and its licence |
-| `/privacy` | What the site records about visitors and members, who can read it and how to have it removed. Change it whenever the logging or the sign-in changes |
+| `/privacy` | What the site records about visitors, members, people who send a piracy report and players the fleet names, who can read it and how to have it removed. Change it whenever the logging, the sign-in, the report line or the hostile list changes |
+| `/piracy` | The public report line: anyone may tell the fleet about piracy, without signing in. It says plainly that it is not an emergency line. Command reads the reports at `/admin/piracy`. See The piracy report line below |
 | `/visit` | Not a page. A public page posts its address here once it has been read, to be counted |
 | `/menu` | The menu as a page, for a browser that is not running scripts |
 
@@ -106,6 +107,7 @@ The figures of the fleet, for the people who run it. A role decides which pages 
 | `/admin/people` | Staff, command and admins | Everyone on the books, by status, service and grade, with qualifications and attendance. A name opens that member's service record, at `/admin/people/<id>` |
 | `/admin/recruiting` | Staff, command and admins | How far applications get, how long decisions take, and which are still open |
 | `/admin/operations` | Command and admins | Every event, turnout, late reports, and attendance member by member |
+| `/admin/piracy` | Command and admins | The piracy reports sent through the public form: those that wait, and those handled or dismissed |
 | `/admin/structure` | Admins | The editors: areas, roles, units, posts, qualifications, event types, and ranks and grades. See Editors below |
 | `/admin/logs` | Admins | Everything that has happened: changes to records, sign-ins and sign-outs, anything refused or failed, and how often each public page is read |
 
@@ -174,6 +176,44 @@ engaged, and who is only to be reported.
   will lapse within 14 days.
 - **It is a members' page,** so it is in `MEMBER_PAGES` in `lib/supabase/proxy.ts` and in the
   matcher in `proxy.ts`. A new members' page goes in both.
+
+## The piracy report line
+
+`/piracy` is the fleet's public request line. Anyone may send a report without signing in: their
+handle in the game, where and when it happened, who did it if they know, what was done, and web
+addresses of a screenshot or a clip. A report can be marked as happening now.
+
+- **It is not an emergency line, and the page says so first.** Nobody is sent a message when a
+  report arrives. Command learns of one on the admin overview, the next time one of them opens
+  the site.
+- **Command alone reads a report,** at `/admin/piracy`. From one, command starts a hostile-list
+  entry or drafts a Response event, marks the report handled or dismisses it with a word of what
+  came of it, reopens it, or deletes it.
+- **A stranger's words stay plain words.** A report is shown as the text that was typed: nothing
+  in it is formatting or a link. Only the web addresses given as evidence are linked, each checked
+  and labelled with its real site, as on the hostile list. When command starts an entry from a
+  report, `fromPlainText` in `lib/rich/markdown.ts` writes the words so that the editor reads
+  none of them as formatting.
+- **Who sent a report stays with command.** The hostile list and an announced event are read by
+  the whole serving fleet. So an entry or an event started from a report is filled in with what
+  happened and where, and not with the sender's handle. Command adds it where the ships need it.
+- **Nothing about a sender is stored.** `lib/piracy-sender.ts` works out a mark of four characters
+  from the sender's network address and the day, and the action sends it with the report. The
+  database counts the mark and throws it away. About 65,000 addresses share each mark, and a
+  sender's mark changes every day. The address is not written down anywhere.
+- **The line has limits, and the database keeps them:** five reports a day from one sender, and
+  ten an hour and thirty a day from everyone together. A hidden field that no person reaches
+  catches a robot that fills in every field: it is told its report went, and nothing is sent.
+- **The limit on one sender only binds the form.** The database key in the page is public, as it
+  must be, so someone can send reports to the database directly and choose their own mark. The
+  limit on everyone together still holds them, and the worst they can do is fill the line for a
+  day. Command deletes what they sent.
+- **A report is kept for twelve months.** `getPiracyReports` in `lib/piracy.ts` deletes any that
+  are older each time command opens the page, before it reads anything. Deleting a report takes
+  its words out of the log of changes too. `KEEP_MONTHS` in `lib/piracy-form.ts` sets the time, and
+  the privacy page and the form read it from there.
+- **The form's checks are in `lib/piracy-form.ts`,** which reads nothing and is tested by
+  `npm test`. The database makes the same checks for itself.
 
 ## Editors
 
@@ -308,6 +348,7 @@ to be tracked.
 | The picture and colour of each type of log line | `lookIcons` in `app/admin/logs/page.tsx`, and the `log-kind-` colours in `app/globals.css`. The type's name is always written beside them |
 | Formatted text: its format, how it is shown and how it is edited | `lib/rich/` and `components/rich/`. See Formatted text above |
 | The site's icons, and the symbol for each kind of unit | `components/Icon.tsx` and `components/UnitSymbol.tsx`. An icon goes with words and never stands in for them |
+| The piracy report line | `app/piracy/` for the public form, `app/admin/piracy/` for command's page, and the checks, the limits' words and how long a report is kept in `lib/piracy-form.ts` |
 | What the site says it records | `app/privacy/page.tsx` |
 | The menu | `lib/menu.ts` |
 | The pictures | `lib/pictures.ts`. See Pictures below |

@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PageHead } from "@/components/PageHead";
+import { KEEP_MONTHS } from "@/lib/piracy-form";
 
 export const metadata: Metadata = {
   title: "What this site records",
-  description: "What the 9th Fleet's site keeps about visitors and members, who can read it, and how to have it removed.",
+  description: "What the 9th Fleet's site keeps about visitors, members and players it names, who can read it, and how to have it removed.",
 };
 
 /**
@@ -21,7 +23,7 @@ export default function PrivacyPage() {
             What this site <strong>records</strong>
           </>
         }
-        lead="What is kept about visitors and members, who can read it, and how to have it removed."
+        lead="What is kept about visitors, members and players the fleet names, who can read it, and how to have it removed."
       />
 
       <section className="wrap band" aria-labelledby="reading">
@@ -41,6 +43,59 @@ export default function PrivacyPage() {
             <li>
               <strong>The companies that run it.</strong> The site is served by Vercel and its database is kept by Supabase. Like any web
               host, they handle each request and keep their own short technical logs.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section className="wrap band" aria-labelledby="reporting">
+        <h2 id="reporting">
+          If you <strong>report piracy</strong>
+        </h2>
+        <div className="prose">
+          <p>
+            Anyone may send the fleet a <Link href="/piracy">piracy report</Link> without signing in. It is read by fleet command and
+            nobody else, and it is never published.
+          </p>
+          <ul>
+            <li>
+              <strong>What is kept.</strong> What you typed: your handle in the game, where and when it happened, who you say did it,
+              what they did, and any web addresses you gave. With it, the time the report arrived.
+            </li>
+            <li>
+              <strong>What is not kept.</strong> Your network address and anything about your browser. So that one sender cannot flood
+              the line, the site works out a mark of four characters from your network address and the day, and the database counts how
+              many reports that mark has sent today. The mark is not kept with your report. About 65,000 addresses share each mark, so
+              it cannot be turned back into yours, and yours changes every day.
+            </li>
+            <li>
+              <strong>How long.</strong> A report is deleted {KEEP_MONTHS} months after it arrives, or sooner if command deletes it.
+              Its words go from the log of changes at the same time.
+            </li>
+            <li>
+              <strong>What may come of it.</strong> Command may put the player or organisation you named on the fleet&apos;s hostile
+              list, and may tell the fleet&apos;s members what they need to know in the game to answer your report.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section className="wrap band" aria-labelledby="named">
+        <h2 id="named">
+          If the fleet has <strong>named you</strong>
+        </h2>
+        <div className="prose">
+          <p>The fleet keeps two records that can name a player who has nothing to do with this site.</p>
+          <ul>
+            <li>
+              <strong>The hostile list.</strong> The players and organisations the fleet treats as hostile in the game. An entry holds a
+              handle or an organisation ID as the game shows it, what the fleet says was done in the game, links to a screenshot or a
+              clip, and who in the fleet put it forward and decided it. It holds nothing about anyone outside the game. The serving
+              fleet reads it, and it is never published. An entry for a player lapses after 90 days unless command renews it.
+            </li>
+            <li>
+              <strong>Piracy reports.</strong> A report may give the handle of whoever its sender says attacked them. Command alone reads
+              it, and it is deleted {KEEP_MONTHS} months after it arrives.
             </li>
           </ul>
         </div>
@@ -102,8 +157,8 @@ export default function PrivacyPage() {
           <div>
             <dt>The serving fleet</dt>
             <dd>
-              Each other&apos;s names, ranks, posts and qualifications, the events, who said they are attending, and who is
-              mentioned in an event&apos;s report.
+              Each other&apos;s names, ranks, posts and qualifications, the events, who said they are attending, who is mentioned in an
+              event&apos;s report, and the hostile list as it stands today.
             </dd>
           </div>
           <div>
@@ -111,6 +166,13 @@ export default function PrivacyPage() {
             <dd>
               Everyone&apos;s record and Discord name, applications and their answers, interview notes except on their own, and who
               attended each event or was absent.
+            </dd>
+          </div>
+          <div>
+            <dt>Command</dt>
+            <dd>
+              Piracy reports. Names put forward for the hostile list, and entries that were declined, lifted or have lapsed, which
+              whoever put a name forward also sees.
             </dd>
           </div>
           <div>
@@ -146,6 +208,11 @@ export default function PrivacyPage() {
             something changed and when, with what it held about you blanked.
           </p>
           <p>You can also ask to see what is held about you, or to have a mistake put right.</p>
+          <p>
+            That goes for someone who is not a member too. If you sent a piracy report, or believe a report or the hostile list names
+            you, ask the fleet&apos;s command to show you what is held, to correct it or to delete it. Deleting a report or an entry
+            removes its words from the log of changes as well.
+          </p>
         </div>
       </section>
     </>

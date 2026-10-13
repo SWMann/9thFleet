@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { Icon } from "@/components/Icon";
 import { RichField } from "@/components/rich/RichField";
 import { STANDS_FOR, handleNames, kindNames, levelMeaning, levelNames, type HostileKind, type HostileLevel } from "@/lib/hostile-form";
 import { decideHostile, liftHostile, moveHostile, proposeHostile, renewHostile, rewordHostile, withdrawHostile, type HostileResult } from "./actions";
@@ -19,10 +20,11 @@ const kinds: HostileKind[] = ["individual", "organisation"];
 const levels: HostileLevel[] = ["hostile", "watch"];
 
 /**
- * Put a name forward. `start` fills the form in to begin with, when it was
- * opened from a report. Command may also list the name there and then.
+ * Put a name forward. `start` fills the form in to begin with, when command
+ * opened it from a piracy report: the entry then keeps a link to that report.
+ * Command may also list the name there and then.
  */
-export function ProposeForm({ command, start = {} }: { command: boolean; start?: Record<string, string> }) {
+export function ProposeForm({ command, start = {}, from }: { command: boolean; start?: Record<string, string>; from?: string }) {
   const [result, action, pending] = useActionState(proposeHostile, untouched);
   // What was typed comes back when it was turned down. After a success the form is empty again.
   const values = result.values ?? (result.ok ? {} : start);
@@ -31,6 +33,16 @@ export function ProposeForm({ command, start = {} }: { command: boolean; start?:
 
   return (
     <form action={action} className="fields fields-wide hostile-form" key={result.stamp ?? 0}>
+      {values.report ? <input type="hidden" name="report" value={values.report} /> : null}
+      {values.report && from ? (
+        <p className="notice">
+          <Icon name="flag" size={16} />
+          <span>
+            Filled in from the piracy report sent by {from}. A report is one side of a story: check it, and put it in the fleet&apos;s
+            words, before you send this.
+          </span>
+        </p>
+      ) : null}
       <fieldset className="field choices">
         <legend>Who is it?</legend>
         {kinds.map((entry) => (

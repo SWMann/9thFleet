@@ -3,7 +3,7 @@
  * never are. The database keeps the same list and has the last word, in
  * `app.count_page_view`. Keep the two in step.
  */
-const SECTIONS = ["standards", "ranks", "joining", "manual", "roles", "credits", "privacy", "menu", "sign-in"];
+const SECTIONS = ["standards", "ranks", "joining", "manual", "roles", "credits", "privacy", "menu", "sign-in", "piracy"];
 
 /** The address to count a view under, or null if this page is not counted. */
 export function countedPath(pathname: string): string | null {
