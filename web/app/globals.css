@@ -7222,3 +7222,76 @@ a.mention:hover {
   display: inline;
   font-size: inherit;
 }
+
+/* ---------------------------------------------------------------------------
+   Routine orders
+   --------------------------------------------------------------------------- */
+
+.issues {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
+  align-items: start;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One issue. An unread one carries the gold of something that waits for its reader. */
+.issue {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--seam);
+  border-top: 3px solid var(--seam-2);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.issue-unread {
+  border-top-color: var(--gold);
+}
+
+.issue-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.issue-head h3 {
+  min-width: 0;
+  margin: 0;
+  font-size: 1.1875rem;
+}
+
+.issue-title {
+  margin: 0;
+  color: var(--white);
+}
+
+.issue-facts {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}
+
+.orders-form {
+  max-width: 52rem;
+}
+
+.orders-body {
+  max-width: 46rem;
+}
+
+/* The line that says the reader has read an issue. */
+.read-mark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 24px 0 0;
+  color: var(--text-3);
+}

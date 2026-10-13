@@ -12,6 +12,7 @@ export const config = {
     "/order-of-battle/:path*",
     "/operations/:path*",
     "/hostiles/:path*",
+    "/routine-orders/:path*",
     "/apply/:path*",
     "/staff/:path*",
     "/admin/:path*",

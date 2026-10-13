@@ -6,6 +6,8 @@ import { ServiceRecordView } from "@/components/record/ServiceRecord";
 import { TabPanel, Tabs } from "@/components/Tabs";
 import { getSession, isServing, isStaff, type Member, type Role, type Service, type Status } from "@/lib/member";
 import { getServiceRecord } from "@/lib/service-record";
+import { orderName } from "@/lib/orders-form";
+import { getUnreadOrders } from "@/lib/routine-orders";
 import { site } from "@/lib/site";
 import { signOut } from "./actions";
 import { NamesForm } from "./NamesForm";
@@ -86,7 +88,7 @@ async function Record() {
   const status = statusNames[member.status];
   // Someone who has served has a record. A new applicant has only the day they signed in, which is not worth a tab.
   // One who was sent back out still has what went before.
-  const read = await getServiceRecord(member.id, member.service);
+  const [read, orders] = await Promise.all([getServiceRecord(member.id, member.service), getUnreadOrders()]);
   const record = member.status !== "applicant" || read.posts.length > 0 || read.statusLines.length > 1 ? read : null;
 
   const standing = (
@@ -184,12 +186,15 @@ async function Record() {
   );
 
   const head = (
-    <PageHead
-      picture="members"
-      slim
-      title={<strong>{heading(member)}</strong>}
-      lead={member.postTitle ? `${member.postTitle}, ${member.unitName}.` : status.meaning}
-    />
+    <PageHead picture="members" slim title={<strong>{heading(member)}</strong>} lead={member.postTitle ? `${member.postTitle}, ${member.unitName}.` : status.meaning}>
+      {orders.latest ? (
+        <p className="notice">
+          <Link href={`/routine-orders/${orders.latest.number}`}>
+            {orderName(orders.latest.number)} {orders.count > 1 ? `and ${orders.count - 1} more ${orders.count === 2 ? "issue are" : "issues are"}` : "is"} unread
+          </Link>
+        </p>
+      ) : null}
+    </PageHead>
   );
 
   if (!record) {

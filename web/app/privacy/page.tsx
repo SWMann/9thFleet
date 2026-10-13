@@ -165,7 +165,8 @@ export default function PrivacyPage() {
             <dt>The serving fleet</dt>
             <dd>
               Each other&apos;s names, ranks, posts and qualifications, the events, who said they are attending, who is mentioned in an
-              event&apos;s report, and the hostile list as it stands today.
+              event&apos;s report, the hostile list as it stands today, and routine orders, which name who was appointed, promoted and
+              qualified.
             </dd>
           </div>
           <div>
@@ -179,7 +180,7 @@ export default function PrivacyPage() {
             <dt>Command</dt>
             <dd>
               Piracy reports. Names put forward for the hostile list, and entries that were declined, lifted or have lapsed, which
-              whoever put a name forward also sees.
+              whoever put a name forward also sees. Who has marked each issue of routine orders as read.
             </dd>
           </div>
           <div>
