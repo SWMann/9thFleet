@@ -48,7 +48,7 @@ and the app did not need **Run as administrator**. The saved record is
 | --- | --- |
 | Keys (Numpad1, Numpad2) | 6 presses, 6 releases, none cut. The shortest press, 45 ms, was caught with its release |
 | Stick (buttons 6 and 5) | 6 presses, 6 releases, none cut, including four taps of about 100 ms |
-| Stick reading in the background | Not slowed: the stick's times are 10 ms apart, as they are with the app in front |
+| Stick reading in the background | Not slowed: taps 80 to 120 ms long were each caught with their release |
 | Second key | Net 2 was refused while Net 1 was held, as designed |
 
 The record says the app was in the background. It cannot say which program was in front: that
