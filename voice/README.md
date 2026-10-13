@@ -114,12 +114,14 @@ checks that the packaged copy starts and loads its key hook. See
 | One microphone, two keys, two nets, correct ear | Proven by the end-to-end test |
 | Release always closes the microphone | 50 of 50 in the end-to-end test, with a fake microphone |
 | The app recovers from a lost link by itself | Proven by the end-to-end test |
-| Keys work while Star Citizen has focus, with anti-cheat running | **Not tested. Gate A.** |
-| Stick buttons are seen while the game has focus | **Not tested. Gate A.** |
+| Keys work while Star Citizen has focus, with anti-cheat running | Seen on one PC, with nothing sent, in Gate A Part 1 on 13 October 2026. **Gate A repeats it on three PCs while transmitting.** |
+| Stick buttons are seen while the game has focus | Seen on one PC, with nothing sent, in Gate A Part 1 on 13 October 2026. **Gate A repeats it on three PCs while transmitting.** |
+| Two sticks of the same model keep their binds after being unplugged or a restart | **Not tested.** The app tells them apart by the order Windows lists them |
+| A stick button numbered above 32 can be bound | No. The Gamepad API reports 32 buttons at most |
 | It works when the game is played through a streaming client | **Not tested. Gate A.** |
 | Voice quality and delay with real microphones over the internet | **Not tested. Gate A.** |
 
-The Gate A script is in [`docs/gate-a-test.md`](../docs/gate-a-test.md).
+The Gate A script, and the Part 1 result, are in [`docs/gate-a-test.md`](../docs/gate-a-test.md).
 
 ## Known limits of the spike
 
