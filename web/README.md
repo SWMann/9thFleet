@@ -23,7 +23,7 @@ Then open http://localhost:3000.
 | `npm run typecheck` | Types |
 | `npm run lint` | Code style and common mistakes |
 | `npm run build` | That every page builds |
-| `npm test` | The format of formatted text, with no browser: what is written reads back the same, and nothing that could run is kept |
+| `npm test` | Rules that need no browser. The format of formatted text: what is written reads back the same, and nothing that could run is kept. The service record: lengths of time, time at a rank across posts, and what each change of status and grade is called |
 | `npm run e2e` | The whole site in a real browser: signing in, the member pages, applying and the staff pages. Run `npm run build` first |
 
 GitHub runs all five on every push that touches `web/` or the database migrations.
@@ -103,7 +103,7 @@ The figures of the fleet, for the people who run it. A role decides which pages 
 | Page | Who it is for | What it shows |
 | --- | --- | --- |
 | `/admin` | Staff, command and admins | Active strength against the stage, posts filled, and a list of what needs attention |
-| `/admin/people` | Staff, command and admins | Everyone on the books, by status, service and grade, with qualifications. Command also sees attendance |
+| `/admin/people` | Staff, command and admins | Everyone on the books, by status, service and grade, with qualifications and attendance. A name opens that member's service record, at `/admin/people/<id>` |
 | `/admin/recruiting` | Staff, command and admins | How far applications get, how long decisions take, and which are still open |
 | `/admin/operations` | Command and admins | Every event, turnout, late reports, and attendance member by member |
 | `/admin/structure` | Admins | The editors: areas, roles, units, posts, qualifications, event types, and ranks and grades. See Editors below |
@@ -120,6 +120,31 @@ An admin holds every role, so sees all of them. A role only counts while its hol
   reads the same without its bars. Every bar of a chart is one blue, because gold is for things to
   press and green, amber and red are for states. The colours were checked for contrast and for
   colour-blind readers against the site's dark panels. Check any new colour the same way.
+
+## The service record
+
+A member's history, on the second tab of `/profile` for the member and at `/admin/people/<id>` for
+staff, command and admins.
+
+| Part | What it shows |
+| --- | --- |
+| Time served | How long in the post held now and at the rank held now, and events attended in the last 30 and 90 days |
+| Posts held | Every post and duty, the rank it was held at, from when to when, and for how long |
+| Standing and promotions | The day of each change of status, and of each change of grade made in a post |
+| Events attended | Each event the member was on the return of, and whether they were present |
+| Earned | Qualifications and mentions |
+
+- **The rules are in `lib/record.ts`,** which reads nothing and is tested on its own by `npm test`.
+  `lib/service-record.ts` reads the rows and `components/record/ServiceRecord.tsx` lays them out,
+  the same for the member and for staff.
+- **Time at a rank carries across posts.** A move to another post at the same grade within 30 days
+  does not start the count again, because the database keeps a grade for 30 days. An acting grade
+  and the same grade held outright are counted apart.
+- **The database decides who reads it.** A member is sent their own lines and staff are sent
+  anyone's. A page that asked for someone else's would get an empty record.
+- **What command wrote on an appointment** is shown to staff. It is left off the member's own page,
+  but it is not secret from them: the database would send a member the note on their own
+  appointment if a page asked for it.
 
 ## Editors
 

@@ -49,9 +49,9 @@ Staff look after people, command makes appointments, and the admin owns the stru
 | --- | --- | --- |
 | Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: areas, roles, units, positions and the qualifications each requires. Never who holds one | Nothing |
 | Applicant | The same, and their own record and their own application | Set a character name and an RSI handle, apply while recruitment is open, withdraw |
-| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position and qualification, and every announced event with its orders, roll and report | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. A full member can apply for the cadet course |
+| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position now and which qualification, every announced event with its orders, roll and report, and their own service record | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. A full member can apply for the cadet course |
 | Instructor | The same | Award a qualification to someone else, in their own name. Draft an event of a type that is open to instructors, which at the start is training |
-| Staff | Everyone, every application and the interview notes | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
+| Staff | Everyone, every application and the interview notes, and any member's service record | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
 | Command | The same as staff | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event |
 | Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, the areas and roles, the qualifications and the rank names. Grant roles on the site, open recruitment, open a service, move the fleet to a new stage |
 
@@ -70,6 +70,11 @@ Roles add up: an admin holds every role. Things the database decides for itself:
 - **Officer positions need a commission**, unless the appointment is acting. An acting rank ends
   with the appointment.
 - **Signing in creates an applicant.** Accepting their application makes them a recruit.
+- **A member's history is their service record.** The database writes down the day a member's
+  status changes, and the day their grade changes while they hold a position, which is a
+  promotion. Nobody writes or changes those lines through the API. A member reads their own
+  history: the positions they have left, those days, and their attendance. Staff read anyone's.
+  Everyone else serving reads only who holds a position now.
 - **Nobody decides anything about themselves:** not their application, their qualification, their
   appointment, their promotion or their status. The admin is the one exception, so the fleet can
   start.
@@ -179,7 +184,7 @@ tables and Supabase's own default privileges. It is only for the tests.
 
 The migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
 database is compared with the tested copy after each one is applied: its functions, rules, columns,
-grants, triggers, constraints and views. It matched after the latest, `fleet_roles`.
+grants, triggers, constraints and views. It matched after the latest, `service_record`.
 
 Each file name starts with the version number Supabase recorded when it was applied, so this folder
 and the database's own migration history agree.

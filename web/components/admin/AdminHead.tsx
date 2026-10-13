@@ -27,18 +27,21 @@ export function AdminHead({
   tier,
   title,
   lead,
+  before,
   children,
 }: {
   current: AdminPage;
   tier: Tier | null;
   title: ReactNode;
   lead: ReactNode;
+  /** Something above the title, such as a link back. */
+  before?: ReactNode;
   children?: ReactNode;
 }) {
   const offered = tier ? pages.filter((page) => reaches(tier, page.needs)) : [];
   return (
     <>
-      <PageHead picture="staff" slim title={title} lead={lead}>
+      <PageHead picture="staff" slim title={title} lead={lead} before={before}>
         {children}
       </PageHead>
       {offered.length > 0 ? (

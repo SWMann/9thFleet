@@ -9,7 +9,7 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "e2e": "node e2e/sign-in.mjs && node e2e/recruiting.mjs",
-    "test": "node --import tsx --test lib/rich/*.test.ts"
+    "test": "node --import tsx --test lib/*.test.ts lib/rich/*.test.ts"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.8.0",

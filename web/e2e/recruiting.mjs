@@ -885,7 +885,7 @@ try {
     assert.match(await chart("By unit").innerText(), /1 of \d+/);
     await shot("admin-overview");
   });
-  await check("staff see everyone on the books and can narrow the list, without attendance", async () => {
+  await check("staff see everyone on the books, with what each has attended, and can narrow the list", async () => {
     await adminTab("People").click();
     await headingIs("People");
     await page.locator(".data-people:visible").waitFor();
@@ -899,7 +899,9 @@ try {
     const mine = await record("Starman Recruit Kit Marlow").innerText();
     assert.match(mine, /Kit_Marlow · kit_on_discord/);
     assert.match(mine, /Recruit\s+Navy · E1 · Staff/);
-    assert.equal(await page.locator(".data-people:visible thead th", { hasText: /Events|Absent|Last attended/ }).count(), 0);
+    // Attendance is on the People table for staff. The operations page is still for command.
+    assert.equal(await page.locator(".data-people:visible thead th", { hasText: "Events, 30 days" }).count(), 1);
+    assert.deepEqual((await cells(record("Kit Marlow"))).slice(4, 8), ["1", "1", "1", "0"]);
 
     await page.getByLabel("Status").selectOption({ label: "Applicant" });
     assert.equal(await rows.count(), 2);
@@ -2158,7 +2160,7 @@ try {
     await page.getByText("Signed off here: Private First Class Lee Tanaka.").waitFor();
     assert.equal(await page.getByRole("button", { name: "Sign off the passes" }).count(), 0);
     await signInAs(lee);
-    await page.goto(`${site}/profile`);
+    await page.goto(`${site}/profile?tab=service`);
     await page.getByRole("heading", { name: "What you have earned" }).waitFor();
     assert.match((await page.locator(".earned:visible").innerText()).replace(/\s+/g, " "), /Radio user .*, at Radio course 001/i);
   });
@@ -2223,7 +2225,7 @@ try {
     await signInAs(kit);
     await openCourse();
     assert.match(await reportText(), /Kit Marlow ?You Kept the net clear/i);
-    await page.goto(`${site}/profile`);
+    await page.goto(`${site}/profile?tab=service`);
     await page.getByRole("heading", { name: "What you have earned" }).waitFor();
     const earned = (await page.locator(".earned:visible").innerText()).replace(/\s+/g, " ");
     assert.match(earned, /Mentions Kept the net clear for the whole course\. Radio course 001,/i);
@@ -3035,6 +3037,145 @@ try {
     await told(again, "Saved.");
     assert.equal((await roleRow("gunner")).summary, "Ask Kit Marlow about the turrets. Daily.");
     await supabase.sql("update public.fleet_roles set summary = 'Mans a turret and **keeps it firing**.' where slug = 'gunner'");
+  });
+
+  console.log("The service record");
+  const rae = { discordId: "11", name: "rae_on_discord" };
+  const shortDay = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const daysAgo = (days) => shortDay.format(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
+  const rankOf = async (grade) => (await one("select name from public.ranks where service = 'navy' and grade_code = $1", [grade])).name;
+  const recordTab = tabOf("Parts of your record");
+  // A row of one of the record's tables, by the words in its first cell.
+  const recordRow = (label, name) =>
+    page.locator(`.table-scroll[aria-label="${label}"]:visible tbody tr`, { has: page.locator("th", { hasText: name }) });
+  const stepsText = async () => (await page.locator(".record-steps:visible li").allInnerTexts()).map((text) => text.replace(/\s+/g, " ").trim());
+  let raeId;
+
+  await check("a member's record holds their posts, the days their status and grade changed, and how long in post and rank", async () => {
+    // Rae signs in, is taken through the recruit route, and has held two posts: one left, one held now.
+    await signInAs(rae);
+    await setNames("Rae Okoye", "Rae_Okoye");
+    raeId = (await memberOf(rae)).id;
+    await supabase.sql("update public.members set service = 'navy' where id = $1", [raeId]);
+    for (const status of ["recruit", "auxiliary", "member"]) {
+      await supabase.sql("update public.members set status = $2 where id = $1", [raeId, status]);
+    }
+    await supabase.sql(
+      `insert into public.qualification_awards (member_id, qualification_id)
+       select $1, id from public.qualifications where code in ('induction', 'radio-user', 'navy-crew')`,
+      [raeId],
+    );
+    const free = await supabase.sql(
+      `select p.id, p.title from public.positions p join public.units u on u.id = p.unit_id
+       where u.name = 'Training Ship' and p.kind = 'primary'
+         and not exists (select 1 from public.assignments a where a.position_id = p.id and a.ended_on is null)
+       order by p.sort_order limit 2`,
+    );
+    assert.equal(free.length, 2, "two posts on the training ship are open");
+    // The first post: taken up 100 days ago, promoted in it 80 days ago, left 55 days ago.
+    const first = await one(
+      `insert into public.assignments (member_id, position_id, kind, grade_code, started_on)
+       values ($1, $2, 'primary', 'E2', current_date - 100) returning id`,
+      [raeId, free[0].id],
+    );
+    await supabase.sql("update public.assignments set grade_code = 'E3' where id = $1", [first.id]);
+    await supabase.sql("update public.assignment_grades set since = current_date - 80 where assignment_id = $1 and grade_code = 'E3'", [first.id]);
+    await supabase.sql("update public.assignments set ended_on = current_date - 55 where id = $1", [first.id]);
+    // The second: taken up 40 days ago at the same grade, and still held.
+    await supabase.sql(
+      `insert into public.assignments (member_id, position_id, kind, grade_code, started_on, note)
+       values ($1, $2, 'primary', 'E3', current_date - 40, 'Earned it on the range.')`,
+      [raeId, free[1].id],
+    );
+    const e3 = await rankOf("E3");
+
+    await signInAs(rae);
+    // The record is a tab of the member's own page. The first tab is as it was.
+    assert.equal(await page.locator("#record-posts:visible").count(), 0);
+    await recordTab("Service record");
+    assert.match(await page.locator('nav[aria-label="Parts of your record"]:visible').innerText(), /2 posts/);
+
+    // In post for 40 days. At the rank for 80: the move to a new post within 30 days did not start the count again.
+    assert.equal(await stat("In post"), `5 weeks ${free[1].title}, since ${daysAgo(40)}`);
+    assert.equal(await stat("At this rank"), `2 months ${e3}, since ${daysAgo(80)}`);
+    assert.equal(await stat("Events, 30 days"), "0 Returned present");
+
+    const now = (await cells(recordRow("Posts held", free[1].title))).map((cell) => cell.replace(/\s+/g, " "));
+    assert.deepEqual(now, [`${e3} E3`, daysAgo(40), "Now", "5 weeks"]);
+    const left = await cells(recordRow("Posts held", free[0].title));
+    assert.deepEqual(left, [`${e3} E3`, daysAgo(100), daysAgo(55), "6 weeks"]);
+    assert.match(await recordRow("Posts held", free[1].title).locator("th").innerText(), /Training Ship/);
+    // What command wrote on the appointment is for staff.
+    assert.equal(await page.getByText("Earned it on the range.").count(), 0);
+
+    // The latest first, and those of one day in the order they were made.
+    const steps = await stepsText();
+    assert.equal(steps.length, 5);
+    assert.match(steps[0], /Full member/);
+    assert.match(steps[1], /Finished training: auxiliary/);
+    assert.match(steps[2], /Accepted as a recruit/);
+    assert.match(steps[3], /First signed in/);
+    assert.match(steps[4], new RegExp(`^${daysAgo(80)} Promoted to ${e3} E3, as ${free[0].title}\\.$`));
+
+    await page.getByText("No event yet.").waitFor();
+    assert.match((await page.locator(".earned:visible").innerText()).replace(/\s+/g, " "), /Qualifications General induction .* Navy crew .* Radio user/i);
+    await shot("service-record");
+  });
+  await check("a member sees the events they were at, and where they were absent", async () => {
+    await signInAs(jo);
+    await recordTab("Service record");
+    const patrolRow = recordRow("Events attended", "Patrol 001");
+    assert.deepEqual((await cells(patrolRow)).filter((_, index) => index !== 1), ["Patrol", "Absent without notice"]);
+    assert.equal(await patrolRow.getByRole("link", { name: "Patrol 001" }).getAttribute("href"), `/operations/${(await patrol()).id}`);
+    await page.getByText("Only you and staff see where you were absent.").waitFor();
+
+    await signInAs(kit);
+    await recordTab("Service record");
+    assert.deepEqual((await cells(recordRow("Events attended", "Patrol 001"))).at(-1), "Present");
+    assert.match(await stat("Events, 90 days"), /^\d+ \d+ in all$/);
+  });
+  await check("staff open anyone's record from the People table, with the note on each appointment", async () => {
+    // Kit holds the staff role.
+    await page.goto(`${site}/admin/people`);
+    await page.locator(".data-people:visible").waitFor();
+    await page.locator(".data-people:visible").getByRole("link", { name: /Rae Okoye$/ }).click();
+    const e3 = await rankOf("E3");
+    await headingIs(`${e3} Rae Okoye`);
+    assert.equal(new URL(page.url()).pathname, `/admin/people/${raeId}`);
+    const facts = (await page.locator(".facts:visible").innerText()).replace(/\s+/g, " ");
+    assert.match(facts, /Status Full member/i);
+    assert.match(facts, /RSI handle Rae_Okoye/i);
+    assert.match(facts, /Discord rae_on_discord/i);
+    assert.equal(await stat("At this rank"), `2 months ${e3}, since ${daysAgo(80)}`);
+    await page.getByText("Earned it on the range.").waitFor();
+    assert.equal((await stepsText()).length, 5);
+    await page.getByText("On no event's return yet.").waitFor();
+    await shot("member-record");
+
+    // Attendance is on a record for staff as well as for the member.
+    await page.goto(`${site}/admin/people/${(await memberOf(jo)).id}`);
+    await page.getByText("Only the member and staff see this.").waitFor();
+    assert.deepEqual((await cells(recordRow("Events attended", "Patrol 001"))).at(-1), "Absent without notice");
+
+    await page.goto(`${site}/admin/people/00000000-0000-4000-8000-000000000000`);
+    await headingIs("Nothing heard.");
+    await page.goto(`${site}/admin/people/not-an-id`);
+    await headingIs("Nothing heard.");
+  });
+  await check("a member's record is opened by nobody but the member and staff", async () => {
+    // Rae serves and holds no role.
+    await signInAs(rae);
+    assert.equal(await page.getByRole("heading", { name: "Staff work" }).count(), 0);
+    for (const person of [jo, kit]) {
+      await page.goto(`${site}/admin/people/${(await memberOf(person)).id}`);
+      await leadIs(/for the people who run the fleet/);
+      assert.equal(await page.locator(".kpis:visible, .data:visible, .record-steps:visible, .facts:visible").count(), 0);
+    }
+    const kitId = (await memberOf(kit)).id;
+
+    await context.clearCookies();
+    await page.goto(`${site}/admin/people/${kitId}`);
+    assert.equal(new URL(page.url()).pathname, "/sign-in");
   });
 
   await check("no page raised a script error", async () => {
