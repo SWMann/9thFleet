@@ -6974,3 +6974,196 @@ a.mention:hover {
     grid-column: 1;
   }
 }
+
+/* The hostile list */
+
+.hostiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
+  /* Each entry keeps its own height, so opening one does not stretch its neighbour. */
+  align-items: start;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One entry. The bar at its top says how it stands: red for hostile, amber for watch, grey for off the list. */
+.hostile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--seam);
+  border-top: 3px solid var(--seam-2);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.hostile-hostile {
+  border-top-color: #d0463a;
+}
+
+.hostile-watch {
+  border-top-color: #c9962a;
+}
+
+.hostile:target {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.hostile-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.hostile-head h3 {
+  min-width: 0;
+  margin: 0;
+}
+
+/* The name as the game shows it, set so that an l is not read as an I. */
+.hostile-handle {
+  display: block;
+  color: var(--white);
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 1.1875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
+.hostile-name {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: 0.9375rem;
+  font-weight: 400;
+}
+
+.band .hostile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: none;
+  margin: 0;
+}
+
+.chip-red {
+  border-color: var(--red);
+  background: var(--red);
+  color: var(--white);
+}
+
+.hostile .rich {
+  max-width: none;
+  color: var(--text);
+}
+
+.hostile-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9375rem;
+}
+
+.hostile-evidence li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hostile-evidence .icon {
+  flex: none;
+  align-self: center;
+  color: var(--text-3);
+}
+
+.hostile-evidence a {
+  overflow-wrap: anywhere;
+}
+
+.hostile-facts {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--seam);
+  font-size: 0.9375rem;
+}
+
+.hostile-facts > div {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 12px;
+}
+
+.hostile-facts dt {
+  color: var(--text-3);
+}
+
+.hostile-facts dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.hostile-facts .aside {
+  color: var(--text-3);
+}
+
+.hostile .decisions {
+  margin-top: 2px;
+  padding-top: 14px;
+  border-top: 1px solid var(--seam);
+}
+
+.hostile .decisions .button {
+  min-height: 36px;
+  padding-inline: 14px;
+  font-size: 0.875rem;
+}
+
+.hostile .confirm-body {
+  max-width: none;
+}
+
+/* A second title further down a tab, with room above it. */
+.tab-title-next {
+  margin-top: 44px;
+  padding-top: 28px;
+  border-top: 1px solid var(--seam);
+}
+
+.band .empty {
+  margin: 0;
+  color: var(--text-3);
+}
+
+.tab-band .notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 46rem;
+  margin: 0 0 18px;
+}
+
+.hostile-form {
+  max-width: 46rem;
+}
+
+/* The second line of a choice: what choosing it means. */
+.choice small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 0.9375rem;
+}

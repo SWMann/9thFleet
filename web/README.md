@@ -149,6 +149,29 @@ staff, command and admins.
 - **Lines are taken in the order the database wrote them,** whatever day each is dated, and no
   change is shown before the one it followed or outside the days its post was held.
 
+## The hostile list
+
+`/hostiles`, for the serving fleet. It is the list the rules of engagement point at: who may be
+engaged, and who is only to be reported.
+
+| Tab | Who sees it | What it holds |
+| --- | --- | --- |
+| Hostile | Everyone serving | Declared hostile organisations and individuals on the list today |
+| Watch | Everyone serving | Names to report on contact and not engage |
+| Put forward | Everyone serving | The form, and the reader's own names that wait. Command sees every name that waits, with the buttons to list or decline it |
+| Past | Command, and whoever put a name forward | What was declined, lifted or has lapsed, with what command answered |
+
+- **The rules are the database's.** `app/hostiles/actions.ts` sends each change and passes on the
+  answer. `lib/hostile-form.ts` checks a form's fields first, reads nothing, and is tested by
+  `npm test`.
+- **Only web addresses become links.** Evidence is kept as addresses, one to a line. Each is
+  checked when it is written, by the database, and again before it is drawn. A link opens in a new
+  tab and passes nothing to the site it goes to.
+- **Command is told on the admin overview** when a name waits for a decision, and when an entry
+  will lapse within 14 days.
+- **It is a members' page,** so it is in `MEMBER_PAGES` in `lib/supabase/proxy.ts` and in the
+  matcher in `proxy.ts`. A new members' page goes in both.
+
 ## Editors
 
 An admin keeps the fleet's structure on the site, at `/admin/structure`. Nothing about a role, an

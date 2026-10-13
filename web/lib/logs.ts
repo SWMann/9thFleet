@@ -93,7 +93,7 @@ const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
     "events", "event_orders", "event_units", "event_key_posts", "event_posts", "event_objectives", "event_elements",
     "event_timings", "event_ships", "event_nets", "event_amendments", "event_acknowledgements", "attendance",
     "attendance_returns", "after_action_reports", "event_objective_outcomes", "event_losses", "event_opfor",
-    "event_opfor_members", "event_unit_tasks",
+    "event_opfor_members", "event_unit_tasks", "hostiles",
   ],
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
@@ -386,6 +386,7 @@ const FORMATTED: Record<string, string[]> = {
   fleet_roles: ["summary"],
   qualifications: ["description"],
   event_types: ["situation_holds", "mission_holds", "execution_holds", "support_holds", "command_and_signal_holds"],
+  hostiles: ["reason"],
 };
 
 function changes(row: AuditRow, names: Names, said: string[] = []): string | null {
@@ -673,6 +674,27 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       if (row.action === "insert") return line("personnel", `${actor} mentioned ${subject} in the report of ${event}`, plainText(String(now.citation ?? "")));
       if (row.action === "delete") return line("personnel", `${actor} withdrew ${whose} mention in the report of ${event}`);
       return line("personnel", `${actor} corrected ${whose} mention in the report of ${event}`, plainText(String(now.citation ?? "")));
+    }
+
+    case "hostiles": {
+      // The name is a player's handle or an organisation's ID from the game. What it is said to have done stays on the list.
+      const name = `${any.kind === "organisation" ? "the organisation " : ""}${String(any.handle)}`;
+      const level = (value: unknown) => (value === "watch" ? "on watch" : "as hostile");
+      if (row.action === "insert") {
+        return line("operations", now.state === "listed" ? `${actor} listed ${name} ${level(now.level)}` : `${actor} put ${name} forward for the hostile list`);
+      }
+      if (row.action === "delete") {
+        return line("operations", was.state === "proposed" ? `${actor} took back ${name}, which they had put forward for the hostile list` : `${actor} deleted the hostile list's entry for ${name}, to put right a mistake`);
+      }
+      const said = typeof now.decision_note === "string" && now.decision_note !== "" && changed("decision_note") ? `Command said: ${now.decision_note}` : null;
+      if (changed("state")) {
+        if (now.state === "listed") return line("operations", `${actor} listed ${name} ${level(now.level)}`, said);
+        if (now.state === "declined") return line("operations", `${actor} declined to list ${name}`, said);
+        if (now.state === "lifted") return line("operations", `${actor} lifted ${name} from the hostile list`, said);
+      }
+      if (changed("level")) return line("operations", now.level === "watch" ? `${actor} moved ${name} from hostile to watch` : `${actor} made ${name} hostile, from watch`);
+      if (changed("renewed_at")) return line("operations", `${actor} renewed ${name} on the hostile list`, now.expires_on ? `It stands to ${String(now.expires_on)}.` : null);
+      return line("operations", `${actor} rewrote the hostile list's entry for ${name}`, changes(row, names));
     }
 
     case "event_opfor": {

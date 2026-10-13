@@ -49,10 +49,10 @@ Staff look after people, command makes appointments, and the admin owns the stru
 | --- | --- | --- |
 | Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: areas, roles, units, positions and the qualifications each requires. Never who holds one | Nothing |
 | Applicant | The same, and their own record and their own application | Set a character name and an RSI handle, apply while recruitment is open, withdraw |
-| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position now and which qualification, every announced event with its orders, roll and report, and their own service record | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. A full member can apply for the cadet course |
+| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position now and which qualification, every announced event with its orders, roll and report, their own service record, and the hostile list as it stands today | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. A full member can apply for the cadet course |
 | Instructor | The same | Award a qualification to someone else, in their own name. Draft an event of a type that is open to instructors, which at the start is training |
 | Staff | Everyone, every application and the interview notes, and any member's service record | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
-| Command | The same as staff | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event |
+| Command | The same as staff, and every entry of the hostile list: waiting, declined, lifted and lapsed | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event. Keep the hostile list |
 | Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, the areas and roles, the qualifications and the rank names. Grant roles on the site, open recruitment, open a service, move the fleet to a new stage |
 
 Roles add up: an admin holds every role. Things the database decides for itself:
@@ -79,6 +79,17 @@ Roles add up: an admin holds every role. Things the database decides for itself:
 - **A grade put right after a position was left is a correction.** Only the database's owner can
   change a position that has ended. Doing so changes its last line and adds none, so the record
   does not show a promotion made today.
+- **The hostile list is command's to keep.** Any serving member puts a name forward, in their own
+  name, and may take it back while it waits. Only command lists it, as hostile or on watch,
+  declines it, rewrites it, renews it and lifts it. A name has one open entry at a time, an entry
+  stays about the name it was made for, and one that was declined or lifted is closed.
+- **An entry lapses by the calendar, not by a job.** A declared hostile organisation stands until
+  it is lifted. An individual, and anything on watch, stands for 90 days from the day it was listed,
+  moved between hostile and watch, or renewed. The database sets that day. Nothing runs to take a
+  lapsed entry off: the rule that sends the list to the fleet leaves it out from the next day.
+- **The list holds names from the game.** A player's handle or an organisation's ID, what they did
+  in the game, and web addresses of a picture or a clip. A serving member of the fleet cannot be
+  listed. It is never sent to a visitor or to someone who has not joined.
 - **A note on a member is for staff.** What command writes on an appointment is kept on the
   appointment, where the API cannot read it, and copied to its own table, which only staff are
   sent. What an instructor writes on an award is kept and sent to nobody. A page that asks for
