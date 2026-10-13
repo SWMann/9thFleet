@@ -80,16 +80,27 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   change a position that has ended. Doing so changes its last line and adds none, so the record
   does not show a promotion made today.
 - **The hostile list is command's to keep.** Any serving member puts a name forward, in their own
-  name, and may take it back while it waits. Only command lists it, as hostile or on watch,
-  declines it, rewrites it, renews it and lifts it. A name has one open entry at a time, an entry
-  stays about the name it was made for, and one that was declined or lifted is closed.
+  name, and may take it back while it waits. A member has five names waiting at most, and a name
+  command declined waits 30 days before anyone but command puts it forward again. Only command
+  lists a name, as hostile or on watch, declines it, rewrites a listed entry, moves it, renews it
+  and lifts it. A name that waits stays as it was put forward. A name waits once and is listed
+  once, an entry stays about the name it was made for, and one that was declined or lifted is
+  closed. Listing a name closes an entry for the same name that has lapsed.
+- **Someone outside the fleet learns nothing from the hostile list,** not even by trying a name:
+  the refusal is the same whatever they send. The check of who is asking comes before every other.
 - **An entry lapses by the calendar, not by a job.** A declared hostile organisation stands until
   it is lifted. An individual, and anything on watch, stands for 90 days from the day it was listed,
   moved between hostile and watch, or renewed. The database sets that day. Nothing runs to take a
   lapsed entry off: the rule that sends the list to the fleet leaves it out from the next day.
 - **The list holds names from the game.** A player's handle or an organisation's ID, what they did
   in the game, and web addresses of a picture or a clip. A serving member of the fleet cannot be
-  listed. It is never sent to a visitor or to someone who has not joined.
+  put forward, listed, moved or renewed, as a player or as an organisation: an entry for someone
+  who has since joined can only be declined or lifted. The list is never sent to a visitor or to
+  someone who has not joined. What an entry says is still for command to read before listing it:
+  the database checks its shape, not whether it is fair.
+- **Deleting an entry takes its words out of the audit log.** An admin deletes an entry to put
+  right a mistake, or to take out something that should not have been written. The log keeps that
+  the entry existed, who it named and who did what, and loses what it said.
 - **A note on a member is for staff.** What command writes on an appointment is kept on the
   appointment, where the API cannot read it, and copied to its own table, which only staff are
   sent. What an instructor writes on an award is kept and sent to nobody. A page that asks for
@@ -203,7 +214,7 @@ tables and Supabase's own default privileges. It is only for the tests.
 
 The migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
 database is compared with the tested copy after each one is applied: its functions, rules, columns,
-grants, triggers, constraints and views. It matched after the latest, `record_notes`.
+grants, triggers, constraints and views. It matched after the latest, `hostile_list`.
 
 Each file name starts with the version number Supabase recorded when it was applied, so this folder
 and the database's own migration history agree.

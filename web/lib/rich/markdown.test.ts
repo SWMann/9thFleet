@@ -203,7 +203,16 @@ test("a list item that holds more than a line reads back as it was", () => {
 });
 
 test("a mention can be taken out of text that visitors will read", () => {
-  const { withoutMentions } = markdown;
+  const { withoutMentions, withoutLinks } = markdown;
+  // A link becomes its words with its address after them, so it cannot say one place and lead to another.
+  assert.equal(withoutLinks("See [the RSI page](https://evil.example/login) and **act**."), "See the RSI page (https://evil.example/login) and **act**.");
+  assert.equal(withoutLinks("Write to [him](mailto:someone@example.com)."), "Write to him (mailto:someone@example.com).");
+  assert.equal(withoutLinks("At <https://example.com/clip> now."), "At https://example.com/clip now.");
+  assert.equal(withoutLinks("- *[one](/manual)*\n- two"), "- *one (/manual)*\n- two");
+  // Text with no link is left exactly as it was written.
+  assert.equal(withoutLinks("Camped the pads  for a week."), "Camped the pads  for a week.");
+  assert.equal(markdown.parseRich(withoutLinks("[x](https://a.example) [y](https://b.example)")).length, 1);
+  assert.ok(!JSON.stringify(markdown.parseRich(withoutLinks("[x](https://a.example)"))).includes('"link"'));
   assert.equal(withoutMentions(`Ask [@Kit Marlow](member:${MEMBER}) about **it**.`), "Ask Kit Marlow about **it**.");
   assert.equal(withoutMentions("- [@A Flight](unit:" + MEMBER + ") leads"), "- A Flight leads");
   // Text with nobody named in it is left exactly as it was written.

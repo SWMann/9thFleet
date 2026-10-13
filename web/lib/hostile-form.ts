@@ -35,11 +35,10 @@ export type HostileFields = { kind: HostileKind; handle: string; name: string; l
  * a plain http or https address is a problem, not something to guess at.
  */
 export function readEvidence(text: string): { lines: string[] } | { problem: string } {
-  const lines = text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  for (const line of lines) {
+  const lines: string[] = [];
+  for (const typed of text.split("\n")) {
+    const line = typed.trim();
+    if (line === "") continue;
     let address: URL | null = null;
     try {
       address = new URL(line);
@@ -49,6 +48,9 @@ export function readEvidence(text: string): { lines: string[] } | { problem: str
     if (!address || !["http:", "https:"].includes(address.protocol) || /\s/.test(line) || !/^https?:\/\//i.test(line)) {
       return { problem: "Give each piece of evidence as a web address starting https://, one to a line." };
     }
+    // The database keeps the start of an address in small letters. The same address twice is kept once.
+    const tidy = line.replace(/^https?:\/\//i, (start) => start.toLowerCase());
+    if (!lines.includes(tidy)) lines.push(tidy);
   }
   if (lines.join("\n").length > 1000) return { problem: "Keep the evidence to 1,000 characters." };
   return { lines };
@@ -62,8 +64,8 @@ export function readHostile(get: (name: string) => string): { fields: HostileFie
   if (!HANDLE.test(handle)) {
     return { problem: `Give the ${handleNames[kind]} as the game shows it: 2 to 60 letters, numbers, hyphens or underscores, with no spaces.` };
   }
-  const name = get("name").replace(/\s+/g, " ");
-  if (name.length > 80) return { problem: "Keep the name under 80 characters." };
+  const name = readName(get("name"));
+  if (typeof name !== "string") return name;
   const level = get("level") || "hostile";
   if (level !== "hostile" && level !== "watch") return { problem: "Choose hostile or watch." };
   const words = readWords(get);
@@ -71,9 +73,17 @@ export function readHostile(get: (name: string) => string): { fields: HostileFie
   return { fields: { kind, handle, name, level, ...words.fields } };
 }
 
+/** What a name is also known as: one line, with nothing in it that hides or reorders what is written. */
+export function readName(typed: string): string | { problem: string } {
+  const name = typed.replace(/\s+/g, " ").trim();
+  if (name.length > 80) return { problem: "Keep the name under 80 characters." };
+  if (/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/.test(name)) return { problem: "Keep the name to plain letters, numbers and marks." };
+  return name;
+}
+
 /** What happened and where to see it: the part of an entry command can rewrite. */
 export function readWords(get: (name: string) => string): { fields: { reason: string; evidence: string } } | { problem: string } {
-  const reason = get("reason");
+  const reason = get("reason").trim();
   if (reason.length < 10) return { problem: "Say what happened, in a sentence or more." };
   if (reason.length > 2000) return { problem: "Keep what happened to 2,000 characters, counting its formatting." };
   const evidence = readEvidence(get("evidence"));
@@ -81,13 +91,18 @@ export function readWords(get: (name: string) => string): { fields: { reason: st
   return { fields: { reason, evidence: evidence.lines.join("\n") } };
 }
 
-/** A web address as a short label: where it is and the start of its path. */
+/**
+ * A web address as a short label: the whole of the site's name, then the start
+ * of its path. The site's name is never cut short, because where a link really
+ * goes is in the end of that name.
+ */
 export function linkLabel(address: string): string {
   try {
     const url = new URL(address);
+    const host = url.hostname.replace(/^www\./, "");
     const path = url.pathname === "/" ? "" : url.pathname;
-    const label = `${url.hostname.replace(/^www\./, "")}${path}`;
-    return label.length > 48 ? `${label.slice(0, 47)}…` : label;
+    const room = Math.max(12, 48 - host.length);
+    return `${host}${path.length > room ? `${path.slice(0, room - 1)}…` : path}`;
   } catch {
     return address;
   }

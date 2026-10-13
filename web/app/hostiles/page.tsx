@@ -101,12 +101,13 @@ async function Hostiles() {
         </p>
       </div>
 
-      <Rich text={item.reason} you={member.id} members={names} />
+      {/* An address in the words is read, not followed. The evidence has links of its own, each a checked web address. */}
+      <Rich text={item.reason} you={member.id} members={names} links={false} />
 
       {item.evidence.length > 0 ? (
         <ul className="hostile-evidence" aria-label={`Evidence for ${item.handle}`}>
-          {item.evidence.map((address) => (
-            <li key={address}>
+          {item.evidence.map((address, index) => (
+            <li key={`${index}-${address}`}>
               <Icon name="link" size={14} />
               <a href={address} rel="noopener noreferrer nofollow" target="_blank">
                 {linkLabel(address)}
@@ -131,7 +132,7 @@ async function Hostiles() {
         ) : null}
         {item.decidedAt ? (
           <div>
-            <dt>{item.state === "declined" ? "Declined" : "Listed"}</dt>
+            <dt>{item.state === "declined" ? "Declined" : "Decided"}</dt>
             <dd>
               {day(item.decidedAt)}, by {who(item.decidedBy)}
             </dd>
@@ -158,6 +159,12 @@ async function Hostiles() {
           <div>
             <dt>Command said</dt>
             <dd>{item.decisionNote}</dd>
+          </div>
+        ) : null}
+        {item.liftNote ? (
+          <div>
+            <dt>On lifting</dt>
+            <dd>{item.liftNote}</dd>
           </div>
         ) : null}
       </dl>
@@ -236,7 +243,7 @@ async function Hostiles() {
               Put a name forward
             </h2>
             <p className="intro">
-              Any serving member may. Nothing is on the list until command says so
+              Any serving member may, with five names waiting at most. Nothing is on the list until command says so
               {past.length > 0 ? (
                 <>
                   , and what command answered is under <TabLink to="past">Past</TabLink>

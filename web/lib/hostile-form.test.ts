@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { lapses, linkLabel, readEvidence, readHostile, readWords, standing } from "./hostile-form";
+import { lapses, linkLabel, readEvidence, readHostile, readName, readWords, standing } from "./hostile-form";
 
 const form = (fields: Record<string, string>) => (name: string) => (fields[name] ?? "").trim();
 const good = { kind: "individual", handle: "Red_Raider-7", name: "Known as Red", level: "watch", reason: "Attacked a mining ship at Yela.", evidence: "https://example.com/clip" };
@@ -41,6 +41,22 @@ test("evidence is web addresses, one to a line", () => {
     assert.ok("problem" in readEvidence(`https://fine.example\n${bad}`), bad);
   }
   assert.ok("problem" in readEvidence(`https://example.com/${"x".repeat(1000)}`));
+  // The start of an address is kept in small letters, as the database asks, and an address is kept once.
+  assert.deepEqual(readEvidence("HTTPS://Example.com/A\nhttps://Example.com/A\nHttp://example.org/b"), { lines: ["https://Example.com/A", "http://example.org/b"] });
+});
+
+test("a name is one plain line", () => {
+  assert.equal(readName("  The   Scrub Collective "), "The Scrub Collective");
+  assert.equal(readName(""), "");
+  for (const bad of ["over\u202eride", "iso\u2066late", "bell\u0007", "x".repeat(81)]) {
+    assert.ok(typeof readName(bad) !== "string", JSON.stringify(bad));
+  }
+  assert.ok("problem" in readHostile(form({ ...good, name: "over\u202eride" })));
+});
+
+test("what happened is more than spaces", () => {
+  assert.ok("problem" in readWords((name) => (name === "reason" ? "          " : "")));
+  assert.ok("problem" in readWords((name) => (name === "reason" ? "   short   " : "")));
 });
 
 test("only a declared hostile organisation stands without a last day", () => {
@@ -66,4 +82,8 @@ test("a link is labelled by where it goes", () => {
   assert.equal(linkLabel("https://example.com/"), "example.com");
   assert.equal(linkLabel(`https://example.com/${"a".repeat(80)}`).length, 48);
   assert.equal(linkLabel("not an address"), "not an address");
+  // A long name that starts like a site you know is shown to its end, which is where it really goes.
+  const long = "https://robertsspaceindustries.com.account-security-check.evil.example/sign-in/with/a/long/path";
+  assert.match(linkLabel(long), /^robertsspaceindustries\.com\.account-security-check\.evil\.example\//);
+  assert.equal(linkLabel("https://rsi.com@evil.example/x"), "evil.example/x");
 });

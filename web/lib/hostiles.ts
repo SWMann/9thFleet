@@ -30,6 +30,7 @@ export type Hostile = {
   renewedAt: string | null;
   liftedBy: string | null;
   liftedAt: string | null;
+  liftNote: string;
   /** Whether it is the reader's own: they put it forward. */
   mine: boolean;
   /** Whether it lapses at all, how long it has left, and whether it has lapsed. */
@@ -77,7 +78,7 @@ export async function getHostiles(): Promise<HostileList> {
   const [entries, roster, sources] = await Promise.all([
     supabase
       .from("hostiles")
-      .select("id, kind, handle, name, level, state, reason, evidence, reported_by, reported_at, decided_by, decided_at, decision_note, expires_on, renewed_at, lifted_by, lifted_at")
+      .select("id, kind, handle, name, level, state, reason, evidence, reported_by, reported_at, decided_by, decided_at, decision_note, expires_on, renewed_at, lifted_by, lifted_at, lift_note")
       .order("handle", { ascending: true }),
     supabase.from("roster").select("member_id, character_name, rank_name, acting"),
     fleetSources(),
@@ -116,6 +117,7 @@ export async function getHostiles(): Promise<HostileList> {
       renewedAt: (row.renewed_at as string | null) ?? null,
       liftedBy: (row.lifted_by as string | null) ?? null,
       liftedAt: (row.lifted_at as string | null) ?? null,
+      liftNote: (row.lift_note as string) ?? "",
       mine: row.reported_by === me,
       lapses: lapses(kind, level),
       standing: standing(expiresOn, today),
@@ -126,7 +128,8 @@ export async function getHostiles(): Promise<HostileList> {
   const byHandle = (a: Hostile, b: Hostile) => a.handle.localeCompare(b.handle, "en", { sensitivity: "base" });
   // The soonest to lapse first, then those that stand until lifted.
   const bySoonest = (a: Hostile, b: Hostile) => (a.standing.daysLeft ?? Infinity) - (b.standing.daysLeft ?? Infinity) || byHandle(a, b);
-  const latest = (entry: Hostile) => entry.liftedAt ?? entry.decidedAt ?? entry.expiresOn ?? entry.reportedAt;
+  // When each left the list: the day it was lifted, the day it lapsed, or the day it was declined.
+  const latest = (entry: Hostile) => entry.liftedAt ?? (entry.state === "listed" ? entry.expiresOn : entry.decidedAt) ?? entry.reportedAt;
 
   return {
     state: "ready",

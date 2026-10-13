@@ -690,7 +690,10 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       if (changed("state")) {
         if (now.state === "listed") return line("operations", `${actor} listed ${name} ${level(now.level)}`, said);
         if (now.state === "declined") return line("operations", `${actor} declined to list ${name}`, said);
-        if (now.state === "lifted") return line("operations", `${actor} lifted ${name} from the hostile list`, said);
+        if (now.state === "lifted") {
+          const why = typeof now.lift_note === "string" && now.lift_note !== "" ? `Command said: ${now.lift_note}` : null;
+          return line("operations", `${actor} lifted ${name} from the hostile list`, why);
+        }
       }
       if (changed("level")) return line("operations", now.level === "watch" ? `${actor} moved ${name} from hostile to watch` : `${actor} made ${name} hostile, from watch`);
       if (changed("renewed_at")) return line("operations", `${actor} renewed ${name} on the hostile list`, now.expires_on ? `It stands to ${String(now.expires_on)}.` : null);

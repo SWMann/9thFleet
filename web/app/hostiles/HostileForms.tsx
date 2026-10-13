@@ -88,7 +88,8 @@ export function ProposeForm({ command, start = {} }: { command: boolean; start?:
       <div className="field">
         <label htmlFor="hostile_reason">What happened</label>
         <p className="hint" id="hostile_reason_hint">
-          What they did in the game, where and when. Keep to what was seen. Nothing about anyone outside the game belongs here.
+          What they did in the game, where and when. Keep to what was seen. Nothing about anyone outside the game belongs here. A web
+          address written here is kept as words: links go under Evidence.
         </p>
         <RichField id="hostile_reason" name="reason" rows={5} maxLength={2000} required defaultValue={values.reason ?? ""} describedBy="hostile_reason_hint" />
       </div>

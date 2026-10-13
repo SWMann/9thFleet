@@ -3272,7 +3272,7 @@ try {
     assert.match(await hostileBar(), /Put forward 1 waiting/);
     // The same name is not put forward twice.
     await putForward({ name: "red_raider", reason: "Saw the same player again near Daymar." });
-    await page.locator(".form-result-bad:visible", { hasText: "red_raider already has an entry that is waiting or listed." }).waitFor();
+    await page.locator(".form-result-bad:visible", { hasText: "red_raider has already been put forward, or is on the list." }).waitFor();
 
     // It is not on the list, and nobody but command is shown it waiting.
     await signInAs(kit);
@@ -3318,6 +3318,26 @@ try {
     assert.match(await cardText("Red_Raider"), /Report on contact|Attacked a mining ship/);
     assert.equal(await card("Red_Raider").locator("summary, button").count(), 0);
     await leadIs(/0 names are declared hostile and 1 on watch\.$/);
+
+    // A name on the list is there for everyone to see, so putting it forward again says so.
+    await hostileTab("Put forward");
+    await putForward({ name: "RED_RAIDER", reason: "Seen again, this time near Daymar." });
+    await page.locator(".form-result-bad:visible", { hasText: "RED_RAIDER is already on the list." }).waitFor();
+  });
+  await check("a link in what happened is read and not followed, and only the evidence is linked", async () => {
+    // Written straight to the database, as the form would not send it: a link that says one place and leads to another.
+    await supabase.sql(
+      `insert into public.hostiles (kind, handle, state, level, reason, evidence)
+       values ('individual', 'Link_Layer', 'listed', 'watch',
+               'See [the RSI page](https://evil.example/login), or write to [him](mailto:someone@example.com).',
+               'https://example.com/real-clip')`,
+    );
+    await openHostiles("Watch");
+    const words = card("Link_Layer").locator("> .rich");
+    assert.equal(await words.locator("a").count(), 0);
+    assert.equal((await words.innerText()).trim(), "See the RSI page (https://evil.example/login), or write to him (mailto:someone@example.com).");
+    assert.deepEqual(await card("Link_Layer").locator("a").evaluateAll((list) => list.map((link) => link.getAttribute("href"))), ["https://example.com/real-clip"]);
+    await supabase.sql("delete from public.hostiles where handle = 'Link_Layer'");
   });
   await check("command lists an organisation outright, which stands until it is lifted", async () => {
     await signInAs(jo);
@@ -3393,7 +3413,7 @@ try {
     const text = await cardText("SCRUBS");
     assert.match(text, /Organisation Lifted/i);
     assert.match(text, /Lifted .* by .*Jo Reyes/i);
-    assert.match(text, /Command said Disbanded\./i);
+    assert.match(text, /On lifting Disbanded\./i);
     assert.equal(await card("SCRUBS").locator("summary, button").count(), 0, "a lifted entry is closed");
     const lifted = await hostileRow("SCRUBS");
     assert.equal(lifted.state, "lifted");

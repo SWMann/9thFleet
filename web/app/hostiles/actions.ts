@@ -4,8 +4,9 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { refused, turnedDown, type Attempt } from "@/lib/activity";
 import { typed } from "@/lib/application-form";
-import { STANDS_FOR, readHostile, readWords } from "@/lib/hostile-form";
+import { STANDS_FOR, readHostile, readName, readWords } from "@/lib/hostile-form";
 import { explainRefusal } from "@/lib/refusals";
+import { withoutLinks } from "@/lib/rich/markdown";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -50,22 +51,31 @@ function typedInto(formData: FormData): Record<string, string> {
   return values;
 }
 
-/** A change to one entry, and what to say when the database, or its access rules, said no. */
+/**
+ * A change to one entry, and what to say when the database, or its access
+ * rules, said no. `from` is how the entry must stand for the change to mean
+ * anything: a page left open while someone else decided does not then change
+ * an entry that has moved on.
+ */
 async function changeEntry(
   session: Session,
   action: Attempt,
   id: string,
+  from: "proposed" | "listed",
   change: Record<string, string>,
-  words: { done: string; refusedAs: string; notYours: string },
+  words: { done: string; refusedAs: string },
 ): Promise<HostileResult> {
-  const { data, error } = await session.supabase.from("hostiles").update(change).eq("id", id).select("id");
+  const { data, error } = await session.supabase.from("hostiles").update(change).eq("id", id).eq("state", from).select("id");
   if (error) return { ok: false, message: await turnedDown(session.supabase, action, error, explainRefusal(error, words.refusedAs)) };
-  if (!data || data.length === 0) return { ok: false, message: await refused(session.supabase, action, words.notYours) };
+  if (!data || data.length === 0) {
+    refresh();
+    return { ok: false, message: await refused(session.supabase, action, NOTHING_CHANGED) };
+  }
   refresh();
   return { ok: true, message: words.done };
 }
 
-const COMMAND_ONLY = "Nothing was changed. Command keeps the hostile list.";
+const NOTHING_CHANGED = "Nothing was changed. Command keeps the hostile list, and this entry may have been decided or lifted since the page was opened.";
 
 /**
  * Put a name forward. A member's goes to command to decide. Command may list
@@ -79,13 +89,15 @@ export async function proposeHostile(_previous: HostileResult, formData: FormDat
   const read = readHostile((name) => typed(formData.get(name)));
   if ("problem" in read) return { ok: false, message: read.problem, ...again };
   const outright = formData.get("outright") === "on";
+  // An address in the words is kept as words. The evidence is where links go.
+  const fields = { ...read.fields, reason: withoutLinks(read.fields.reason) };
 
-  const { error } = await session.supabase.from("hostiles").insert({ ...read.fields, state: outright ? "listed" : "proposed" });
+  const { error } = await session.supabase.from("hostiles").insert({ ...fields, state: outright ? "listed" : "proposed" });
   if (error) {
     const shown =
       error.code === "23505"
-        ? `${read.fields.handle} already has an entry that is waiting or listed.`
-        : explainRefusal(error, "That could not be put forward. Only a serving member puts a name forward.");
+        ? `${fields.handle} has already been put forward, or is on the list.`
+        : explainRefusal(error, "That could not be put forward. Check the name, what happened and the evidence, and try again.");
     return { ok: false, message: await turnedDown(session.supabase, "hostile.propose", error, shown), ...again };
   }
 
@@ -114,11 +126,11 @@ export async function decideHostile(_previous: HostileResult, formData: FormData
     session,
     "hostile.decide",
     id,
+    "proposed",
     decision === "listed" ? { state: "listed", level: level as string, decision_note: note } : { state: "declined", decision_note: note },
     {
       done: decision === "listed" ? (level === "watch" ? "Listed, on watch." : "Listed as hostile.") : "Declined.",
       refusedAs: "That could not be decided. Try again.",
-      notYours: COMMAND_ONLY,
     },
   );
 }
@@ -130,10 +142,9 @@ export async function renewHostile(_previous: HostileResult, formData: FormData)
   const id = uuid(formData.get("id"));
   if (!id) return { ok: false, message: await refused(session.supabase, "hostile.renew", "That is not something this page can do.") };
   const until = new Date(Date.now() + STANDS_FOR * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  return changeEntry(session, "hostile.renew", id, { expires_on: until }, {
+  return changeEntry(session, "hostile.renew", id, "listed", { expires_on: until }, {
     done: `Renewed for ${STANDS_FOR} days.`,
     refusedAs: "That could not be renewed. Try again.",
-    notYours: COMMAND_ONLY,
   });
 }
 
@@ -146,10 +157,9 @@ export async function moveHostile(_previous: HostileResult, formData: FormData):
   if (!id || (level !== "hostile" && level !== "watch")) {
     return { ok: false, message: await refused(session.supabase, "hostile.level", "That is not something this page can do.") };
   }
-  return changeEntry(session, "hostile.level", id, { level }, {
+  return changeEntry(session, "hostile.level", id, "listed", { level }, {
     done: level === "watch" ? "Moved to watch." : "Made hostile.",
     refusedAs: "That could not be moved. Try again.",
-    notYours: COMMAND_ONLY,
   });
 }
 
@@ -161,10 +171,9 @@ export async function liftHostile(_previous: HostileResult, formData: FormData):
   const note = typed(formData.get("note")).replace(/\s+/g, " ");
   if (!id) return { ok: false, message: await refused(session.supabase, "hostile.lift", "That is not something this page can do.") };
   if (note.length > 500) return { ok: false, message: "Keep the note under 500 characters." };
-  return changeEntry(session, "hostile.lift", id, { state: "lifted", decision_note: note }, {
+  return changeEntry(session, "hostile.lift", id, "listed", { state: "lifted", lift_note: note }, {
     done: "Lifted. It is off the list.",
     refusedAs: "That could not be lifted. Try again.",
-    notYours: COMMAND_ONLY,
   });
 }
 
@@ -175,15 +184,14 @@ export async function rewordHostile(_previous: HostileResult, formData: FormData
   const again = { values: typedInto(formData), stamp: Date.now() };
   const id = uuid(formData.get("id"));
   if (!id) return { ok: false, message: await refused(session.supabase, "hostile.reword", "That is not something this page can do."), ...again };
-  const name = typed(formData.get("name")).replace(/\s+/g, " ");
-  if (name.length > 80) return { ok: false, message: "Keep the name under 80 characters.", ...again };
+  const name = readName(typed(formData.get("name")));
+  if (typeof name !== "string") return { ok: false, message: name.problem, ...again };
   const words = readWords((field) => typed(formData.get(field)));
   if ("problem" in words) return { ok: false, message: words.problem, ...again };
 
-  const result = await changeEntry(session, "hostile.reword", id, { name, ...words.fields }, {
+  const result = await changeEntry(session, "hostile.reword", id, "listed", { name, reason: withoutLinks(words.fields.reason), evidence: words.fields.evidence }, {
     done: "Saved.",
     refusedAs: "That could not be saved. Try again.",
-    notYours: COMMAND_ONLY,
   });
   return result.ok ? { ...result, stamp: Date.now() } : { ...result, ...again };
 }

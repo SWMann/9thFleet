@@ -4,7 +4,7 @@ import { gfmStrikethrough } from "micromark-extension-gfm-strikethrough";
 import remarkParse from "remark-parse";
 import remarkStringify from "remark-stringify";
 import { unified, type Processor } from "unified";
-import { callouts, isCalloutKind, mentionAddress, plainOf, readMention, safeHref, type Block, type CalloutKind, type Inline } from "./format";
+import { callouts, inlineText, isCalloutKind, mentionAddress, plainOf, readMention, safeHref, type Block, type CalloutKind, type Inline } from "./format";
 
 /**
  * Formatted text to and from the Markdown it is kept as.
@@ -322,6 +322,47 @@ export function withoutMentions(markdown: string): string {
     });
   const tree = parseRich(markdown);
   return JSON.stringify(tree).includes('"mention"') ? writeRich(block(tree)) : markdown;
+}
+
+/**
+ * A link as words: what it said, and where it led in brackets after it, unless
+ * the two are the same. The address is then read, not followed, and a link
+ * cannot say one place and lead to another.
+ */
+export function linkAsWords(link: Extract<Inline, { type: "link" }>): Inline[] {
+  const said = inlineText(link.children).trim();
+  if (said === "" || said === link.href) return [{ type: "text", value: link.href }];
+  return [...link.children, { type: "text", value: ` (${link.href})` }];
+}
+
+/**
+ * Formatted text with no links in it: each becomes its words, with its address
+ * after them. For a field whose links belong somewhere else, such as an entry
+ * of the hostile list, where the evidence has a field of its own.
+ */
+export function withoutLinks(markdown: string): string {
+  const inline = (nodes: Inline[]): Inline[] =>
+    nodes.flatMap((node): Inline[] => {
+      if (node.type === "link") return inline(linkAsWords(node));
+      return "children" in node ? [{ ...node, children: inline(node.children) }] : [node];
+    });
+  const block = (blocks: Block[]): Block[] =>
+    blocks.map((entry): Block => {
+      switch (entry.type) {
+        case "paragraph":
+        case "heading":
+          return { ...entry, children: inline(entry.children) };
+        case "list":
+          return { ...entry, items: entry.items.map(block) };
+        case "quote":
+        case "callout":
+          return { ...entry, children: block(entry.children) };
+        default:
+          return entry;
+      }
+    });
+  const tree = parseRich(markdown);
+  return JSON.stringify(tree).includes('"link"') ? writeRich(block(tree)) : markdown;
 }
 
 /** The names of the call-out kinds, for whoever needs to list them. */

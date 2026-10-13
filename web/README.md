@@ -164,9 +164,12 @@ engaged, and who is only to be reported.
 - **The rules are the database's.** `app/hostiles/actions.ts` sends each change and passes on the
   answer. `lib/hostile-form.ts` checks a form's fields first, reads nothing, and is tested by
   `npm test`.
-- **Only web addresses become links.** Evidence is kept as addresses, one to a line. Each is
+- **Only the evidence is linked.** Evidence is kept as web addresses, one to a line. Each is
   checked when it is written, by the database, and again before it is drawn. A link opens in a new
-  tab and passes nothing to the site it goes to.
+  tab, passes nothing to the site it goes to, and is labelled with the whole of that site's name.
+- **A link in what happened is read, not followed.** The action turns it into its words with its
+  address after them, and the page draws it that way even if one was written straight to the
+  database. A link cannot then say one place and lead to another.
 - **Command is told on the admin overview** when a name waits for a decision, and when an entry
   will lapse within 14 days.
 - **It is a members' page,** so it is in `MEMBER_PAGES` in `lib/supabase/proxy.ts` and in the
