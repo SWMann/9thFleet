@@ -101,17 +101,35 @@ test("command edits the syllabus: lessons, their order, and what a course requir
     assert.equal(await fleet.as(actor).changed("delete from public.lessons where id = $1", [added.id]), 0);
   }
   assert.equal(await fleet.as(who.command).changed("delete from public.lessons where id = $1", [added.id]), 1);
+  // A lesson keeps to its course.
+  await assert.rejects(
+    fleet.as(who.command).query("update public.lessons set qualification_id = $1 where qualification_id = $2", [qualification["radio-user"], qualification.induction]),
+    /permission denied/,
+  );
 
   // What a course requires is command's to set; the rest of a qualification stays an admin's.
-  assert.equal(await fleet.as(who.command).changed("update public.qualifications set requires_qualification_id = null, name = 'Renamed' where code = 'net-controller'"), 1);
+  await assert.rejects(
+    fleet.as(who.command).query("update public.qualifications set requires_qualification_id = null, name = 'Renamed' where code = 'net-controller'"),
+    /Command sets what a course requires, and nothing else about it\./,
+  );
+  assert.equal(await fleet.as(who.command).changed("update public.qualifications set requires_qualification_id = null where code = 'net-controller'"), 1);
   const changed = await fleet.one("select name, requires_qualification_id from public.qualifications where code = 'net-controller'");
   assert.deepEqual(changed, { name: "Net controller", requires_qualification_id: null });
   assert.equal(await fleet.as(who.staff).changed("update public.qualifications set requires_qualification_id = null where code = 'navy-crew'"), 0);
   await assert.rejects(
     fleet.as(who.command).query("update public.qualifications set requires_qualification_id = id where code = 'navy-crew'"),
-    /qualifications_requires_another/,
+    /qualifications_requires_another|A course cannot require one that requires it/,
   );
+  // Nor round in a circle, however long the way round.
   await fleet.sql("update public.qualifications set requires_qualification_id = $1 where code = 'net-controller'", [qualification["radio-user"]]);
+  await assert.rejects(
+    fleet.as(who.command).query("update public.qualifications set requires_qualification_id = $1 where code = 'radio-user'", [qualification["net-controller"]]),
+    /A course cannot require one that requires it\./,
+  );
+  await assert.rejects(
+    fleet.as(who.admin).query("update public.qualifications set requires_qualification_id = $1 where code = 'induction'", [qualification["navy-crew"]]),
+    /A course cannot require one that requires it\./,
+  );
 });
 
 test("an instructor signs off a lesson for a serving member, in their own name, and the database dates it", async () => {
@@ -173,6 +191,10 @@ test("the qualification is awarded once every lesson is signed off, as a separat
   for (const lesson of lessons.slice(0, -1)) await signOff(who.instructor, lesson.id, trainee);
   await assert.rejects(award(who.instructor, trainee, "induction"), /Every lesson of the course is signed off before/);
   await signOff(who.other, lessons.at(-1).id, trainee);
+  // What the course requires is held first, on the award as on the lessons.
+  await fleet.passLessons(trainee, "radio-user");
+  await assert.rejects(award(who.instructor, trainee, "radio-user"), /They must hold General induction first\./);
+  await fleet.sql("delete from public.lesson_passes p using public.lessons l where l.id = p.lesson_id and l.qualification_id = $1 and p.member_id = $2", [qualification["radio-user"], trainee]);
   await award(who.instructor, trainee, "induction");
   // Holding it, there is nothing left to sign off.
   await assert.rejects(signOff(who.instructor, lessons[0].id, trainee), /They already hold this qualification/);
@@ -187,6 +209,31 @@ test("the qualification is awarded once every lesson is signed off, as a separat
     held.map((row) => row.code),
     ["induction", "net-controller", "radio-user"],
   );
+});
+
+test("a commission is the board's decision, which command records", async () => {
+  const cadet = await fresh("Cadet", { status: "member" });
+  await fleet.qualify(cadet, "induction", "radio-user", "navy-crew");
+  await fleet.passLessons(cadet, "commission");
+  await assert.rejects(award(who.instructor, cadet, "commission"), /The commissioning board commissions an officer, and command records its decision\./);
+  await assert.rejects(award(who.command, cadet, "commission"), /row-level security/, "command without the instructor role may not award at all");
+  const commandant = await fresh("Commandant", { roles: ["command", "instructor"] });
+  await award(commandant, cadet, "commission");
+});
+
+test("taking a qualification away takes the course's passes with it", async () => {
+  const lapsed = await fresh("Lapsed", { status: "recruit" });
+  await fleet.passLessons(lapsed, "induction");
+  await award(who.instructor, lapsed, "induction");
+  assert.equal((await passesOf(who.staff, lapsed)).length, 5);
+  assert.equal(await fleet.as(who.staff).changed("delete from public.qualification_awards where member_id = $1", [lapsed]), 1);
+  assert.deepEqual(await passesOf(who.staff, lapsed), []);
+  assert.deepEqual(await fleet.as(who.staff).rows("select passed from public.training_progress where member_id = $1", [lapsed]), []);
+  // The SQL editor, putting a mistake right, keeps them.
+  await fleet.passLessons(lapsed, "induction");
+  await fleet.qualify(lapsed, "induction");
+  await fleet.sql("delete from public.qualification_awards where member_id = $1", [lapsed]);
+  assert.equal((await passesOf(who.staff, lapsed)).length, 5);
 });
 
 test("the instructor who signed a lesson off withdraws it, until the qualification is awarded", async () => {
@@ -224,6 +271,13 @@ test("a member sees their own passes; instructors and staff see everyone's", asy
   for (const reader of [who.instructor, who.other, who.staff, who.command, who.admin]) {
     assert.equal((await passesOf(reader, trainee)).length, 1, "instructors and staff");
   }
+  // An instructor who is not staff sees the passes of the members they can see, so not a discharged member's.
+  await fleet.sql("update public.members set status = 'discharged' where id = $1", [trainee]);
+  assert.equal((await passesOf(who.instructor, trainee)).length, 0, "an instructor, of a discharged member");
+  assert.equal((await passesOf(who.staff, trainee)).length, 1, "staff, of a discharged member");
+  assert.equal((await passesOf(trainee, trainee)).length, 1, "their own");
+  assert.deepEqual(await fleet.as(who.instructor).rows("select passed from public.training_progress where member_id = $1", [trainee]), []);
+  await fleet.sql("update public.members set status = 'recruit' where id = $1", [trainee]);
   await assert.rejects(fleet.visitor().query("select id from public.lesson_passes"), /permission denied/);
   await assert.rejects(fleet.visitor().query("select * from public.training_progress"), /permission denied/);
   await fleet.passLessons(trainee, "induction");

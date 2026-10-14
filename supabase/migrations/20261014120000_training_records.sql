@@ -16,7 +16,9 @@
 --   The instructor who signed a lesson off may withdraw it, until the
 --   qualification is awarded. After that, only the award can be taken back,
 --   by staff, as before.
---   Awarding a qualification that has lessons needs every lesson passed.
+--   Awarding a qualification needs what the course requires held, and every
+--   lesson passed. A commission is recorded by command, for the board.
+--   Taking a qualification away takes the course's passes with it.
 
 -- ---------------------------------------------------------------------------
 -- What a course requires first
@@ -28,22 +30,34 @@ alter table public.qualifications
 create index qualifications_requires_idx on public.qualifications (requires_qualification_id) where requires_qualification_id is not null;
 
 -- Command sets what a course requires, and nothing else about it. An admin
--- changes anything, as before.
+-- changes anything, as before. What a course requires never comes back round
+-- to itself, or nobody could train.
 create function app.guard_qualification() returns trigger
 language plpgsql security definer set search_path = ''
 as $$
+declare
+  wanted uuid := new.requires_qualification_id;
 begin
-  if app.is_trusted_context() or app.has_role('admin') then
-    return new;
+  if tg_op = 'UPDATE' and not app.is_trusted_context() and not app.has_role('admin') then
+    if (to_jsonb(new) - 'requires_qualification_id') <> (to_jsonb(old) - 'requires_qualification_id') then
+      raise exception 'Command sets what a course requires, and nothing else about it.' using errcode = '42501';
+    end if;
   end if;
-  new.code := old.code;
-  new.name := old.name;
-  new.description := old.description;
+  if wanted is not null and exists (
+    with recursive chain as (
+      select q.id, q.requires_qualification_id, 1 as depth from public.qualifications q where q.id = wanted
+      union all
+      select q.id, q.requires_qualification_id, chain.depth + 1 from public.qualifications q join chain on q.id = chain.requires_qualification_id where chain.depth < 50
+    )
+    select 1 from chain where chain.id = new.id or chain.requires_qualification_id = new.id
+  ) then
+    raise exception 'A course cannot require one that requires it.' using errcode = '23514';
+  end if;
   return new;
 end;
 $$;
 
-create trigger qualifications_guard before update on public.qualifications
+create trigger qualifications_guard before insert or update on public.qualifications
   for each row execute function app.guard_qualification();
 
 -- ---------------------------------------------------------------------------
@@ -53,7 +67,7 @@ create trigger qualifications_guard before update on public.qualifications
 create table public.lessons (
   id uuid primary key default gen_random_uuid(),
   qualification_id uuid not null references public.qualifications (id) on delete cascade,
-  sort_order smallint not null default 0,
+  sort_order smallint not null default 0 check (sort_order >= 0),
   name text not null check (char_length(name) between 1 and 80 and name !~ '(^\s|\s$)'),
   description text not null default '' check (char_length(description) <= 600),
   unique (qualification_id, name)
@@ -183,15 +197,26 @@ begin
 end;
 $$;
 
--- An award needs every lesson of the course passed. This is checked after the
--- access rules have had their say, so that someone who may not award at all
--- is told that, and nothing about the course.
-create function app.check_award_lessons() returns trigger
+-- An award needs what the course requires held first, and every lesson of the
+-- course passed. A commission is the commissioning board's decision, which
+-- command records. All this is checked after the access rules have had their
+-- say, so that someone who may not award at all is told that, and nothing
+-- about the course.
+create function app.check_award_course() returns trigger
 language plpgsql security definer set search_path = ''
 as $$
+declare
+  course public.qualifications%rowtype;
 begin
   if app.is_trusted_context() then
     return new;
+  end if;
+  select q.* into course from public.qualifications q where q.id = new.qualification_id;
+  if course.code = 'commission' and not app.has_role('command') then
+    raise exception 'The commissioning board commissions an officer, and command records its decision.' using errcode = '42501';
+  end if;
+  if course.requires_qualification_id is not null and not app.holds_qualification(new.member_id, course.requires_qualification_id) then
+    raise exception 'They must hold % first.', (select q.name from public.qualifications q where q.id = course.requires_qualification_id) using errcode = '23514';
   end if;
   if exists (
     select 1 from public.lessons l
@@ -204,8 +229,27 @@ begin
 end;
 $$;
 
-create trigger qualification_awards_need_lessons after insert on public.qualification_awards
-  for each row execute function app.check_award_lessons();
+create trigger qualification_awards_need_course after insert on public.qualification_awards
+  for each row execute function app.check_award_course();
+
+-- Taking a qualification away takes the course's passes with it: the member
+-- trains again. The SQL editor, putting right a mistake, is not held to this.
+create function app.retrain_on_revoke() returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if app.is_trusted_context() then
+    return old;
+  end if;
+  delete from public.lesson_passes p
+  using public.lessons l
+  where l.id = p.lesson_id and l.qualification_id = old.qualification_id and p.member_id = old.member_id;
+  return old;
+end;
+$$;
+
+create trigger qualification_awards_retrain after delete on public.qualification_awards
+  for each row execute function app.retrain_on_revoke();
 
 -- ---------------------------------------------------------------------------
 -- Where each member is in each course
@@ -251,7 +295,7 @@ from (values
   ('induction', 3, 'How an operation runs', 'The calendar, replying to an event, muster, the roll, orders and the debrief.'),
   ('induction', 4, 'The voice app', 'Installed, a net joined, push-to-talk set and levels checked.'),
   ('induction', 5, 'Radio check', 'A radio check answered correctly on a net.'),
-  ('radio-user', 1, 'Nets and call signs', 'Which nets there are, who is on each, your call sign and who Zero is.'),
+  ('radio-user', 1, 'Nets and callsigns', 'Which nets there are, who is on each, your callsign and who Zero is.'),
   ('radio-user', 2, 'Voice procedure', 'The fleet''s procedure: the pro-words, keeping it short, and when to speak.'),
   ('radio-user', 3, 'Sending a message', 'The form of a message, acknowledging, correcting and saying again.'),
   ('radio-user', 4, 'Contact and casualty reports', 'The set reports: contact, situation and casualty.'),
@@ -271,11 +315,11 @@ from (values
   ('instructor', 3, 'Assessing and signing off', 'The standard, what a pass is, and withdrawing a mistake.'),
   ('instructor', 4, 'Observed lesson', 'A lesson taught under the observation of an instructor.'),
   ('commission', 1, 'Leading on duty', 'The leader''s job, giving orders, the chain, and stepping up.'),
-  ('commission', 2, 'The orders process', 'The warning order, operation orders in five paragraphs, and confirming orders.'),
+  ('commission', 2, 'The orders process', 'The warning order, operation orders in five paragraphs, quick orders and the back-brief.'),
   ('commission', 3, 'Planning an operation', 'The plan, manning, the opposing force and approval.'),
   ('commission', 4, 'Commanding under supervision', 'Second-in-command, then operation commander, on assessed operations.'),
   ('commission', 5, 'The teamwork exercise', 'The cadets plan and run an evolution together.'),
-  ('commission', 6, 'The commissioning board', 'The Commandant, a commander at O4 or above and a senior enlisted member.')
+  ('commission', 6, 'The commissioning board', 'Passed the board: the Commandant, a commander at O4 or above and a senior enlisted member. Command records the commission.')
 ) as v (code, n, name, description)
 join public.qualifications q on q.code = v.code;
 
@@ -288,7 +332,8 @@ grant select on public.training_progress to authenticated;
 
 grant select on public.lessons to authenticated;
 grant insert (qualification_id, sort_order, name, description) on public.lessons to authenticated;
-grant update (qualification_id, sort_order, name, description) on public.lessons to authenticated;
+-- A lesson keeps to its course: the passes on it are passes in that course.
+grant update (sort_order, name, description) on public.lessons to authenticated;
 grant delete on public.lessons to authenticated;
 
 grant select on public.lesson_passes to authenticated;
@@ -316,13 +361,14 @@ create policy "Command changes lessons" on public.lessons
 create policy "Command removes lessons" on public.lessons
   for delete to authenticated using ((select app.has_role('command')));
 
--- A member sees their own passes. Instructors and staff see everyone's.
+-- A member sees their own passes. Staff see everyone's, and instructors those
+-- of the members they can see.
 create policy "See your own passes, or everyone's as an instructor or staff" on public.lesson_passes
   for select to authenticated
   using (
     member_id = (select auth.uid())
     or (select app.is_staff())
-    or (select app.has_role('instructor'))
+    or ((select app.has_role('instructor')) and exists (select 1 from public.members m where m.id = lesson_passes.member_id))
   );
 create policy "Instructors sign off lessons" on public.lesson_passes
   for insert to authenticated with check ((select app.has_role('instructor')));

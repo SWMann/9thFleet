@@ -140,14 +140,18 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   or the words change. A serving member marks an issue as read for themselves, once, and only an
   issued one; command reads everyone's marks, a member their own.
 - **A qualification is a course of lessons, and is awarded once every lesson is passed.** The
-  lessons are command's to write; a lesson someone has passed stays. An instructor signs a lesson
-  off in their own name, never their own, for a serving member who does not hold the
-  qualification and holds what the course requires first; a sign-off at an event is checked
-  against the event as an award is. The instructor who signed a lesson off may withdraw it until
-  the qualification is awarded. The lessons rule on an award is checked after the access rules,
-  so someone who may not award at all is told that and nothing about the course. The SQL editor
-  is not held to it. `training_progress` gives each member's standing in each course they have
-  started, read with the reader's own access to the passes.
+  lessons are command's to write, and keep to their course; a lesson someone has passed stays.
+  What a course requires first is command's to set, and never comes back round to itself. An
+  instructor signs a lesson off in their own name, never their own, for a serving member who does
+  not hold the qualification and holds what the course requires first; a sign-off at an event is
+  checked against the event as an award is. The instructor who signed a lesson off may withdraw
+  it until the qualification is awarded. The award is checked the same way, prerequisite and
+  every lesson, after the access rules, so someone who may not award at all is told that and
+  nothing about the course; a commission is recorded by command, for the commissioning board.
+  Taking an award away through the API takes the course's passes with it. The SQL editor is held
+  to none of this. `training_progress` gives each member's standing in each course they have
+  started, read with the reader's own access to the passes: a member their own, staff everyone's,
+  an instructor those of the members they can see.
 - **Deleting a member takes their name out of every issue.** Before the record goes, every mention
   of them in an issue, and in what the audit log held of that issue, becomes "a former member".
 - **The record's days are days in UTC, everywhere.** `joined_on`, `started_on` and `awarded_on`

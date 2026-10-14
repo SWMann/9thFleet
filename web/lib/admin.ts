@@ -793,9 +793,13 @@ export function attention(fleet: Fleet, tier: Tier): Attention[] {
     const serving = new Set(fleet.people.filter((person) => SERVING.includes(person.status)).map((person) => person.id));
     const qualificationName = new Map(fleet.qualifications.map((qualification) => [qualification.id, qualification.name]));
     const completed = fleet.awaitingAward.filter((line) => serving.has(line.member_id));
+    const people = new Set(completed.map((line) => line.member_id)).size;
     if (completed.length > 0) {
       list.push({
-        what: completed.length === 1 ? `${name.get(completed[0].member_id) ?? "A member"} has passed every lesson of ${qualificationName.get(completed[0].qualification_id) ?? "a course"}` : `${completed.length} members have passed every lesson of a course`,
+        what:
+          completed.length === 1
+            ? `${name.get(completed[0].member_id) ?? "A member"} has passed every lesson of ${qualificationName.get(completed[0].qualification_id) ?? "a course"}`
+            : `${people === 1 ? `${name.get(completed[0].member_id) ?? "A member"} has` : `${people} members have`} passed every lesson of ${completed.length} courses`,
         detail: "An instructor awards the qualification from the training page.",
         href: "/training#sign-off",
       });

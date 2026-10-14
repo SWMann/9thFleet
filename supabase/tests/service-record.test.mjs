@@ -297,6 +297,7 @@ test("an appointment with no note keeps no copy of one", async () => {
 test("what an instructor writes on an award is sent to nobody", async () => {
   const id = await fresh("Qualified", { status: "recruit" });
   const instructor = await fresh("Teacher", { roles: ["instructor"] });
+  await fleet.qualify(id, "induction");
   await fleet.passLessons(id, "radio-user");
   await fleet.as(instructor).query(
     `insert into public.qualification_awards (member_id, qualification_id, awarded_by, note)
@@ -308,7 +309,7 @@ test("what an instructor writes on an award is sent to nobody", async () => {
     // That the award was made, by whom and when, is read as before.
     assert.equal(await count(fleet.as(reader), "qualification_awards", "member_id = $1 and awarded_by = $2", [id, instructor]), 1);
   }
-  assert.equal((await fleet.one("select note from public.qualification_awards where member_id = $1", [id])).note, "Passed on the second attempt.");
+  assert.equal((await fleet.one("select note from public.qualification_awards where member_id = $1 and awarded_by = $2", [id, instructor])).note, "Passed on the second attempt.");
 });
 
 test("the record's days are days in UTC, whatever time zone a request asks for", async () => {

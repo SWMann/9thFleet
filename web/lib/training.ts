@@ -219,10 +219,3 @@ export async function getTrainingRecord(memberId: string): Promise<TrainingLine[
       }),
     }));
 }
-
-/** For the admin overview: how many have completed a course and await its award. */
-export async function countAwaitingAward(supabase: Client): Promise<number> {
-  const waiting = await supabase.from("training_progress").select("member_id").eq("complete", true).eq("held", false);
-  if (waiting.error) throw new Error(`The training record could not be read: ${waiting.error.message}`);
-  return (waiting.data ?? []).length;
-}

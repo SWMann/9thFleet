@@ -4167,7 +4167,7 @@ try {
     said(/Kit Marlow signed .*Pat Ortega off for the lesson The fleet and its values, of General induction/);
     said(/Kit Marlow withdrew the sign-off of .*Pat Ortega for the lesson Conduct and the chain of command, of General induction/);
     said(/Kit Marlow awarded .*Pat Ortega the General induction qualification/);
-    said(/Kit Marlow signed .*Lee Tanaka off for the lesson Nets and call signs, of Radio user, at Radio course 001/);
+    said(/Kit Marlow signed .*Lee Tanaka off for the lesson Nets and callsigns, of Radio user, at Radio course 001/);
     await page.goto(`${site}/admin/logs?show=structure`);
     await page.locator(".log-line:visible").first().waitFor();
     lines = (await page.locator(".log-line:visible").allInnerTexts()).map((line) => line.replace(/\s+/g, " "));

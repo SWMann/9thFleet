@@ -95,7 +95,7 @@ export function SignOffForm({
         <input type="hidden" name="course" value={course.id} />
         <fieldset>
           <legend>{course.name}</legend>
-          {held ? <p className="hint">They hold this qualification.</p> : null}
+          {held ? <p className="hint">They hold this qualification.</p> : lessons.length === 0 ? <p className="hint">No lessons are written for this course, so it is awarded on your word alone.</p> : null}
           <ul>
             {lessons.map((lesson) => (
               <li key={lesson.id}>

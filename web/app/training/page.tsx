@@ -139,7 +139,6 @@ async function Training({ asked }: { asked: Asked }) {
                 });
                 const isHeld = chosen.held.has(course.id);
                 const needs = course.requires && !chosen.held.has(course.requires.id);
-                if (course.lessons.length === 0) return null;
                 return (
                   <div className="sign-off-course" key={course.id}>
                     {needs && !isHeld ? (
@@ -224,7 +223,7 @@ function CourseCard({ course, passes, held, names, own }: { course: Course; pass
           })}
         </ol>
       ) : (
-        <p className="course-about">This course has no lessons written yet, so it is awarded on an instructor&apos;s word.</p>
+        <p className="course-about">This course has no lessons written yet, so it is awarded on an instructor&apos;s word alone.</p>
       )}
     </li>
   );

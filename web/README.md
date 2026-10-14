@@ -235,9 +235,13 @@ doctrine and edited by command at `/admin/training`.
   `app/training/actions.ts` does the signing.
 - **The award is a separate step.** Once every lesson is passed the member appears under
   "Awaiting the award" for every instructor, and on the admin overview, and an instructor awards
-  the qualification. A course with no lessons is awarded on the instructor's word, as before.
+  the qualification. The database checks the course's prerequisite on the award as on the
+  lessons. A course with no lessons is awarded on the instructor's word alone. A commission is
+  the commissioning board's decision, which an instructor who is also command records.
 - **A sign-off is withdrawn by the instructor who gave it,** until the qualification is awarded.
-  After that only the award can be taken back, by staff, as before.
+  After that only the award can be taken back, by staff, as before, and taking it back takes the
+  course's passes with it: the member trains again. A pass whose instructor's record has been
+  deleted can be withdrawn by nobody through the site; the SQL editor can.
 - **Who sees what.** A member sees their own passes, on `/training` and under "In training" on
   their record; instructors, staff and command see everyone's, and staff see a member's courses
   in progress on their record page. The syllabus itself is for the serving fleet and staff.

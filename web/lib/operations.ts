@@ -948,25 +948,26 @@ export async function getOperation(id: string): Promise<Operation> {
   if (mayAward && event.teaches && event.started && (row.state === "announced" || row.state === "done")) {
     // Nobody signs off their own lessons or qualification.
     const candidates = present.filter((person) => person.id !== member.id);
-    const [holders, lessons, passes] = await Promise.all([
+    const lessons = await supabase.from("lessons").select("id, name, sort_order").eq("qualification_id", event.teaches.id);
+    if (lessons.error) throw new Error(`The event could not be read: ${lessons.error.message}`);
+    const course = ((lessons.data ?? []) as { id: string; name: string; sort_order: number }[]).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+    // Only this course's lessons, for those present: bounded, so the reply is never cut short.
+    const [holders, passes] = await Promise.all([
       supabase.from("qualification_awards").select("member_id").eq("qualification_id", event.teaches.id),
-      supabase.from("lessons").select("id, name, sort_order").eq("qualification_id", event.teaches.id),
-      candidates.length > 0
+      candidates.length > 0 && course.length > 0
         ? supabase
             .from("lesson_passes")
             .select("lesson_id, member_id")
             .in("member_id", candidates.map((person) => person.id))
+            .in("lesson_id", course.map((lesson) => lesson.id))
         : Promise.resolve({ data: [], error: null }),
     ]);
-    for (const result of [holders, lessons, passes]) {
+    for (const result of [holders, passes]) {
       if (result.error) throw new Error(`The event could not be read: ${result.error.message}`);
     }
     const holds = new Set(((holders.data ?? []) as { member_id: string }[]).map((entry) => entry.member_id));
-    const course = ((lessons.data ?? []) as { id: string; name: string; sort_order: number }[]).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
-    const lessonIds = new Set(course.map((lesson) => lesson.id));
     const passedBy = new Map<string, string[]>();
     for (const pass of (passes.data ?? []) as { lesson_id: string; member_id: string }[]) {
-      if (!lessonIds.has(pass.lesson_id)) continue;
       passedBy.set(pass.member_id, [...(passedBy.get(pass.member_id) ?? []), pass.lesson_id]);
     }
     signOff = {

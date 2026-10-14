@@ -61,11 +61,12 @@ const award = (actor, memberId, qualification, awardedBy = actor) =>
 test("an instructor awards a qualification in their own name, dated today", async () => {
   const recruit = await fresh("Trainee", { status: "recruit" });
   const radio = await qualificationId("radio-user");
+  await fleet.qualify(recruit, "induction");
   await fleet.passLessons(recruit, "radio-user");
   await award(who.instructor, recruit, radio);
   const row = await fleet.one(
-    "select awarded_by, awarded_on = current_date as today from public.qualification_awards where member_id = $1",
-    [recruit],
+    "select awarded_by, awarded_on = current_date as today from public.qualification_awards where member_id = $1 and qualification_id = $2",
+    [recruit, radio],
   );
   assert.deepEqual(row, { awarded_by: who.instructor, today: true });
 
@@ -469,8 +470,11 @@ test("the admin keeps the order of battle, and nobody else can change it", async
     assert.equal(await outsider.changed("update public.units set opens_at_stage = 1"), 0);
     assert.equal(await outsider.changed("delete from public.units where name = 'Escort One'"), 0);
     // Command may set what a course requires, and nothing else about a qualification.
-    await outsider.changed("update public.qualifications set name = 'Anything'");
-    assert.deepEqual(await fleet.rows("select id from public.qualifications where name = 'Anything'"), []);
+    if (actor === who.command) {
+      await assert.rejects(outsider.query("update public.qualifications set name = 'Anything'"), /Command sets what a course requires, and nothing else/);
+    } else {
+      assert.equal(await outsider.changed("update public.qualifications set name = 'Anything'"), 0);
+    }
     assert.equal(await outsider.changed("delete from public.position_qualifications where position_id = $1", [bridgeCo]), 0);
   }
 
