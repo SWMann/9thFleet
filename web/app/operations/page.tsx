@@ -5,7 +5,9 @@ import { Suspense } from "react";
 import { Icon, type IconName } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { getOperations, type Summary } from "@/lib/operations";
+import { orderName } from "@/lib/orders-form";
 import { getWaitingReports } from "@/lib/piracy";
+import { getUnreadOrders } from "@/lib/routine-orders";
 import { cycle, formatWhen, stateNames, weaponsName } from "@/lib/operations-form";
 
 export const metadata: Metadata = {
@@ -49,10 +51,17 @@ async function Operations() {
 
   const { coming, drafts, past, mayCreate } = result;
   // Nobody is sent a message when a piracy report arrives. Command is told here, where it works.
-  const reports = await getWaitingReports();
+  const [reports, orders] = await Promise.all([getWaitingReports(), getUnreadOrders()]);
   return (
     <>
       <Head lead="Training and operation nights: the orders, who is attending, and what was learned.">
+        {orders.latest ? (
+          <p className="notice">
+            <Link href={`/routine-orders/${orders.latest.number}`}>
+              {orderName(orders.latest.number)} {orders.count > 1 ? `and ${orders.count - 1} more ${orders.count === 2 ? "issue are" : "issues are"}` : "is"} unread
+            </Link>
+          </p>
+        ) : null}
         {reports.waiting > 0 ? (
           <p className="notice">
             <Link href="/admin/piracy">

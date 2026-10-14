@@ -58,6 +58,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/manual` | The fleet manual: the doctrine volumes that have been reviewed, section by section. Open to everyone |
 | `/credits` | Who took each picture on the site, and its licence |
 | `/privacy` | What the site records about visitors, members, people who send a piracy report and players the fleet names, who can read it and how to have it removed. Change it whenever the logging, the sign-in, the report line or the hostile list changes |
+| `/routine-orders` | Routine orders: numbered, dated notices from command to the serving fleet, each drafted by the site from the fleet's record and issued by command. Members mark each issue as read. See Routine orders below |
 | `/piracy` | The public report line: anyone may tell the fleet about piracy, without signing in. It says plainly that it is not an emergency line. Command reads the reports at `/admin/piracy`. See The piracy report line below |
 | `/visit` | Not a page. A public page posts its address here once it has been read, to be counted |
 | `/menu` | The menu as a page, for a browser that is not running scripts |
@@ -176,6 +177,48 @@ engaged, and who is only to be reported.
   will lapse within 14 days.
 - **It is a members' page,** so it is in `MEMBER_PAGES` in `lib/supabase/proxy.ts` and in the
   matcher in `proxy.ts`. A new members' page goes in both.
+
+## Routine orders
+
+`/routine-orders`, for the serving fleet. Volume 2 has them weekly from stage 2, with the command
+board's decisions published in the next issue.
+
+- **The site drafts, command issues.** Command opens a draft and the database sets the period it
+  records: from the end of the last issue to that moment, or for the first issue from the day the
+  fleet's record began, or four weeks back if that is later. `draftFromRecord` in
+  `lib/routine-orders.ts` then reads the record of that period and `composeRoutineOrders` in
+  `lib/orders-form.ts` writes it into the draft as formatted text: appointments at the rank the
+  post was taken up at, promotions, qualifications, who joined and left, operations held and
+  ahead, names declared hostile or placed on watch, and strength, under free sections for
+  command's own words, decisions and standing orders. Command edits the whole thing in the
+  formatted-text editor and issues it.
+- **What is in the period is what was recorded in it.** Where the database keeps the time a line
+  was recorded (appointments, promotions, awards, changes of status), a line dated on the day of
+  the last issue but recorded after it goes in the next. Where it keeps only the day (a post
+  left), a line dated that day is listed again rather than missed. An event is listed under the
+  issue for the period it started in, with its attendance once the return is made and "attendance
+  return to come" until then. A lifted hostile-list entry is read by command and whoever put the
+  name forward, so it is not published.
+- **The draft fits the limit.** Each section lists `SECTION_LIMIT` lines at most and then says how
+  many more there were and where to read them; if the whole draft would still overrun
+  `BODY_LIMIT`, every section is cut further, down to a handful of lines.
+- **The number, the date and the period are the database's.** An issue is numbered when it is
+  issued, and never taken back. Command may correct its words afterwards, and the page says when
+  that happened: the database moves `updated_at` only when the title or the orders change, so
+  issuing and a save that changes nothing are not corrections. One draft at a time; a draft can be
+  discarded.
+- **Each member is named the way the editor names them,** as a mention kept by id, so a name still
+  reads correctly after a rename. The rank in the label is the rank on the day of drafting, which
+  is what a record should say. A name is written on one line whatever it holds, so a list stays a
+  list. When a member's record is deleted, every issue that named them says "a former member".
+- **Who has read it.** A member marks an issue as read, for themselves, once. Command sees who
+  has and who has not. The list page counts the serving readers of the latest `COUNTED_ISSUES`
+  issues only, reading the marks a page at a time, since they outgrow one reply as the issues
+  mount up; an issue's own page counts them for any issue. A member is told of an unread issue at
+  the top of their record and of the operations page. The admin overview tells command when a
+  draft is waiting and when the next issue is due.
+- **It is a members' page,** so it is in `MEMBER_PAGES` in `lib/supabase/proxy.ts` and in the
+  matcher in `proxy.ts`.
 
 ## The piracy report line
 
@@ -361,6 +404,7 @@ to be tracked.
 | The picture and colour of each type of log line | `lookIcons` in `app/admin/logs/page.tsx`, and the `log-kind-` colours in `app/globals.css`. The type's name is always written beside them |
 | Formatted text: its format, how it is shown and how it is edited | `lib/rich/` and `components/rich/`. See Formatted text above |
 | The site's icons, and the symbol for each kind of unit | `components/Icon.tsx` and `components/UnitSymbol.tsx`. An icon goes with words and never stands in for them |
+| Routine orders | `app/routine-orders/`, the draft's wording in `lib/orders-form.ts`, and what is read for it in `lib/routine-orders.ts` |
 | The piracy report line | `app/piracy/` for the public form, `app/admin/piracy/` for command's page, and the checks, the limits' words and how long a report is kept in `lib/piracy-form.ts` |
 | What the site says it records | `app/privacy/page.tsx` |
 | The menu | `lib/menu.ts` |

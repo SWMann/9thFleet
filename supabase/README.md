@@ -28,6 +28,7 @@ or let someone promote themselves.
 | `migrations/…_record_notes.sql` | The note on an appointment and on an award, kept for staff and out of the member's own view |
 | `migrations/…_hostile_list.sql` | The hostile list: names put forward by members, listed, declined, renewed and lifted by command |
 | `migrations/…_piracy_reports.sql` | The public piracy report line: what a visitor may send, how much the line takes, and what command does with a report |
+| `migrations/…_routine_orders.sql` | Routine orders: drafted and issued by command, numbered and dated by the database, read by the serving fleet, each member marking an issue as read |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -53,10 +54,10 @@ Staff look after people, command makes appointments, and the admin owns the stru
 | --- | --- | --- |
 | Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: areas, roles, units, positions and the qualifications each requires. Never who holds one | Send a piracy report, and read nothing back |
 | Applicant | The same, and their own record and their own application | Set a character name and an RSI handle, apply while recruitment is open, withdraw |
-| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position now and which qualification, every announced event with its orders, roll and report, their own service record, and the hostile list as it stands today | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. A full member can apply for the cadet course |
+| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position now and which qualification, every announced event with its orders, roll and report, their own service record, the hostile list as it stands today, and issued routine orders | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. Mark an issue of routine orders as read. A full member can apply for the cadet course |
 | Instructor | The same | Award a qualification to someone else, in their own name. Draft an event of a type that is open to instructors, which at the start is training |
 | Staff | Everyone, every application and the interview notes, and any member's service record | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
-| Command | The same as staff, every entry of the hostile list: waiting, declined, lifted and lapsed, and the piracy reports | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event. Keep the hostile list. Handle and delete piracy reports |
+| Command | The same as staff, every entry of the hostile list: waiting, declined, lifted and lapsed, the piracy reports, the draft of routine orders and who has read each issue | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event. Keep the hostile list. Handle and delete piracy reports. Draft, issue and correct routine orders |
 | Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, the areas and roles, the qualifications and the rank names. Grant roles on the site, open recruitment, open a service, move the fleet to a new stage |
 
 Roles add up: an admin holds every role. Things the database decides for itself:
@@ -128,6 +129,21 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   on an entry that is closed.
 - **Deleting a report or a hostile-list entry takes its words out of the audit log.** That it
   existed, when, and who did what stay.
+- **Routine orders are numbered by the database, once.** Command opens a draft, one at a time, and
+  the database sets the period it records: from the end of the last issue to that moment, or for
+  the first issue from the day the fleet's record began, or four weeks back if that is later.
+  Drafting and issuing take an advisory lock in turn, so a draft opened while another issue is
+  being issued runs on from it. Issuing gives the next number, signs and dates the issue, and
+  needs words in it; an issued order keeps words in it. An issued order is never taken back or
+  deleted through the API; its words can be corrected, and `updated_at` moves only when the title
+  or the words change. A serving member marks an issue as read for themselves, once, and only an
+  issued one; command reads everyone's marks, a member their own.
+- **Deleting a member takes their name out of every issue.** Before the record goes, every mention
+  of them in an issue, and in what the audit log held of that issue, becomes "a former member".
+- **The record's days are days in UTC, everywhere.** `joined_on`, `started_on` and `awarded_on`
+  default to the day in UTC, and the rules that compare a day with today run with the time zone
+  set to UTC, so a session's time zone changes nothing. An award keeps the time it was recorded,
+  as an appointment does.
 - **Deleting an entry takes its words out of the audit log.** An admin deletes an entry to put
   right a mistake, or to take out something that should not have been written. The log keeps that
   the entry existed, who it named and who did what, and loses what it said.
@@ -244,7 +260,7 @@ tables and Supabase's own default privileges. It is only for the tests.
 
 The migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
 database is compared with the tested copy after each one is applied: its functions, rules, columns,
-grants, triggers, constraints and views. It matched after the latest, `piracy_reports`.
+grants, triggers, constraints and views. It matched after the latest, `routine_orders`.
 
 Each file name starts with the version number Supabase recorded when it was applied, so this folder
 and the database's own migration history agree.

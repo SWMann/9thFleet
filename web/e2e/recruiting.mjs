@@ -3822,6 +3822,179 @@ try {
     assert.ok(!lines.some((line) => /Lost_Miner|Sore_Loser|Long_Ago|Fair_Fighter/.test(line)), "a sender or a player a report named is in the logs");
   });
 
+  console.log("Routine orders");
+  const ordersRow = (state) => one("select * from public.routine_orders where state = $1 order by number desc nulls first limit 1", [state]);
+  const ordersEditor = () => page.getByLabel("The orders");
+  const issueCard = (number) => page.locator(".issue:visible", { has: page.getByRole("link", { name: `Routine Orders ${number}`, exact: true }) });
+
+  await check("routine orders are for the serving fleet, and command alone drafts them", async () => {
+    await context.clearCookies();
+    await page.goto(`${site}/routine-orders`);
+    assert.equal(new URL(page.url()).pathname, "/sign-in");
+    await signInAs(nix);
+    await page.goto(`${site}/routine-orders`);
+    await leadIs(/Routine orders are for the serving fleet\./);
+    await signInAs(rae);
+    assert.ok((await menuLabels()).includes("Routine orders"), "the menu offers routine orders");
+    await page.goto(`${site}/routine-orders`);
+    await headingIs("Routine orders");
+    await leadIs(/Nothing has been issued yet\./);
+    await page.getByText("The first issue will appear here.").waitFor();
+    assert.equal(await page.getByRole("button", { name: "Draft the next issue" }).count(), 0);
+    await page.goto(`${site}/routine-orders/draft`);
+    await headingIs("Routine orders");
+  });
+  await check("command drafts the first issue, and the site writes the fleet's record into it", async () => {
+    await signInAs(jo);
+    await page.goto(`${site}/routine-orders`);
+    await headingIs("Routine orders");
+    await page.getByRole("button", { name: "Draft the next issue" }).click();
+    await page.waitForURL(/\/routine-orders\/draft$/);
+    await leadIs(/A draft opened .* by .*Jo Reyes\. It records/);
+    const draft = await ordersRow("draft");
+    assert.equal(draft.drafted_by, (await memberOf(jo)).id);
+    assert.equal(draft.number, null);
+
+    await ordersEditor().and(page.locator('[contenteditable="true"]')).waitFor();
+    const written = await wordsIn(ordersEditor());
+    for (const expected of [
+      /This issue records .* to .*\./,
+      /From the Fleet Commander/,
+      /Decisions/,
+      /Standing orders\n+No change\./,
+      /Appointments/,
+      /Promotions/,
+      /Qualifications/,
+      /Joined and left/,
+      /Operations/,
+      /Hostile list/,
+      /The organisation BLACKSUN declared hostile/,
+      /Red_Raider declared hostile/,
+      /Strength\n+\d+ serving: \d+ full members?, \d+ auxiliar(y|ies), \d+ recruits? and \d+ reservists?\. Stage \d\./,
+      /Notices/,
+    ]) {
+      assert.match(written, expected);
+    }
+    // A member who was appointed in the period is named, with the rank the post was taken up at.
+    assert.match(written, /@Leading Starman Rae Okoye appointed [^\n]*, Training Ship, as Leading Starman, from /);
+    // A declined name is not the fleet's business, and a lifted entry is command's alone.
+    assert.doesNotMatch(written, /Quiet_One/);
+    assert.doesNotMatch(written, /SCRUBS/);
+    await shot("routine-orders-draft");
+  });
+  await check("command issues it, and the database numbers and dates it", async () => {
+    const form = page.locator("form.orders-form:visible");
+    await form.getByLabel("Title").fill("The first");
+    await form.getByRole("button", { name: "Save the draft" }).click();
+    await page.locator(".form-result:visible", { hasText: "Saved." }).waitFor();
+    await page.locator("summary", { hasText: "Issue it" }).click();
+    await page.locator("details[open]").getByRole("button", { name: "Yes, issue it" }).click();
+    await page.waitForURL(/\/routine-orders\/1$/);
+    await headingIs("Routine Orders 1");
+    await leadIs(/The first\. Issued .* by .*Jo Reyes\. Records .* to .*\./);
+    const issued = await ordersRow("issued");
+    assert.equal(issued.number, 1);
+    assert.equal(issued.title, "The first");
+    assert.equal(issued.issued_by, (await memberOf(jo)).id);
+    assert.match(await page.locator(".orders-body:visible").innerText(), /BLACKSUN declared hostile/);
+    // Issuing is not a correction.
+    assert.equal(await page.getByText(/Corrected on/).count(), 0);
+    // Command is a reader too.
+    await page.getByRole("button", { name: "Mark as read" }).waitFor();
+    assert.match((await page.locator("section[aria-labelledby='who-read']").innerText()).replace(/\s+/g, " "), /0 of \d+ serving have marked Routine Orders 1 as read/);
+    await shot("routine-orders-issue");
+  });
+  await check("a member is told of the issue, reads it and marks it as read, and command sees who has", async () => {
+    await signInAs(rae);
+    await page.goto(`${site}/operations`);
+    await headingIs("Operations");
+    const told = page.locator(".page-head .notice:visible a", { hasText: "Routine Orders 1 is unread" });
+    assert.equal(await told.getAttribute("href"), "/routine-orders/1");
+    await page.goto(`${site}/profile`);
+    await page.locator(".page-head .notice:visible a", { hasText: "Routine Orders 1 is unread" }).waitFor();
+    await told.click();
+    await headingIs("Routine Orders 1");
+    // A member is shown the orders and nothing of who else has read them, and no editor.
+    assert.equal(await page.locator("section[aria-labelledby='who-read'], form.orders-form").count(), 0);
+    await page.getByRole("button", { name: "Mark as read" }).click();
+    await page.getByText("You have read this issue.").waitFor();
+    const read = await one("select member_id from public.routine_order_reads where order_id = $1 and member_id = $2", [(await ordersRow("issued")).id, raeId]);
+    assert.equal(read.member_id, raeId);
+
+    await page.goto(`${site}/routine-orders`);
+    await leadIs(/1 issue\. The latest, Routine Orders 1, was issued .*\.$/);
+    assert.match(await issueCard(1).innerText(), /Read/);
+    assert.doesNotMatch(await issueCard(1).innerText(), /Unread|Read by/);
+    await page.goto(`${site}/operations`);
+    await headingIs("Operations");
+    assert.equal(await page.locator(".page-head .notice:visible").count(), 0);
+
+    await signInAs(jo);
+    await page.goto(`${site}/routine-orders/1`);
+    await headingIs("Routine Orders 1");
+    const who = (await page.locator("section[aria-labelledby='who-read']").innerText()).replace(/\s+/g, " ");
+    assert.match(who, /1 of \d+ serving have marked Routine Orders 1 as read/);
+    assert.match(who, /Read: .*Rae Okoye/);
+    assert.match(who, /Not yet: .*Jo Reyes/);
+    await page.goto(`${site}/routine-orders`);
+    assert.match(await issueCard(1).innerText(), /Read by 1 of \d+/);
+  });
+  await check("command corrects the words of an issue, and its number and date stand", async () => {
+    await page.goto(`${site}/routine-orders/1`);
+    await headingIs("Routine Orders 1");
+    const was = await ordersRow("issued");
+    await page.locator("summary", { hasText: "Open the editor" }).click();
+    const form = page.locator("form.orders-form:visible");
+    await form.getByLabel("Title").fill("The first, corrected");
+    await form.getByRole("button", { name: "Save the correction" }).click();
+    await page.locator(".form-result:visible", { hasText: "Saved." }).waitFor();
+    const now = await ordersRow("issued");
+    assert.equal(now.title, "The first, corrected");
+    assert.equal(now.number, was.number);
+    assert.equal(now.issued_at.toISOString(), was.issued_at.toISOString());
+    await page.goto(`${site}/routine-orders/1`);
+    await leadIs(/The first, corrected\. Issued/);
+    await page.getByText(/Corrected on .*, after it was issued\./).waitFor();
+  });
+  await check("the next draft runs on from the last issue, waits on the admin overview, and can be discarded", async () => {
+    await page.goto(`${site}/routine-orders`);
+    await page.getByRole("button", { name: "Draft the next issue" }).click();
+    await page.waitForURL(/\/routine-orders\/draft$/);
+    const first = await ordersRow("issued");
+    const draft = await ordersRow("draft");
+    assert.equal(draft.covers_from.toISOString(), first.covers_to.toISOString());
+    // Nothing is listed twice: the first issue's record is not in the second.
+    await ordersEditor().and(page.locator('[contenteditable="true"]')).waitFor();
+    assert.doesNotMatch(await wordsIn(ordersEditor()), /BLACKSUN/);
+
+    await page.goto(`${site}/admin`);
+    const told = page.locator(".attention:visible li", { hasText: "A draft of routine orders is waiting to be issued" });
+    assert.equal(await told.getByRole("link").getAttribute("href"), "/routine-orders/draft");
+    // A second draft cannot be opened while one waits.
+    await page.goto(`${site}/routine-orders`);
+    await page.getByRole("link", { name: "Continue the draft" }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Draft the next issue" }).count(), 0);
+
+    await page.goto(`${site}/routine-orders/draft`);
+    await page.locator("summary", { hasText: "Discard the draft" }).click();
+    await page.locator("details[open]").getByRole("button", { name: "Yes, discard it" }).click();
+    await page.waitForURL(/\/routine-orders$/);
+    assert.equal(await ordersRow("draft"), undefined);
+    assert.equal((await ordersRow("issued")).number, 1);
+  });
+  await check("every step with the orders is in the logs", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/admin/logs?show=operations`);
+    await headingIs("Logs");
+    await page.locator(".log-line:visible").first().waitFor();
+    const lines = (await page.locator(".log-line:visible").allInnerTexts()).map((line) => line.replace(/\s+/g, " "));
+    const said = (pattern) => assert.ok(lines.some((line) => pattern.test(line)), `${pattern} is not in the logs`);
+    said(/Jo Reyes opened a draft of routine orders/);
+    said(/Jo Reyes issued Routine Orders 1.*The first/);
+    said(/Jo Reyes corrected Routine Orders 1/);
+    said(/Jo Reyes discarded a draft of routine orders/);
+  });
+
   await check("no page raised a script error", async () => {
     assert.deepEqual(pageErrors, []);
   });

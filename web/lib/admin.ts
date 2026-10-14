@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { refused } from "@/lib/activity";
 import { getSession, isServing, type Member, type Role, type Service, type Status } from "@/lib/member";
+import { EVERY_DAYS, sinceIssue } from "@/lib/orders-form";
 import { manningOf, shortfall, unitsTakingPart, type Manning, type Place } from "@/lib/manning";
 import type { EventState, Reply, Returned } from "@/lib/operations-form";
 import { createClient } from "@/lib/supabase/server";
@@ -174,6 +175,8 @@ export type Fleet = {
   hostiles: { id: string; handle: string; state: "proposed" | "listed" | "declined" | "lifted"; expires_on: string | null }[];
   /** The piracy reports, which the database sends to command and nobody else. */
   piracy: { id: string; state: "new" | "handled" | "dismissed"; urgent: boolean }[];
+  /** Routine orders: the draft for command, and what has been issued. */
+  orders: { id: string; state: "draft" | "issued"; number: number | null; issued_at: string | null }[];
 };
 
 export type Loaded = { state: "no-database" } | { state: "ready"; fleet: Fleet };
@@ -183,7 +186,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
 
-  const [settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles, piracy] =
+  const [settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles, piracy, orders] =
     await Promise.all([
       supabase.from("fleet_settings").select("current_stage, recruitment_open").maybeSingle(),
       supabase
@@ -214,8 +217,9 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       supabase.from("event_posts").select("id, event_id, title, must_fill"),
       supabase.from("hostiles").select("id, handle, state, expires_on"),
       supabase.from("piracy_reports").select("id, state, urgent"),
+      supabase.from("routine_orders").select("id, state, number, issued_at"),
     ]);
-  const results = { settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles, piracy };
+  const results = { settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles, piracy, orders };
   for (const [name, result] of Object.entries(results)) {
     if (result.error) throw new Error(`The ${name} could not be read: ${result.error.message}`);
   }
@@ -321,6 +325,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       reports: rows<Fleet["reports"][number]>(reports),
       hostiles: rows<Fleet["hostiles"][number]>(hostiles),
       piracy: rows<Fleet["piracy"][number]>(piracy),
+      orders: rows<Fleet["orders"][number]>(orders),
     },
   };
 });
@@ -763,6 +768,21 @@ export function attention(fleet: Fleet, tier: Tier): Attention[] {
           href: `/operations/${event.id}`,
         });
       }
+    }
+
+    // Routine orders: a draft left open, and the next issue falling due.
+    const draft = fleet.orders.find((issue) => issue.state === "draft");
+    if (draft) {
+      list.push({ what: "A draft of routine orders is waiting to be issued", detail: "Finish it and issue it, or discard it.", href: "/routine-orders/draft" });
+    }
+    const lastIssued = fleet.orders.filter((issue) => issue.state === "issued" && issue.issued_at).sort((a, b) => (b.issued_at ?? "").localeCompare(a.issued_at ?? ""))[0];
+    const gap = sinceIssue(lastIssued?.issued_at ?? null, now);
+    if (gap.due && !draft) {
+      list.push({
+        what: `Routine orders are due: the last issue was ${gap.days} days ago`,
+        detail: `An issue every ${EVERY_DAYS} days. The site drafts the next one from the record.`,
+        href: "/routine-orders",
+      });
     }
 
     // Reports from the public line. Nobody is sent a message when one arrives, so this is where command learns of it.

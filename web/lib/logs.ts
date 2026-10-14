@@ -93,7 +93,7 @@ const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
     "events", "event_orders", "event_units", "event_key_posts", "event_posts", "event_objectives", "event_elements",
     "event_timings", "event_ships", "event_nets", "event_amendments", "event_acknowledgements", "attendance",
     "attendance_returns", "after_action_reports", "event_objective_outcomes", "event_losses", "event_opfor",
-    "event_opfor_members", "event_unit_tasks", "hostiles", "piracy_reports",
+    "event_opfor_members", "event_unit_tasks", "hostiles", "piracy_reports", "routine_orders",
   ],
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
@@ -387,6 +387,7 @@ const FORMATTED: Record<string, string[]> = {
   qualifications: ["description"],
   event_types: ["situation_holds", "mission_holds", "execution_holds", "support_holds", "command_and_signal_holds"],
   hostiles: ["reason"],
+  routine_orders: ["body"],
 };
 
 function changes(row: AuditRow, names: Names, said: string[] = []): string | null {
@@ -705,6 +706,17 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       }
       if (changed("renewed_at")) return line("operations", `${actor} renewed ${name} on the hostile list`, now.expires_on ? `It stands to ${String(now.expires_on)}.` : null);
       return line("operations", `${actor} rewrote the hostile list's entry for ${name}`, changes(row, names));
+    }
+
+    case "routine_orders": {
+      const which = typeof now.number === "number" ? `Routine Orders ${now.number}` : typeof was.number === "number" ? `Routine Orders ${was.number}` : "a draft of routine orders";
+      if (row.action === "insert") return line("operations", `${actor} opened a draft of routine orders`);
+      if (row.action === "delete") return line("operations", `${actor} discarded a draft of routine orders`);
+      if (changed("state") && now.state === "issued") return line("operations", `${actor} issued ${which}`, now.title ? String(now.title) : null);
+      if (["drafted_by", "issued_by"].some((key) => changed(key) && !now[key]) && !changed("body") && !changed("title")) {
+        return line("operations", `A member named on ${which} was deleted, and their name was cleared from it`);
+      }
+      return line("operations", now.state === "issued" ? `${actor} corrected ${which}` : `${actor} wrote the draft of routine orders`);
     }
 
     case "piracy_reports": {
