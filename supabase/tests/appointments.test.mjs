@@ -61,10 +61,12 @@ const award = (actor, memberId, qualification, awardedBy = actor) =>
 test("an instructor awards a qualification in their own name, dated today", async () => {
   const recruit = await fresh("Trainee", { status: "recruit" });
   const radio = await qualificationId("radio-user");
+  await fleet.qualify(recruit, "induction");
+  await fleet.passLessons(recruit, "radio-user");
   await award(who.instructor, recruit, radio);
   const row = await fleet.one(
-    "select awarded_by, awarded_on = current_date as today from public.qualification_awards where member_id = $1",
-    [recruit],
+    "select awarded_by, awarded_on = current_date as today from public.qualification_awards where member_id = $1 and qualification_id = $2",
+    [recruit, radio],
   );
   assert.deepEqual(row, { awarded_by: who.instructor, today: true });
 
@@ -89,8 +91,16 @@ test("a qualification cannot be self-awarded, signed as someone else, given to a
   await assert.rejects(award(who.staff, recruit, radio), /row-level security/, "staff are not instructors");
 });
 
-test("the admin can sign off their own qualification, to start the chain", async () => {
-  await award(who.admin, who.admin, await qualificationId("instructor"));
+test("the admin can sign off their own lessons and qualifications, to start the chain", async () => {
+  // Each course needs the one before it, so the chain starts at the beginning.
+  for (const code of ["induction", "radio-user", "instructor"]) {
+    await fleet.as(who.admin).query(
+      `insert into public.lesson_passes (lesson_id, member_id)
+       select l.id, $1 from public.lessons l join public.qualifications q on q.id = l.qualification_id where q.code = $2`,
+      [who.admin, code],
+    );
+    await award(who.admin, who.admin, await qualificationId(code));
+  }
 });
 
 test("staff remove an award, but not their own or an admin's", async () => {
@@ -459,7 +469,12 @@ test("the admin keeps the order of battle, and nobody else can change it", async
     assert.equal(await outsider.changed("update public.positions set max_grade = 'O10' where title = 'Gunner 1'"), 0);
     assert.equal(await outsider.changed("update public.units set opens_at_stage = 1"), 0);
     assert.equal(await outsider.changed("delete from public.units where name = 'Escort One'"), 0);
-    assert.equal(await outsider.changed("update public.qualifications set name = 'Anything'"), 0);
+    // Command may set what a course requires, and nothing else about a qualification.
+    if (actor === who.command) {
+      await assert.rejects(outsider.query("update public.qualifications set name = 'Anything'"), /Command sets what a course requires, and nothing else/);
+    } else {
+      assert.equal(await outsider.changed("update public.qualifications set name = 'Anything'"), 0);
+    }
     assert.equal(await outsider.changed("delete from public.position_qualifications where position_id = $1", [bridgeCo]), 0);
   }
 

@@ -17,6 +17,8 @@ import {
   type GradeChange,
 } from "@/lib/record";
 import type { ServiceRecord } from "@/lib/service-record";
+import type { TrainingLine } from "@/lib/training";
+import { progressWords } from "@/lib/training-form";
 
 /**
  * A member's service record, as the member reads their own and as staff read
@@ -41,6 +43,7 @@ export function ServiceRecordView({
   own,
   attendance,
   notes = false,
+  training = [],
 }: {
   record: ServiceRecord;
   /** The reader's own record, which changes a few of the words. */
@@ -48,6 +51,8 @@ export function ServiceRecordView({
   attendance: boolean;
   /** Show the note command left on each appointment. For staff. */
   notes?: boolean;
+  /** The courses in progress: started and not yet held. */
+  training?: TrainingLine[];
 }) {
   const now = record.readAt;
   const on = today(now);
@@ -245,6 +250,46 @@ export function ServiceRecordView({
             ) : (
               <p>None yet. An instructor signs each one off in training.</p>
             )}
+            {training.length > 0 ? (
+              <>
+                <h4 className="with-icon">
+                  <Icon name="book" size={14} />
+                  In training
+                </h4>
+                <ul className="in-training">
+                  {training.map((line) => (
+                    <li key={line.course}>
+                      <strong>{line.course}</strong>
+                      <span>{progressWords(line.passed, line.lessons)}</span>
+                      <ol className="lessons lessons-small">
+                        {line.lines.map((lesson) => (
+                          <li key={lesson.lesson} className={lesson.passedOn ? "lesson lesson-passed" : "lesson"}>
+                            <span className="lesson-mark" aria-hidden="true">
+                              {lesson.passedOn ? <Icon name="check" size={12} /> : null}
+                            </span>
+                            <span className="lesson-words">
+                              {lesson.lesson}
+                              {lesson.passedOn ? (
+                                <small className="lesson-when">
+                                  {" "}
+                                  {day(lesson.passedOn)}
+                                  {lesson.signedBy ? `, ${lesson.signedBy}` : ""}
+                                </small>
+                              ) : null}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    </li>
+                  ))}
+                </ul>
+                {own ? (
+                  <p>
+                    The whole syllabus is at <Link href="/training">Training</Link>.
+                  </p>
+                ) : null}
+              </>
+            ) : null}
           </div>
           <div>
             <h3 className="with-icon">

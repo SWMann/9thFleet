@@ -122,6 +122,18 @@ export class Fleet {
     return row.id;
   }
 
+  /** Sign off every lesson of a course directly, for setting up a test. */
+  async passLessons(memberId, ...codes) {
+    for (const code of codes) {
+      await this.sql(
+        `insert into public.lesson_passes (lesson_id, member_id)
+         select l.id, $1 from public.lessons l join public.qualifications q on q.id = l.qualification_id where q.code = $2
+         on conflict do nothing`,
+        [memberId, code],
+      );
+    }
+  }
+
   /** Award qualifications directly, for setting up a test. */
   async qualify(memberId, ...codes) {
     for (const code of codes) {

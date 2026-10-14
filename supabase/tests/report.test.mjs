@@ -63,6 +63,12 @@ before(async () => {
   who.other = await fleet.person("7", "Other");
   who.applicant = await fleet.applicant("8", "Applicant");
   for (const row of await fleet.rows("select id, code from public.qualifications")) qualification[row.code] = row.id;
+  // The awards below are about the event they name; the lessons are passed, and what each course requires held, beforehand.
+  for (const member of [who.gunner, who.spare, who.other, who.helm, who.instructor]) {
+    await fleet.passLessons(member, "induction", "radio-user", "navy-crew");
+    // The other is awarded induction in a test below, away from any event.
+    if (member !== who.other) await fleet.qualify(member, "induction");
+  }
 });
 after(() => fleet.close());
 
@@ -90,8 +96,10 @@ test("an instructor signs off who passed at an event that teaches the qualificat
   assert.equal(pass.awarded_by, who.instructor);
   // The event teaches one qualification, and only that one is signed off there.
   await assert.rejects(award(who.instructor, who.spare, "navy-crew", id), /does not teach this qualification/);
-  // Someone who was not there is not signed off.
+  // Someone who was not there is not signed off. The other holds what the course requires, so that is the reason given.
+  await fleet.qualify(who.other, "induction");
   await assert.rejects(award(who.instructor, who.other, "radio-user", id), /was not at the event/);
+  await fleet.sql("delete from public.qualification_awards where member_id = $1", [who.other]);
   // Who may award at all has not changed: an instructor, and never to themselves.
   await assert.rejects(award(who.helm, who.spare, "radio-user", id), /row-level security/);
   await assert.rejects(award(who.instructor, who.instructor, "radio-user", id), /row-level security/);

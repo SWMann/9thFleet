@@ -7295,3 +7295,354 @@ a.mention:hover {
   margin: 24px 0 0;
   color: var(--text-3);
 }
+
+/* ---------------------------------------------------------------------------
+   Training: the syllabus, a member's progress, and the instructor's sign-offs
+   --------------------------------------------------------------------------- */
+
+.courses {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
+  align-items: start;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.course {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--seam);
+  border-top: 3px solid var(--seam-2);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.course-held {
+  border-top-color: var(--green);
+}
+
+.course-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.course-head h3 {
+  margin: 0;
+  color: var(--white);
+  font-size: 1.1875rem;
+}
+
+.course-about,
+.course-requires {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.course-requires {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+.lessons {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: lesson;
+}
+
+.lesson {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--seam);
+  color: var(--text-2);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.lesson-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.05em;
+  border: 1px solid var(--seam-2);
+  border-radius: 50%;
+  color: var(--white);
+}
+
+.lesson-passed .lesson-mark {
+  border-color: var(--green);
+  background: var(--green);
+}
+
+.lesson-passed .lesson-words strong {
+  color: var(--white);
+}
+
+.lesson-words strong {
+  color: var(--text);
+}
+
+.lesson-about {
+  color: var(--text-3);
+}
+
+.lesson-when {
+  display: block;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+}
+
+.lessons-small .lesson {
+  padding: 4px 0;
+  font-size: 0.875rem;
+}
+
+.lessons-small .lesson-mark {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.in-training {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.in-training > li {
+  padding: 8px 0;
+  border-top: 1px solid var(--seam);
+}
+
+.in-training > li > strong {
+  color: var(--text);
+}
+
+.in-training > li > span {
+  margin-left: 8px;
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+.earned h4 {
+  margin: 18px 0 6px;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.choose-member {
+  max-width: 42rem;
+}
+
+.sign-offs {
+  display: grid;
+  gap: 24px;
+  max-width: 42rem;
+  margin: 28px 0 36px;
+}
+
+.sign-offs h3 {
+  margin: 0;
+  color: var(--white);
+}
+
+.band .sign-off-course .hint {
+  margin: 0 0 6px;
+  color: var(--amber);
+}
+
+.sign-off li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.sign-off li label {
+  min-width: 0;
+}
+
+.sign-off label small,
+.sign-off-grid small {
+  display: block;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+/* At an event: each member who was there, with the course's lessons beside them. */
+.sign-off-grid li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px 16px;
+  padding: 10px 0;
+}
+
+@media (min-width: 720px) {
+  .sign-off-grid li {
+    grid-template-columns: minmax(12rem, 0.6fr) minmax(0, 1.4fr);
+  }
+}
+
+.sign-off-who {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sign-off-lessons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.sign-off-lesson {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  color: var(--text-2);
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.sign-off-lesson input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--gold);
+}
+
+.sign-off-award {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.awaiting {
+  display: grid;
+  gap: 10px;
+  max-width: 42rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.awaiting li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--seam);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--text-2);
+}
+
+.awaiting strong {
+  color: var(--white);
+}
+
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.inline-form .form-result {
+  margin: 0;
+}
+
+/* Command's syllabus editor. */
+.syllabus-editor {
+  display: grid;
+  gap: 28px;
+  max-width: 48rem;
+}
+
+.syllabus-course {
+  padding: 18px 20px 20px;
+  border: 1px solid var(--seam);
+  border-top: 3px solid var(--seam-2);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.syllabus-course h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 6px;
+  color: var(--white);
+}
+
+.requires-form {
+  margin: 12px 0 16px;
+}
+
+.syllabus-lessons {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: lesson;
+}
+
+.syllabus-lessons > li {
+  border-top: 1px solid var(--seam);
+  counter-increment: lesson;
+}
+
+.syllabus-lessons summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 10px 0;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.syllabus-lessons summary::before {
+  content: counter(lesson) ".";
+  color: var(--text-3);
+}
+
+.syllabus-lessons summary strong {
+  color: var(--white);
+}
+
+.syllabus-lessons .lesson-form,
+.add-lesson .lesson-form {
+  margin: 6px 0 12px;
+}
+
+.add-lesson {
+  margin-top: 12px;
+  border-top: 1px solid var(--seam);
+}
+
+.add-lesson summary {
+  padding: 10px 0;
+  color: var(--gold);
+  cursor: pointer;
+}

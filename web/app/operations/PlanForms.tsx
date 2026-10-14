@@ -278,41 +278,77 @@ type Named = { id: string; name: string; rankName: string | null };
 const rankAndName = (person: Named) => (person.rankName ? `${person.rankName} ${person.name}` : person.name);
 
 /**
- * For an instructor, at an event that teaches a qualification: tick who
- * passed. Each pass is an award in the instructor's own name.
+ * For an instructor, at an event that teaches a qualification: for each
+ * member who was there, tick the lessons they passed, and award the
+ * qualification to anyone who has passed every lesson. Each sign-off and
+ * award is in the instructor's own name and points back at the event.
  */
 export function SignOffForm({
   id,
   qualification,
+  lessons,
   candidates,
 }: {
   id: string;
   qualification: string;
-  candidates: { person: Named; holds: boolean }[];
+  lessons: { id: string; name: string }[];
+  candidates: { person: Named; holds: boolean; passed: string[] }[];
 }) {
   const [result, action, pending] = useActionState(signOff, untouched);
   const open = candidates.filter((candidate) => !candidate.holds);
   return (
-    <form action={action} className="picks" key={result.stamp ?? 0}>
+    <form action={action} className="picks sign-off" key={result.stamp ?? 0}>
       <input type="hidden" name="id" value={id} />
       <fieldset>
         <legend>Who passed</legend>
         <p className="hint">
-          Tick everyone who met the standard for {qualification}. Each pass is signed in your name and dated today, and
-          it is not undone from here.
+          {lessons.length > 0
+            ? `Tick each lesson of ${qualification} a member passed here, and "Award" for anyone who has now passed every lesson. Each sign-off is in your name and dated today.`
+            : `Tick everyone who met the standard for ${qualification}. Each pass is signed in your name and dated today, and it is not undone from here.`}
         </p>
-        <ul>
-          {candidates.map((candidate) => (
-            <li key={candidate.person.id}>
-              <label>
-                <input type="checkbox" name="pass" value={candidate.person.id} disabled={candidate.holds} defaultChecked={candidate.holds} />
-                <span>
-                  {rankAndName(candidate.person)}
-                  {candidate.holds ? <small> Holds it already</small> : null}
-                </span>
-              </label>
-            </li>
-          ))}
+        <ul className={lessons.length > 0 ? "sign-off-grid" : undefined}>
+          {candidates.map((candidate) => {
+            const passed = new Set(candidate.passed);
+            const complete = lessons.every((lesson) => passed.has(lesson.id));
+            return (
+              <li key={candidate.person.id}>
+                {lessons.length > 0 ? (
+                  <>
+                    <span className="sign-off-who">
+                      {rankAndName(candidate.person)}
+                      {candidate.holds ? <small> Holds it already</small> : null}
+                    </span>
+                    <span className="sign-off-lessons">
+                      {lessons.map((lesson) => (
+                        <label key={lesson.id} className="sign-off-lesson">
+                          <input
+                            type="checkbox"
+                            name={`lesson:${candidate.person.id}`}
+                            value={lesson.id}
+                            disabled={candidate.holds || passed.has(lesson.id)}
+                            defaultChecked={passed.has(lesson.id)}
+                          />
+                          <span>{lesson.name}</span>
+                        </label>
+                      ))}
+                      <label className="sign-off-lesson sign-off-award">
+                        <input type="checkbox" name="award" value={candidate.person.id} disabled={candidate.holds} defaultChecked={candidate.holds} />
+                        <span>{candidate.holds ? "Awarded" : complete ? "Award it" : "Award it, once every lesson is passed"}</span>
+                      </label>
+                    </span>
+                  </>
+                ) : (
+                  <label>
+                    <input type="checkbox" name="award" value={candidate.person.id} disabled={candidate.holds} defaultChecked={candidate.holds} />
+                    <span>
+                      {rankAndName(candidate.person)}
+                      {candidate.holds ? <small> Holds it already</small> : null}
+                    </span>
+                  </label>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </fieldset>
       <div className="form-end">

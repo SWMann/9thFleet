@@ -625,7 +625,7 @@ async function Event({ params }: { params: Props["params"] }) {
                   </p>
                   {signOff ? (
                     signOff.candidates.length > 0 ? (
-                      <SignOffForm id={event.id} qualification={signOff.qualification.name} candidates={signOff.candidates} />
+                      <SignOffForm id={event.id} qualification={signOff.qualification.name} lessons={signOff.lessons} candidates={signOff.candidates} />
                     ) : (
                       <p>Nobody else is down as having been there.</p>
                     )

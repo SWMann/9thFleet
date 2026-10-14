@@ -13,6 +13,7 @@ export const config = {
     "/operations/:path*",
     "/hostiles/:path*",
     "/routine-orders/:path*",
+    "/training/:path*",
     "/apply/:path*",
     "/staff/:path*",
     "/admin/:path*",

@@ -653,11 +653,13 @@ export type Opfor = {
   candidates: Person[];
 };
 
-/** For an instructor, at an event that teaches a qualification: who can be signed off. */
+/** For an instructor, at an event that teaches a qualification: who can be signed off, lesson by lesson. */
 export type SignOff = {
   qualification: { id: string; name: string };
+  /** The lessons of the course, in order. A course with none is awarded on the instructor's word. */
+  lessons: { id: string; name: string }[];
   /** Everyone who was there, by the return if this member can see it, and otherwise by the roll. */
-  candidates: { person: Person; holds: boolean }[];
+  candidates: { person: Person; holds: boolean; passed: string[] }[];
 };
 
 export type Operation =
@@ -944,13 +946,34 @@ export async function getOperation(id: string): Promise<Operation> {
   const mayAward = isServing(member) && (member.roles.includes("instructor") || member.roles.includes("admin"));
   let signOff: SignOff | null = null;
   if (mayAward && event.teaches && event.started && (row.state === "announced" || row.state === "done")) {
-    const holders = await supabase.from("qualification_awards").select("member_id").eq("qualification_id", event.teaches.id);
-    if (holders.error) throw new Error(`The event could not be read: ${holders.error.message}`);
+    // Nobody signs off their own lessons or qualification.
+    const candidates = present.filter((person) => person.id !== member.id);
+    const lessons = await supabase.from("lessons").select("id, name, sort_order").eq("qualification_id", event.teaches.id);
+    if (lessons.error) throw new Error(`The event could not be read: ${lessons.error.message}`);
+    const course = ((lessons.data ?? []) as { id: string; name: string; sort_order: number }[]).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+    // Only this course's lessons, for those present: bounded, so the reply is never cut short.
+    const [holders, passes] = await Promise.all([
+      supabase.from("qualification_awards").select("member_id").eq("qualification_id", event.teaches.id),
+      candidates.length > 0 && course.length > 0
+        ? supabase
+            .from("lesson_passes")
+            .select("lesson_id, member_id")
+            .in("member_id", candidates.map((person) => person.id))
+            .in("lesson_id", course.map((lesson) => lesson.id))
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    for (const result of [holders, passes]) {
+      if (result.error) throw new Error(`The event could not be read: ${result.error.message}`);
+    }
     const holds = new Set(((holders.data ?? []) as { member_id: string }[]).map((entry) => entry.member_id));
+    const passedBy = new Map<string, string[]>();
+    for (const pass of (passes.data ?? []) as { lesson_id: string; member_id: string }[]) {
+      passedBy.set(pass.member_id, [...(passedBy.get(pass.member_id) ?? []), pass.lesson_id]);
+    }
     signOff = {
       qualification: event.teaches,
-      // Nobody signs off their own qualification.
-      candidates: present.filter((person) => person.id !== member.id).map((person) => ({ person, holds: holds.has(person.id) })),
+      lessons: course.map((lesson) => ({ id: lesson.id, name: lesson.name })),
+      candidates: candidates.map((person) => ({ person, holds: holds.has(person.id), passed: passedBy.get(person.id) ?? [] })),
     };
   }
 

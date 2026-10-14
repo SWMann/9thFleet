@@ -29,6 +29,7 @@ or let someone promote themselves.
 | `migrations/…_hostile_list.sql` | The hostile list: names put forward by members, listed, declined, renewed and lifted by command |
 | `migrations/…_piracy_reports.sql` | The public piracy report line: what a visitor may send, how much the line takes, and what command does with a report |
 | `migrations/…_routine_orders.sql` | Routine orders: drafted and issued by command, numbered and dated by the database, read by the serving fleet, each member marking an issue as read |
+| `migrations/…_training_records.sql` | Training records: each qualification as a course of lessons, signed off by instructors, with the qualification awarded once every lesson is passed |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -54,10 +55,10 @@ Staff look after people, command makes appointments, and the admin owns the stru
 | --- | --- | --- |
 | Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: areas, roles, units, positions and the qualifications each requires. Never who holds one | Send a piracy report, and read nothing back |
 | Applicant | The same, and their own record and their own application | Set a character name and an RSI handle, apply while recruitment is open, withdraw |
-| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position now and which qualification, every announced event with its orders, roll and report, their own service record, the hostile list as it stands today, and issued routine orders | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. Mark an issue of routine orders as read. A full member can apply for the cadet course |
-| Instructor | The same | Award a qualification to someone else, in their own name. Draft an event of a type that is open to instructors, which at the start is training |
+| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position now and which qualification, every announced event with its orders, roll and report, their own service record, the hostile list as it stands today, issued routine orders, the training syllabus and their own lessons passed | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. Mark an issue of routine orders as read. A full member can apply for the cadet course |
+| Instructor | The same, and every member's lessons passed | Sign off a lesson for someone else, in their own name, and withdraw their own sign-off until the award. Award a qualification to someone else once every lesson of its course is passed. Draft an event of a type that is open to instructors, which at the start is training |
 | Staff | Everyone, every application and the interview notes, and any member's service record | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
-| Command | The same as staff, every entry of the hostile list: waiting, declined, lifted and lapsed, the piracy reports, the draft of routine orders and who has read each issue | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event. Keep the hostile list. Handle and delete piracy reports. Draft, issue and correct routine orders |
+| Command | The same as staff, every entry of the hostile list: waiting, declined, lifted and lapsed, the piracy reports, the draft of routine orders and who has read each issue | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event. Keep the hostile list. Handle and delete piracy reports. Draft, issue and correct routine orders. Edit the syllabus: the lessons of each course and what a course requires first |
 | Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, the areas and roles, the qualifications and the rank names. Grant roles on the site, open recruitment, open a service, move the fleet to a new stage |
 
 Roles add up: an admin holds every role. Things the database decides for itself:
@@ -138,6 +139,19 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   deleted through the API; its words can be corrected, and `updated_at` moves only when the title
   or the words change. A serving member marks an issue as read for themselves, once, and only an
   issued one; command reads everyone's marks, a member their own.
+- **A qualification is a course of lessons, and is awarded once every lesson is passed.** The
+  lessons are command's to write, and keep to their course; a lesson someone has passed stays.
+  What a course requires first is command's to set, and never comes back round to itself. An
+  instructor signs a lesson off in their own name, never their own, for a serving member who does
+  not hold the qualification and holds what the course requires first; a sign-off at an event is
+  checked against the event as an award is. The instructor who signed a lesson off may withdraw
+  it until the qualification is awarded. The award is checked the same way, prerequisite and
+  every lesson, after the access rules, so someone who may not award at all is told that and
+  nothing about the course; a commission is recorded by command, for the commissioning board.
+  Taking an award away through the API takes the course's passes with it. The SQL editor is held
+  to none of this. `training_progress` gives each member's standing in each course they have
+  started, read with the reader's own access to the passes: a member their own, staff everyone's,
+  an instructor those of the members they can see.
 - **Deleting a member takes their name out of every issue.** Before the record goes, every mention
   of them in an issue, and in what the audit log held of that issue, becomes "a former member".
 - **The record's days are days in UTC, everywhere.** `joined_on`, `started_on` and `awarded_on`
@@ -260,15 +274,16 @@ tables and Supabase's own default privileges. It is only for the tests.
 
 The migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
 database is compared with the tested copy after each one is applied: its functions, rules, columns,
-grants, triggers, constraints and views. It matched after the latest, `routine_orders`.
+grants, triggers, constraints and views. It matched after the latest, `training_records`.
 
 Each file name starts with the version number Supabase recorded when it was applied, so this folder
 and the database's own migration history agree.
 
-One exception: `piracy_reports` was recorded without its housekeeping function,
-`app.clear_old_piracy_reports`. The tool that applies migrations asks the Fleet Commander to confirm
-anything that deletes, and that confirmation did not reach him, so he created that one function
-himself in the SQL editor from the lines in the file. The comparison above covers it.
+Two exceptions. `piracy_reports` was recorded without its housekeeping function,
+`app.clear_old_piracy_reports`, and `training_records` without `app.retrain_on_revoke` and its
+trigger. The tool that applies migrations asks the Fleet Commander to confirm anything that
+deletes, and that confirmation did not reach him, so he created those himself in the SQL editor
+from the lines in the files. The comparison above covers them.
 
 Three settings live in the Supabase dashboard, not in these files:
 
