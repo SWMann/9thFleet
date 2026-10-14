@@ -14,7 +14,34 @@
 --   Each serving member marks an issue as read, for themselves. Command sees
 --   who has.
 --
--- Routine orders name members, so they are never sent to a visitor.
+-- Routine orders name members, so they are never sent to a visitor. A member
+-- whose record is deleted is named in no issue after it: where an issue named
+-- them, it says "a former member".
+
+-- ---------------------------------------------------------------------------
+-- The record's days are days in UTC, everywhere
+-- ---------------------------------------------------------------------------
+
+-- An issue lists the record by day, so the record's days must all be the same
+-- kind of day. Three were still the day in the session's time zone, as were
+-- the rules that compare a day with today. They are now days in UTC, like the
+-- rest of the record, whatever time zone a session has.
+alter table public.members alter column joined_on set default ((now() at time zone 'utc')::date);
+alter table public.assignments alter column started_on set default ((now() at time zone 'utc')::date);
+alter table public.qualification_awards alter column awarded_on set default ((now() at time zone 'utc')::date);
+alter function app.check_assignment() set timezone = 'UTC';
+alter function app.guard_member_update() set timezone = 'UTC';
+alter function app.member_grade(uuid) set timezone = 'UTC';
+
+-- An issue lists what was recorded since the last one. An award is dated by
+-- the day, which may be the day of the last issue; the time it was recorded
+-- tells which issue it belongs in, as it already does for an appointment.
+alter table public.qualification_awards add column recorded_at timestamptz not null default clock_timestamp();
+grant select (recorded_at) on public.qualification_awards to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Routine orders
+-- ---------------------------------------------------------------------------
 
 create type public.routine_order_state as enum ('draft', 'issued');
 
@@ -65,9 +92,9 @@ declare
   me uuid := (select auth.uid());
 begin
   -- The database's own housekeeping: a member named on the issue was deleted,
-  -- and their name was cleared.
+  -- and their name was cleared from the issue and from its words.
   if tg_op = 'UPDATE' and pg_trigger_depth() > 1
-     and (to_jsonb(new) - array['drafted_by', 'issued_by', 'updated_at']) = (to_jsonb(old) - array['drafted_by', 'issued_by', 'updated_at']) then
+     and (to_jsonb(new) - array['drafted_by', 'issued_by', 'body']) = (to_jsonb(old) - array['drafted_by', 'issued_by', 'body']) then
     return new;
   end if;
 
@@ -77,6 +104,9 @@ begin
 
   if tg_op = 'INSERT' then
     if not trusted then
+      -- Drafting and issuing take turns, so a draft opened while another
+      -- issue is being issued runs on from that issue, not from the one before.
+      perform pg_advisory_xact_lock(hashtext('public.routine_orders'));
       new.state := 'draft';
       new.number := null;
       new.issued_by := null;
@@ -84,10 +114,11 @@ begin
       new.drafted_by := me;
       new.drafted_at := now();
       new.updated_at := now();
-      -- The record runs on from the last issue, or from the day the fleet's record began.
+      -- The record runs on from the last issue. The first issue runs from the
+      -- day the fleet's record began, or from four weeks ago if that is later.
       new.covers_from := coalesce(
         (select max(o.covers_to) from public.routine_orders o where o.state = 'issued'),
-        (select min(m.joined_on)::timestamptz from public.members m),
+        greatest((select min(m.joined_on)::timestamp at time zone 'utc' from public.members m), now() - interval '28 days'),
         now()
       );
       new.covers_to := now();
@@ -95,8 +126,8 @@ begin
     return new;
   end if;
 
-  new.updated_at := now();
   if trusted then
+    new.updated_at := now();
     return new;
   end if;
 
@@ -108,18 +139,26 @@ begin
   new.number := old.number;
   new.issued_by := old.issued_by;
   new.issued_at := old.issued_at;
+  -- The issue is dated by its words: a save that changes nothing is no correction.
+  new.updated_at := case when new.title is distinct from old.title or new.body is distinct from old.body then now() else old.updated_at end;
 
   if new.state is distinct from old.state then
     if old.state = 'draft' and new.state = 'issued' then
-      if char_length(btrim(new.body)) < 20 then
-        raise exception 'Write the orders before issuing them.' using errcode = '23514';
-      end if;
+      perform pg_advisory_xact_lock(hashtext('public.routine_orders'));
       new.number := coalesce((select max(o.number) from public.routine_orders o), 0) + 1;
       new.issued_by := me;
       new.issued_at := now();
+      new.updated_at := new.issued_at;
     else
       raise exception 'An issue, once issued, stands. Correct its words, or put a correction in the next issue.' using errcode = '23514';
     end if;
+  end if;
+  -- An issue has words, before it is issued and after.
+  if new.state = 'issued' and char_length(btrim(new.body)) < 20 then
+    if old.state = 'draft' then
+      raise exception 'Write the orders before issuing them.' using errcode = '23514';
+    end if;
+    raise exception 'An issue keeps its orders. Correct them, or put a correction in the next issue.' using errcode = '23514';
   end if;
   return new;
 end;
@@ -129,6 +168,30 @@ create trigger routine_orders_guard before insert or update on public.routine_or
   for each row execute function app.guard_routine_order();
 create trigger routine_orders_audit after insert or update or delete on public.routine_orders
   for each row execute function app.audit();
+
+-- Routine orders name members, and stand. Deleting a member on request takes
+-- their name out of every issue, and out of what the log of changes held of
+-- those issues: where an issue named them, it now says "a former member".
+-- This runs before the record goes, so that the housekeeping which follows
+-- the deletion finds nothing to carry.
+create function app.forget_member_in_orders() returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  -- A mention of the member in formatted text: [@Their Name](member:their id).
+  named text := '\[@(?:[^]\\]|\\.)*\]\(member:' || old.id || '\)';
+begin
+  update public.routine_orders set body = regexp_replace(body, named, 'a former member', 'gi') where body ~* named;
+  update public.audit_log
+    set old_row = case when old_row ->> 'body' ~* named then jsonb_set(old_row, '{body}', to_jsonb(regexp_replace(old_row ->> 'body', named, 'a former member', 'gi'))) else old_row end,
+        new_row = case when new_row ->> 'body' ~* named then jsonb_set(new_row, '{body}', to_jsonb(regexp_replace(new_row ->> 'body', named, 'a former member', 'gi'))) else new_row end
+    where table_name = 'routine_orders' and (old_row ->> 'body' ~* named or new_row ->> 'body' ~* named);
+  return old;
+end;
+$$;
+
+create trigger members_forget_orders before delete on public.members
+  for each row execute function app.forget_member_in_orders();
 
 -- A member marks an issue as read, for themselves, once it has been issued.
 create function app.guard_routine_order_read() returns trigger

@@ -326,11 +326,21 @@ test("the record's days are days in UTC, whatever time zone a request asks for",
     await asStaff(who.staff, "update public.members set status = 'member' where id = $1", [id]);
     const made = await asStaff(who.command, "insert into public.assignments (member_id, position_id, kind) values ($1, $2, 'primary') returning id", [id, post]);
     await asStaff(who.command, "update public.assignments set grade_code = 'E3' where id = $1", [made.rows[0].id]);
-    await asStaff(who.command, "update public.assignments set ended_on = current_date where id = $1", [made.rows[0].id]);
-
+    // The site sends the day in UTC. The day in the session's time zone is refused when it is another day.
     const utc = "(now() at time zone 'utc')::date";
+    if ((await asStaff(who.command, `select current_date = ${utc} as same`, [])).rows[0].same === false) {
+      await assert.rejects(
+        asStaff(who.command, "update public.assignments set ended_on = current_date where id = $1", [made.rows[0].id]),
+        /An assignment ends on the day it is ended\./,
+        `${zone}: another day`,
+      );
+    }
+    await asStaff(who.command, `update public.assignments set ended_on = ${utc} where id = $1`, [made.rows[0].id]);
+
     const statuses = await fleet.rows(`select changed_on = ${utc} as utc_day from public.member_status_changes where member_id = $1`, [id]);
     assert.ok(statuses.every((line) => line.utc_day), `${zone}: status`);
+    const appointment = await fleet.one(`select started_on = ${utc} as started_today, ended_on = ${utc} as ended_today from public.assignments where id = $1`, [made.rows[0].id]);
+    assert.deepEqual(appointment, { started_today: true, ended_today: true }, `${zone}: appointment`);
     const promoted = await fleet.one(
       `select since = ${utc} as utc_day from public.assignment_grades where assignment_id = $1 and grade_code = 'E3'`,
       [made.rows[0].id],

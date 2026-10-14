@@ -69,7 +69,10 @@ async function Draft() {
         <h2 id="issue-it">
           Issue it, or <strong>discard it</strong>
         </h2>
-        <p className="intro">Issuing numbers the orders, dates them and sends them to every serving member. Save the draft first if you have changed it.</p>
+        <p className="intro">
+          Issuing numbers the orders, dates them and puts them in front of every serving member, who each mark them as read. Nothing is
+          posted to Discord. Save the draft first if you have changed it.
+        </p>
         <DraftDecisions id={issue.id} />
       </section>
     </RichSourcesProvider>

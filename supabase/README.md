@@ -130,11 +130,20 @@ Roles add up: an admin holds every role. Things the database decides for itself:
 - **Deleting a report or a hostile-list entry takes its words out of the audit log.** That it
   existed, when, and who did what stay.
 - **Routine orders are numbered by the database, once.** Command opens a draft, one at a time, and
-  the database sets the period it records: from the end of the last issue, or the day the fleet's
-  record began, to that moment. Issuing gives the next number, signs and dates the issue, and
-  needs words in it. An issued order is never taken back or deleted through the API; its words can
-  be corrected. A serving member marks an issue as read for themselves, once, and only an issued
-  one; command reads everyone's marks, a member their own.
+  the database sets the period it records: from the end of the last issue to that moment, or for
+  the first issue from the day the fleet's record began, or four weeks back if that is later.
+  Drafting and issuing take an advisory lock in turn, so a draft opened while another issue is
+  being issued runs on from it. Issuing gives the next number, signs and dates the issue, and
+  needs words in it; an issued order keeps words in it. An issued order is never taken back or
+  deleted through the API; its words can be corrected, and `updated_at` moves only when the title
+  or the words change. A serving member marks an issue as read for themselves, once, and only an
+  issued one; command reads everyone's marks, a member their own.
+- **Deleting a member takes their name out of every issue.** Before the record goes, every mention
+  of them in an issue, and in what the audit log held of that issue, becomes "a former member".
+- **The record's days are days in UTC, everywhere.** `joined_on`, `started_on` and `awarded_on`
+  default to the day in UTC, and the rules that compare a day with today run with the time zone
+  set to UTC, so a session's time zone changes nothing. An award keeps the time it was recorded,
+  as an appointment does.
 - **Deleting an entry takes its words out of the audit log.** An admin deletes an entry to put
   right a mistake, or to take out something that should not have been written. The log keeps that
   the entry existed, who it named and who did what, and loses what it said.

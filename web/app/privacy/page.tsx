@@ -166,7 +166,7 @@ export default function PrivacyPage() {
             <dd>
               Each other&apos;s names, ranks, posts and qualifications, the events, who said they are attending, who is mentioned in an
               event&apos;s report, the hostile list as it stands today, and routine orders, which name who was appointed, promoted and
-              qualified.
+              qualified, who joined and left, and which names were declared hostile or placed on watch.
             </dd>
           </div>
           <div>
@@ -212,8 +212,9 @@ export default function PrivacyPage() {
         <div className="prose">
           <p>
             Ask the fleet&apos;s staff to delete your record. That removes your account details, applications, appointments,
-            qualifications, mentions, your lines on every roll and your lines in the activity log. The log of changes keeps a line saying that
-            something changed and when, with what it held about you blanked.
+            qualifications, mentions, your lines on every roll and your lines in the activity log. Where an issue of routine orders named
+            you, it says &ldquo;a former member&rdquo; instead. The log of changes keeps a line saying that something changed and when,
+            with what it held about you blanked.
           </p>
           <p>You can also ask to see what is held about you, or to have a mistake put right.</p>
           <p>

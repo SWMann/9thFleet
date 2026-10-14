@@ -3870,15 +3870,16 @@ try {
       /Hostile list/,
       /The organisation BLACKSUN declared hostile/,
       /Red_Raider declared hostile/,
-      /The organisation SCRUBS lifted from the list/,
       /Strength\n+\d+ serving: \d+ full members?, \d+ auxiliar(y|ies), \d+ recruits? and \d+ reservists?\. Stage \d\./,
       /Notices/,
     ]) {
       assert.match(written, expected);
     }
-    // A member who was appointed in the period is named, and a declined name is not the fleet's business.
-    assert.match(written, /@Leading Starman Rae Okoye/);
+    // A member who was appointed in the period is named, with the rank the post was taken up at.
+    assert.match(written, /@Leading Starman Rae Okoye appointed [^\n]*, Training Ship, as Leading Starman, from /);
+    // A declined name is not the fleet's business, and a lifted entry is command's alone.
     assert.doesNotMatch(written, /Quiet_One/);
+    assert.doesNotMatch(written, /SCRUBS/);
     await shot("routine-orders-draft");
   });
   await check("command issues it, and the database numbers and dates it", async () => {
@@ -3896,6 +3897,8 @@ try {
     assert.equal(issued.title, "The first");
     assert.equal(issued.issued_by, (await memberOf(jo)).id);
     assert.match(await page.locator(".orders-body:visible").innerText(), /BLACKSUN declared hostile/);
+    // Issuing is not a correction.
+    assert.equal(await page.getByText(/Corrected on/).count(), 0);
     // Command is a reader too.
     await page.getByRole("button", { name: "Mark as read" }).waitFor();
     assert.match((await page.locator("section[aria-labelledby='who-read']").innerText()).replace(/\s+/g, " "), /0 of \d+ serving have marked Routine Orders 1 as read/);
@@ -3951,6 +3954,7 @@ try {
     assert.equal(now.issued_at.toISOString(), was.issued_at.toISOString());
     await page.goto(`${site}/routine-orders/1`);
     await leadIs(/The first, corrected\. Issued/);
+    await page.getByText(/Corrected on .*, after it was issued\./).waitFor();
   });
   await check("the next draft runs on from the last issue, waits on the admin overview, and can be discarded", async () => {
     await page.goto(`${site}/routine-orders`);

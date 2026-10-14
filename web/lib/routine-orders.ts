@@ -32,6 +32,29 @@ export type Issue = {
 type Row = Record<string, unknown>;
 const COLUMNS = "id, number, title, state, body, covers_from, covers_to, drafted_by, drafted_at, issued_by, issued_at, updated_at";
 const SERVING: Status[] = ["recruit", "auxiliary", "member", "reserve"];
+/** How many of the latest issues the list page counts readers for. The issue's own page counts them for any issue. */
+const COUNTED_ISSUES = 12;
+/** The most rows the database sends in one reply. More are read a page at a time. */
+const PAGE = 1000;
+
+type Client = NonNullable<Awaited<ReturnType<typeof createClient>>>;
+
+/** Who has read each of the given issues, read a page at a time, since the reads outgrow one reply as the issues mount up. */
+async function readsOf(supabase: Client, orderIds: string[]): Promise<Map<string, Set<string>>> {
+  const reads = new Map<string, Set<string>>();
+  if (orderIds.length === 0) return reads;
+  for (let from = 0; ; from += PAGE) {
+    const page = await supabase.from("routine_order_reads").select("order_id, member_id").in("order_id", orderIds).order("read_at").order("member_id").range(from, from + PAGE - 1);
+    if (page.error) throw new Error(`The routine orders could not be read: ${page.error.message}`);
+    const rows = (page.data ?? []) as Row[];
+    for (const row of rows) {
+      const readers = reads.get(row.order_id as string) ?? new Set<string>();
+      readers.add(row.member_id as string);
+      reads.set(row.order_id as string, readers);
+    }
+    if (rows.length < PAGE) return reads;
+  }
+}
 
 const toIssue = (row: Row, read: boolean): Issue => ({
   id: row.id as string,
@@ -59,7 +82,7 @@ async function reader(): Promise<Outside | { state: "ready"; member: Member; com
 }
 
 /** Each serving member's name, by id, as the fleet's records give it. */
-async function fleetNames(supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>): Promise<{ names: Record<string, string>; serving: Named[] }> {
+async function fleetNames(supabase: Client): Promise<{ names: Record<string, string>; serving: Named[] }> {
   const roster = await supabase.from("roster").select("member_id, character_name, rank_name, acting, status");
   if (roster.error) throw new Error(`The fleet could not be read: ${roster.error.message}`);
   const names: Record<string, string> = {};
@@ -83,7 +106,7 @@ export type OrdersList =
       issues: Issue[];
       /** Command's draft, if there is one. */
       draft: Issue | null;
-      /** How many of the serving fleet have read each issue, for command. */
+      /** How many of the serving fleet have read each of the latest issues, for command. Older issues are not counted here. */
       readBy: Record<string, number>;
       serving: number;
       /** Days since the last issue, and whether the next is due. */
@@ -97,21 +120,27 @@ export async function getRoutineOrders(): Promise<OrdersList> {
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
 
-  const [orders, reads, fleet] = await Promise.all([
+  const me = who.member.id;
+  const [orders, mine, fleet] = await Promise.all([
     supabase.from("routine_orders").select(COLUMNS),
-    supabase.from("routine_order_reads").select("order_id, member_id"),
+    supabase.from("routine_order_reads").select("order_id").eq("member_id", me),
     fleetNames(supabase),
   ]);
-  for (const result of [orders, reads]) {
+  for (const result of [orders, mine]) {
     if (result.error) throw new Error(`The routine orders could not be read: ${result.error.message}`);
   }
-  const me = who.member.id;
-  const mine = new Set(((reads.data ?? []) as Row[]).filter((row) => row.member_id === me).map((row) => row.order_id as string));
-  const readBy: Record<string, number> = {};
-  for (const row of (reads.data ?? []) as Row[]) readBy[row.order_id as string] = (readBy[row.order_id as string] ?? 0) + 1;
-
-  const all = ((orders.data ?? []) as Row[]).map((row) => toIssue(row, mine.has(row.id as string)));
+  const read = new Set(((mine.data ?? []) as Row[]).map((row) => row.order_id as string));
+  const all = ((orders.data ?? []) as Row[]).map((row) => toIssue(row, read.has(row.id as string)));
   const issues = all.filter((issue) => issue.state === "issued").sort((a, b) => (b.number ?? 0) - (a.number ?? 0));
+
+  // For command: how many of the serving fleet have read each of the latest issues.
+  const readBy: Record<string, number> = {};
+  if (who.command) {
+    const serving = new Set(fleet.serving.map((person) => person.id));
+    const counted = issues.slice(0, COUNTED_ISSUES).map((issue) => issue.id);
+    const reads = await readsOf(supabase, counted);
+    for (const orderId of counted) readBy[orderId] = [...(reads.get(orderId) ?? [])].filter((id) => serving.has(id)).length;
+  }
   return {
     state: "ready",
     member: who.member,
@@ -153,13 +182,8 @@ export async function getRoutineOrder(number: string): Promise<OneIssue> {
   if (!found.data) return { state: "not-found" };
   const row = found.data as Row;
 
-  const [reads, fleet, sources] = await Promise.all([
-    supabase.from("routine_order_reads").select("member_id").eq("order_id", row.id as string),
-    fleetNames(supabase),
-    fleetSources(),
-  ]);
-  if (reads.error) throw new Error(`The routine orders could not be read: ${reads.error.message}`);
-  const readIds = new Set(((reads.data ?? []) as Row[]).map((entry) => entry.member_id as string));
+  const [reads, fleet, sources] = await Promise.all([readsOf(supabase, [row.id as string]), fleetNames(supabase), fleetSources()]);
+  const readIds = reads.get(row.id as string) ?? new Set<string>();
   const issue = toIssue(row, readIds.has(who.member.id));
   return {
     state: "ready",
@@ -195,9 +219,11 @@ export async function getUnreadOrders(): Promise<{ count: number; latest: { numb
 /**
  * The record of a period, gathered as the member asking and written as the
  * draft of an issue. Everything is read as command, so the database sends the
- * whole fleet's record. Dates are compared as days in UTC, timestamps as they
- * are: a line dated on the day the last issue was drafted, but recorded after
- * it, is not missed where the database keeps the time it was recorded.
+ * whole fleet's record. What belongs in the period is what was recorded in
+ * it, where the database keeps the time a line was recorded: a line dated on
+ * the day the last issue was drafted, but recorded after it, is then not
+ * missed. Where it keeps only the day, the day is compared in UTC, and a
+ * line dated the day of the last issue is listed again rather than missed.
  */
 export async function draftFromRecord(coversFrom: string, coversTo: string, firstIssue: boolean): Promise<string> {
   const supabase = await createClient();
@@ -206,7 +232,7 @@ export async function draftFromRecord(coversFrom: string, coversTo: string, firs
   const toDay = coversTo.slice(0, 10);
   const from = Date.parse(coversFrom);
   const to = Date.parse(coversTo);
-  const inDays = (day: string) => (firstIssue ? day >= fromDay : day > fromDay) && day <= toDay;
+  const inDays = (day: string) => day >= fromDay && day <= toDay;
   const inTime = (at: string) => {
     const t = Date.parse(at);
     return (firstIssue ? t >= from : t > from) && t <= to;
@@ -216,20 +242,20 @@ export async function draftFromRecord(coversFrom: string, coversTo: string, firs
   const [fleet, assignments, positions, units, gradeLines, grades, ranks, roster, awards, qualifications, statuses, events, types, returns, hostiles, settings] =
     await Promise.all([
       fleetNames(supabase),
-      supabase.from("assignments").select("id, member_id, position_id, kind, grade_code, acting, started_on, ended_on"),
+      supabase.from("assignments").select("id, member_id, position_id, kind, grade_code, acting, started_on, ended_on, recorded_at"),
       supabase.from("positions").select("id, unit_id, title"),
       supabase.from("units").select("id, name"),
       supabase.from("assignment_grades").select("id, assignment_id, member_id, grade_code, acting, since, recorded_at"),
       supabase.from("grades").select("code, sort_order"),
       supabase.from("ranks").select("grade_code, service, name"),
       supabase.from("roster").select("member_id, service, status"),
-      supabase.from("qualification_awards").select("member_id, qualification_id, awarded_on"),
+      supabase.from("qualification_awards").select("member_id, qualification_id, awarded_on, recorded_at"),
       supabase.from("qualifications").select("id, name"),
       supabase.from("member_status_changes").select("member_id, status, changed_on, recorded_at"),
-      supabase.from("events").select("id, title, kind, starts_at, state").gte("starts_at", new Date(from - 60 * 24 * 60 * 60 * 1000).toISOString()).lte("starts_at", ahead),
+      supabase.from("events").select("id, title, kind, starts_at, state").gt("starts_at", new Date(from - 24 * 60 * 60 * 1000).toISOString()).lte("starts_at", ahead),
       supabase.from("event_types").select("key, name"),
       supabase.from("attendance_returns").select("event_id, returned"),
-      supabase.from("hostiles").select("handle, kind, level, state, decided_at, lifted_at"),
+      supabase.from("hostiles").select("handle, kind, level, state, decided_at"),
       supabase.from("fleet_settings").select("current_stage").maybeSingle(),
     ]);
   for (const result of [assignments, positions, units, gradeLines, grades, ranks, roster, awards, qualifications, statuses, events, types, returns, hostiles, settings]) {
@@ -244,12 +270,23 @@ export async function draftFromRecord(coversFrom: string, coversTo: string, firs
     (rows(ranks).find((row) => row.grade_code === grade && row.service === serviceOf.get(memberId))?.name as string | undefined) ?? grade;
   const order = new Map(rows(grades).map((row) => [row.code as string, Number(row.sort_order)]));
 
-  // Appointments: posts taken up and left in the period.
+  // Appointments: posts taken up in the period, at the rank they were taken up at, and posts left.
+  const firstLine = new Map<string, Row>();
+  for (const row of [...rows(gradeLines)].sort((a, b) => Number(a.id) - Number(b.id))) {
+    if (!firstLine.has(row.assignment_id as string)) firstLine.set(row.assignment_id as string, row);
+  }
   const appointments: OrderParts["appointments"] = [];
   for (const row of rows(assignments)) {
     const position = positionOf.get(row.position_id as string) ?? { title: "A post", unit: "" };
-    const base = { member: named(row.member_id as string), post: position.title, unit: position.unit, acting: row.acting === true };
-    if (inDays(row.started_on as string)) appointments.push({ ...base, on: row.started_on as string, what: "appointed" });
+    const taken = firstLine.get(row.id as string);
+    const base = {
+      member: named(row.member_id as string),
+      post: position.title,
+      unit: position.unit,
+      rank: taken ? rankName(taken.grade_code as string, row.member_id as string) : null,
+      acting: (taken ? taken.acting : row.acting) === true,
+    };
+    if (inTime(row.recorded_at as string)) appointments.push({ ...base, on: row.started_on as string, what: "appointed" });
     if (row.ended_on && inDays(row.ended_on as string)) appointments.push({ ...base, on: row.ended_on as string, what: "left" });
   }
   appointments.sort((a, b) => a.on.localeCompare(b.on) || a.member.name.localeCompare(b.member.name));
@@ -291,7 +328,7 @@ export async function draftFromRecord(coversFrom: string, coversTo: string, firs
 
   const qualificationName = new Map(rows(qualifications).map((row) => [row.id as string, row.name as string]));
   const awarded: OrderParts["qualifications"] = rows(awards)
-    .filter((row) => inDays(row.awarded_on as string))
+    .filter((row) => inTime(row.recorded_at as string))
     .map((row) => ({ member: named(row.member_id as string), qualification: qualificationName.get(row.qualification_id as string) ?? "a qualification", on: row.awarded_on as string }))
     .sort((a, b) => a.on.localeCompare(b.on) || a.member.name.localeCompare(b.member.name));
 
@@ -306,26 +343,31 @@ export async function draftFromRecord(coversFrom: string, coversTo: string, firs
     if (row.returned === "present") present.set(row.event_id as string, (present.get(row.event_id as string) ?? 0) + 1);
   }
   const eventRows = rows(events).map((row) => ({ id: row.id as string, title: row.title as string, type: typeName.get(row.kind as string) ?? "Event", startsAt: row.starts_at as string, state: row.state as string }));
+  // Held: every event announced for the period, by when it started. One whose
+  // attendance return is still to come is listed with that said, so that it is
+  // in the issue for its period whenever the return is made.
   const held = eventRows
-    .filter((event) => event.state === "done" && inTime(event.startsAt))
-    .map((event) => ({ title: event.title, type: event.type, startsAt: event.startsAt, attended: present.get(event.id) ?? 0, href: `/operations/${event.id}` }))
+    .filter((event) => (event.state === "done" || event.state === "announced") && inTime(event.startsAt))
+    .map((event) => ({
+      title: event.title,
+      type: event.type,
+      startsAt: event.startsAt,
+      attended: event.state === "done" ? (present.get(event.id) ?? 0) : null,
+      href: `/operations/${event.id}`,
+    }))
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const coming = eventRows
     .filter((event) => event.state === "announced" && Date.parse(event.startsAt) > to && event.startsAt <= ahead)
     .map((event) => ({ title: event.title, type: event.type, startsAt: event.startsAt, href: `/operations/${event.id}` }))
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 
-  const listed: OrderParts["hostiles"] = [];
-  for (const row of rows(hostiles)) {
-    const kind = row.kind as "organisation" | "individual";
-    if (row.state === "listed" && row.decided_at && inTime(row.decided_at as string)) {
-      listed.push({ handle: row.handle as string, kind, what: row.level === "watch" ? "watch" : "hostile", on: row.decided_at as string });
-    }
-    if (row.state === "lifted" && row.lifted_at && inTime(row.lifted_at as string)) {
-      listed.push({ handle: row.handle as string, kind, what: "lifted", on: row.lifted_at as string });
-    }
-  }
-  listed.sort((a, b) => a.on.localeCompare(b.on) || a.handle.localeCompare(b.handle));
+  // The hostile list: names declared hostile or placed on watch. A lifted
+  // entry is read by command and whoever put the name forward, and no one
+  // else, so it is not published.
+  const listed: OrderParts["hostiles"] = rows(hostiles)
+    .filter((row) => row.state === "listed" && row.decided_at && inTime(row.decided_at as string))
+    .map((row) => ({ handle: row.handle as string, kind: row.kind as "organisation" | "individual", what: row.level === "watch" ? ("watch" as const) : ("hostile" as const), on: row.decided_at as string }))
+    .sort((a, b) => a.on.localeCompare(b.on) || a.handle.localeCompare(b.handle));
 
   const count = (status: Status) => rows(roster).filter((row) => row.status === status).length;
   const strength = {

@@ -124,15 +124,25 @@ test("an issue needs words, and once issued it stands", async () => {
   const made = await draft(who.command);
   assert.equal(await issue(who.command, made.id), 1);
   const was = await order(made.id);
+  // Issuing dates the issue once: it is not "corrected" by being issued.
+  assert.equal(was.updated_at.toISOString(), was.issued_at.toISOString());
   await assert.rejects(change(who.command, made.id, "state = 'draft'"), /An issue, once issued, stands\./);
-  // Its words can be corrected. Its number, date and period cannot.
+  // A save that changes no words is no correction.
+  assert.equal(await change(who.command, made.id, "body = $2", [BODY]), 1);
+  assert.equal((await order(made.id)).updated_at.toISOString(), was.updated_at.toISOString());
+  // Its words can be corrected, and that is dated. Its number, date and period cannot.
+  await fleet.sql("update public.routine_orders set updated_at = updated_at - interval '1 hour', issued_at = issued_at - interval '1 hour' where id = $1", [made.id]);
+  const before = await order(made.id);
   assert.equal(await change(who.command, made.id, "body = $2, title = $3", ["Corrected: the gate is at 1930Z, not 1900Z.", "Corrected"]), 1);
   const now = await order(made.id);
   assert.equal(now.title, "Corrected");
   assert.equal(now.number, was.number);
-  assert.equal(now.issued_at.toISOString(), was.issued_at.toISOString());
+  assert.equal(now.issued_at.toISOString(), before.issued_at.toISOString());
   assert.equal(now.covers_to.toISOString(), was.covers_to.toISOString());
-  assert.ok(now.updated_at > was.updated_at);
+  assert.ok(now.updated_at > now.issued_at);
+  // Not blanked, though.
+  await assert.rejects(change(who.command, made.id, "body = ''"), /An issue keeps its orders\./);
+  await assert.rejects(change(who.command, made.id, "body = 'Short.'"), /An issue keeps its orders\./);
   // An issued order is not deleted through the API.
   assert.equal(await fleet.as(who.command).changed("delete from public.routine_orders where id = $1", [made.id]), 0);
   assert.equal(await fleet.as(who.admin).changed("delete from public.routine_orders where id = $1", [made.id]), 0);
@@ -174,9 +184,11 @@ test("a serving member marks an issue as read, for themselves, once it is issued
   await assert.rejects(fleet.as(who.member).query("update public.routine_order_reads set read_at = now() where order_id = $1", [made.id]), /permission denied/);
 });
 
-test("deleting a member who issued an order clears their name and nothing else", async () => {
+test("deleting a member takes their name out of every issue, and nothing else", async () => {
   const leaver = await fleet.person("20", "Leaver", { roles: ["command"] });
-  const made = await draft(leaver);
+  const stays = await fleet.person("21", "Stays [Pilot]");
+  const named = `## Appointments\n\n- [@Leaver](member:${leaver}) appointed Captain, from today.\n- [@Stays \\[Pilot\\]](member:${stays}) appointed Pilot 1.\n- [@Leaver \\]](member:${leaver.toUpperCase()}) was mentioned twice.`;
+  const made = await draft(leaver, { body: named });
   await issue(leaver, made.id);
   await markRead(leaver, made.id);
   const was = await order(made.id);
@@ -185,9 +197,24 @@ test("deleting a member who issued an order clears their name and nothing else",
   assert.equal(now.issued_by, null);
   assert.equal(now.drafted_by, null);
   assert.equal(now.number, was.number);
-  assert.equal(now.body, was.body);
   assert.equal(now.state, "issued");
+  assert.equal(now.updated_at.toISOString(), was.updated_at.toISOString());
+  assert.equal(
+    now.body,
+    `## Appointments\n\n- a former member appointed Captain, from today.\n- [@Stays \\[Pilot\\]](member:${stays}) appointed Pilot 1.\n- a former member was mentioned twice.`,
+  );
   assert.deepEqual(await fleet.rows("select member_id from public.routine_order_reads where member_id = $1", [leaver]), []);
+  // The log of changes no longer names them either, while it still names the others.
+  const logged = await fleet.rows(
+    "select coalesce(old_row ->> 'body', '') || coalesce(new_row ->> 'body', '') as words from public.audit_log where table_name = 'routine_orders' and coalesce(new_row ->> 'id', old_row ->> 'id') = $1",
+    [made.id],
+  );
+  assert.ok(logged.length >= 3);
+  for (const line of logged) {
+    assert.ok(!line.words.includes(leaver), line.words);
+    assert.ok(!line.words.toLowerCase().includes("leaver"), line.words);
+  }
+  assert.ok(logged.some((line) => line.words.includes(stays)));
 });
 
 test("every change is in the log of changes, under who made it", async () => {

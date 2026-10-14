@@ -238,7 +238,9 @@ function ordering(url) {
   });
   const limit = url.searchParams.get("limit");
   if (limit && !/^\d+$/.test(limit)) throw new Unsupported(`The stand-in does not understand limit=${limit}.`);
-  return `${parts.length > 0 ? ` order by ${parts.join(", ")}` : ""}${limit ? ` limit ${limit}` : ""}`;
+  const offset = url.searchParams.get("offset");
+  if (offset && !/^\d+$/.test(offset)) throw new Unsupported(`The stand-in does not understand offset=${offset}.`);
+  return `${parts.length > 0 ? ` order by ${parts.join(", ")}` : ""}${limit ? ` limit ${limit}` : ""}${offset ? ` offset ${offset}` : ""}`;
 }
 
 /** Values go to the database as text and it works out the type, as it does for the real API. */

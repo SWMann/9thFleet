@@ -59,7 +59,8 @@ async function Issue({ params }: { params: Params }) {
   const { member, command, issue, readers, names, sources } = result;
   const who = (id: string | null) => (id ? (names[id] ?? "someone who has left") : "nobody on record");
   const name = orderName(issue.number ?? 0);
-  const corrected = issue.issuedAt && Date.parse(issue.updatedAt) - Date.parse(issue.issuedAt) > 60_000;
+  // The database dates the issue by its words: `updatedAt` moves only when the title or the orders change.
+  const corrected = issue.issuedAt !== null && Date.parse(issue.updatedAt) > Date.parse(issue.issuedAt);
 
   return (
     <RichSourcesProvider value={sources}>

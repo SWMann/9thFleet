@@ -184,22 +184,39 @@ engaged, and who is only to be reported.
 board's decisions published in the next issue.
 
 - **The site drafts, command issues.** Command opens a draft and the database sets the period it
-  records: from the end of the last issue, or the day the fleet's record began, to that moment.
-  `draftFromRecord` in `lib/routine-orders.ts` then reads the record of that period and
-  `composeRoutineOrders` in `lib/orders-form.ts` writes it into the draft as formatted text:
-  appointments, promotions, qualifications, who joined and left, operations held and ahead, the
-  hostile list and strength, under free sections for command's own words, decisions and standing
-  orders. Command edits the whole thing in the formatted-text editor and issues it.
+  records: from the end of the last issue to that moment, or for the first issue from the day the
+  fleet's record began, or four weeks back if that is later. `draftFromRecord` in
+  `lib/routine-orders.ts` then reads the record of that period and `composeRoutineOrders` in
+  `lib/orders-form.ts` writes it into the draft as formatted text: appointments at the rank the
+  post was taken up at, promotions, qualifications, who joined and left, operations held and
+  ahead, names declared hostile or placed on watch, and strength, under free sections for
+  command's own words, decisions and standing orders. Command edits the whole thing in the
+  formatted-text editor and issues it.
+- **What is in the period is what was recorded in it.** Where the database keeps the time a line
+  was recorded (appointments, promotions, awards, changes of status), a line dated on the day of
+  the last issue but recorded after it goes in the next. Where it keeps only the day (a post
+  left), a line dated that day is listed again rather than missed. An event is listed under the
+  issue for the period it started in, with its attendance once the return is made and "attendance
+  return to come" until then. A lifted hostile-list entry is read by command and whoever put the
+  name forward, so it is not published.
+- **The draft fits the limit.** Each section lists `SECTION_LIMIT` lines at most and then says how
+  many more there were and where to read them; if the whole draft would still overrun
+  `BODY_LIMIT`, every section is cut further, down to a handful of lines.
 - **The number, the date and the period are the database's.** An issue is numbered when it is
   issued, and never taken back. Command may correct its words afterwards, and the page says when
-  that happened. One draft at a time; a draft can be discarded.
+  that happened: the database moves `updated_at` only when the title or the orders change, so
+  issuing and a save that changes nothing are not corrections. One draft at a time; a draft can be
+  discarded.
 - **Each member is named the way the editor names them,** as a mention kept by id, so a name still
   reads correctly after a rename. The rank in the label is the rank on the day of drafting, which
-  is what a record should say.
+  is what a record should say. A name is written on one line whatever it holds, so a list stays a
+  list. When a member's record is deleted, every issue that named them says "a former member".
 - **Who has read it.** A member marks an issue as read, for themselves, once. Command sees who
-  has and who has not. A member is told of an unread issue at the top of their record and of the
-  operations page. The admin overview tells command when a draft is waiting and when the next
-  issue is due.
+  has and who has not. The list page counts the serving readers of the latest `COUNTED_ISSUES`
+  issues only, reading the marks a page at a time, since they outgrow one reply as the issues
+  mount up; an issue's own page counts them for any issue. A member is told of an unread issue at
+  the top of their record and of the operations page. The admin overview tells command when a
+  draft is waiting and when the next issue is due.
 - **It is a members' page,** so it is in `MEMBER_PAGES` in `lib/supabase/proxy.ts` and in the
   matcher in `proxy.ts`.
 

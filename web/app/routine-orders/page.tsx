@@ -138,7 +138,7 @@ async function Orders() {
                 {issue.title ? <p className="issue-title">{issue.title}</p> : null}
                 <p className="issue-facts">
                   Issued {dayOf(issue.issuedAt ?? issue.draftedAt)} by {who(issue.issuedBy)}. Records {dayOf(issue.coversFrom)} to {dayOf(issue.coversTo)}.
-                  {command ? ` Read by ${readBy[issue.id] ?? 0} of ${serving}.` : ""}
+                  {command && issue.id in readBy ? ` Read by ${readBy[issue.id]} of ${serving}.` : ""}
                 </p>
               </li>
             ))}

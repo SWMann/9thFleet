@@ -61,8 +61,9 @@ test("the week's record is written as lists, naming each member the way the edit
     composeRoutineOrders({
       ...empty,
       appointments: [
-        { member: ADA, post: "Helmsman", unit: "Training Ship", acting: true, on: "2026-10-10", what: "appointed" },
-        { member: KIT, post: "Gunner 2", unit: "Training Ship", acting: false, on: "2026-10-11", what: "left" },
+        { member: ADA, post: "Helmsman", unit: "Training Ship", rank: "Leading Starman", acting: true, on: "2026-10-10", what: "appointed" },
+        { member: KIT, post: "Gunner 2", unit: "Training Ship", rank: null, acting: false, on: "2026-10-11", what: "left" },
+        { member: KIT, post: "Signals watch", unit: "Training Ship", rank: null, acting: false, on: "2026-10-12", what: "appointed" },
       ],
       grades: [
         { member: ADA, rank: "Able Starman", grade: "E3", acting: false, on: "2026-10-12", what: "promoted" },
@@ -73,32 +74,35 @@ test("the week's record is written as lists, naming each member the way the edit
         { member: KIT, status: "recruit", on: "2026-10-08" },
         { member: ADA, status: "member", on: "2026-10-13" },
       ],
-      held: [{ title: "Patrol 003", type: "Patrol", startsAt: "2026-10-11T19:00:00Z", attended: 6, href: "/operations/abc" }],
+      held: [
+        { title: "Patrol 003", type: "Patrol", startsAt: "2026-10-11T19:00:00Z", attended: 6, href: "/operations/abc" },
+        { title: "Patrol 004", type: "Patrol", startsAt: "2026-10-13T19:00:00Z", attended: null, href: "/operations/ghi" },
+      ],
       ahead: [{ title: "Drills [night]", type: "Training evolution", startsAt: "2026-10-17T19:00:00Z", href: "/operations/def" }],
       hostiles: [
         { handle: "BLACKSUN", kind: "organisation", what: "hostile", on: "2026-10-13" },
         { handle: "Red_Raider", kind: "individual", what: "watch", on: "2026-10-12" },
-        { handle: "SCRUBS", kind: "organisation", what: "lifted", on: "2026-10-12" },
       ],
       strength: { serving: 14, members: 9, auxiliaries: 3, recruits: 2, reserve: 0, stage: 2 },
     }),
   );
   const text = plainOf(blocks);
-  assert.match(text, /@Ada Vance appointed Helmsman, Training Ship, acting, from 10 October 2026\./);
+  assert.match(text, /@Ada Vance appointed Helmsman, Training Ship, as acting Leading Starman, from 10 October 2026\./);
   assert.match(text, /@Kit \*Marlow\* left Gunner 2, Training Ship, on 11 October 2026\./);
+  assert.match(text, /@Kit \*Marlow\* appointed Signals watch, Training Ship, from 12 October 2026\./);
   assert.match(text, /@Ada Vance promoted to Able Starman \(E3\) from 12 October 2026\./);
   assert.match(text, /@Kit \*Marlow\* now Starman \(E2\) from 12 October 2026\./);
   assert.match(text, /@Ada Vance awarded Instructor, 9 October 2026\./);
   assert.match(text, /@Kit \*Marlow\* joined the fleet as a recruit, 8 October 2026\./);
   assert.match(text, /@Ada Vance became a full member, 13 October 2026\./);
   assert.match(text, /Patrol 003, Patrol, 11 October 2026: 6 attended\./);
+  assert.match(text, /Patrol 004, Patrol, 13 October 2026: attendance return to come\./);
   assert.match(text, /Drills \[night\], Training evolution, Saturday 17 October, 1900Z\./);
   assert.match(text, /The organisation BLACKSUN declared hostile, 13 October 2026\./);
   assert.match(text, /Red_Raider placed on watch, 12 October 2026\./);
-  assert.match(text, /The organisation SCRUBS lifted from the list, 12 October 2026\./);
   assert.match(text, /14 serving: 9 full members, 3 auxiliaries, 2 recruits and 0 reservists\. Stage 2\./);
   // Each member is a mention, so the name is kept by id. A name with marks in it is still only a name.
-  assert.deepEqual(mentionsIn(blocks).sort(), [ADA.id, ADA.id, ADA.id, ADA.id, KIT.id, KIT.id, KIT.id].sort());
+  assert.deepEqual(mentionsIn(blocks).sort(), [ADA.id, ADA.id, ADA.id, ADA.id, KIT.id, KIT.id, KIT.id, KIT.id].sort());
   // The events are links to their pages, and nothing else is.
   const linksIn = (list: Block[]): string[] =>
     list.flatMap((block) =>
@@ -108,7 +112,34 @@ test("the week's record is written as lists, naming each member the way the edit
           ? block.items.flatMap((item) => linksIn(item))
           : [],
     );
-  assert.deepEqual(linksIn(blocks), ["/operations/abc", "/operations/def"]);
+  assert.deepEqual(linksIn(blocks), ["/operations/abc", "/operations/ghi", "/operations/def"]);
+});
+
+test("a long record is cut section by section, with how many more there were, until the draft can be saved", () => {
+  const many = (n: number): OrderParts["statuses"] =>
+    Array.from({ length: n }, (_, i) => ({ member: { id: ADA.id, name: `Member Number ${i + 1} of the Fleet` }, status: "recruit" as const, on: "2026-10-08" }));
+  // Under the section limit, every line is listed.
+  const thirty = plainOf(parseRich(composeRoutineOrders({ ...empty, statuses: many(30) })));
+  assert.match(thirty, /Member Number 30 of the Fleet joined/);
+  assert.doesNotMatch(thirty, /And \d+ more/);
+  // Over it, the section says how many more there were and where to find them.
+  const forty = plainOf(parseRich(composeRoutineOrders({ ...empty, statuses: many(40) })));
+  assert.match(forty, /Member Number 30 of the Fleet joined/);
+  assert.doesNotMatch(forty, /Member Number 31 of the Fleet/);
+  assert.match(forty, /And 10 more, on the roll\./);
+  // A record so long that even the section limit overruns the orders' limit is cut further, in every section.
+  const long: OrderParts = {
+    ...empty,
+    statuses: many(200),
+    qualifications: Array.from({ length: 200 }, (_, i) => ({ member: { id: KIT.id, name: `Member Number ${i + 1} of the Fleet` }, qualification: "A qualification with a long name", on: "2026-10-09" })),
+    appointments: Array.from({ length: 200 }, (_, i) => ({ member: { id: KIT.id, name: `Member Number ${i + 1} of the Fleet` }, post: "A post with a long name", unit: "A unit with a long name", rank: "A rank with a long name", acting: false, on: "2026-10-09", what: "appointed" as const })),
+  };
+  const body = composeRoutineOrders(long);
+  assert.ok(body.length <= 12000, String(body.length));
+  const text = plainOf(parseRich(body));
+  assert.match(text, /And 1[89]\d more, on the roll\./);
+  assert.match(text, /And 1[89]\d more, on the service records\./);
+  assert.match(text, /And 1[89]\d more, in the order of battle\./);
 });
 
 test("words written into an issue are never read as formatting", () => {
@@ -119,6 +150,11 @@ test("words written into an issue are never read as formatting", () => {
     assert.ok(blocks[0].type === "paragraph" && blocks[0].children.every((node) => node.type === "text"), typed);
   }
   assert.equal(mention(ADA), `[@Ada Vance](member:${ADA.id})`);
+  // A name is one line, however it was typed, so a list stays a list.
+  assert.equal(words("Ada\n- Vance"), "Ada - Vance");
+  const blocks = parseRich(`- ${mention({ id: ADA.id, name: "Ada\n- Vance" })} joined.\n- Someone else joined.`);
+  assert.deepEqual(blocks.map((block) => block.type), ["list"]);
+  assert.equal(mentionsIn(blocks).length, 1);
 });
 
 test("the days and times are written the fleet's way", () => {
