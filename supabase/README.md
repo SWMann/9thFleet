@@ -274,15 +274,16 @@ tables and Supabase's own default privileges. It is only for the tests.
 
 The migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
 database is compared with the tested copy after each one is applied: its functions, rules, columns,
-grants, triggers, constraints and views. It matched after the latest, `routine_orders`.
+grants, triggers, constraints and views. It matched after the latest, `training_records`.
 
 Each file name starts with the version number Supabase recorded when it was applied, so this folder
 and the database's own migration history agree.
 
-One exception: `piracy_reports` was recorded without its housekeeping function,
-`app.clear_old_piracy_reports`. The tool that applies migrations asks the Fleet Commander to confirm
-anything that deletes, and that confirmation did not reach him, so he created that one function
-himself in the SQL editor from the lines in the file. The comparison above covers it.
+Two exceptions. `piracy_reports` was recorded without its housekeeping function,
+`app.clear_old_piracy_reports`, and `training_records` without `app.retrain_on_revoke` and its
+trigger. The tool that applies migrations asks the Fleet Commander to confirm anything that
+deletes, and that confirmation did not reach him, so he created those himself in the SQL editor
+from the lines in the files. The comparison above covers them.
 
 Three settings live in the Supabase dashboard, not in these files:
 
