@@ -63,6 +63,8 @@ before(async () => {
   who.other = await fleet.person("7", "Other");
   who.applicant = await fleet.applicant("8", "Applicant");
   for (const row of await fleet.rows("select id, code from public.qualifications")) qualification[row.code] = row.id;
+  // The awards below are about the event they name; the lessons are passed beforehand.
+  for (const member of [who.gunner, who.spare, who.other, who.helm, who.instructor]) await fleet.passLessons(member, "induction", "radio-user", "navy-crew");
 });
 after(() => fleet.close());
 

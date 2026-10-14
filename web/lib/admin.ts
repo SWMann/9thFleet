@@ -177,6 +177,8 @@ export type Fleet = {
   piracy: { id: string; state: "new" | "handled" | "dismissed"; urgent: boolean }[];
   /** Routine orders: the draft for command, and what has been issued. */
   orders: { id: string; state: "draft" | "issued"; number: number | null; issued_at: string | null }[];
+  /** Training: who has passed every lesson of a course and does not yet hold the qualification. */
+  awaitingAward: { member_id: string; qualification_id: string }[];
 };
 
 export type Loaded = { state: "no-database" } | { state: "ready"; fleet: Fleet };
@@ -186,7 +188,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
 
-  const [settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles, piracy, orders] =
+  const [settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles, piracy, orders, awaiting] =
     await Promise.all([
       supabase.from("fleet_settings").select("current_stage, recruitment_open").maybeSingle(),
       supabase
@@ -218,8 +220,9 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       supabase.from("hostiles").select("id, handle, state, expires_on"),
       supabase.from("piracy_reports").select("id, state, urgent"),
       supabase.from("routine_orders").select("id, state, number, issued_at"),
+      supabase.from("training_progress").select("member_id, qualification_id").eq("complete", true).eq("held", false),
     ]);
-  const results = { settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles, piracy, orders };
+  const results = { settings, roster, members, accounts, roles, units, positions, assignments, qualifications, awards, applications, events, attendance, returns, reports, eventTypes, eventUnits, eventKeyPosts, eventPosts, hostiles, piracy, orders, awaiting };
   for (const [name, result] of Object.entries(results)) {
     if (result.error) throw new Error(`The ${name} could not be read: ${result.error.message}`);
   }
@@ -326,6 +329,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       hostiles: rows<Fleet["hostiles"][number]>(hostiles),
       piracy: rows<Fleet["piracy"][number]>(piracy),
       orders: rows<Fleet["orders"][number]>(orders),
+      awaitingAward: rows<Fleet["awaitingAward"][number]>(awaiting),
     },
   };
 });
@@ -782,6 +786,18 @@ export function attention(fleet: Fleet, tier: Tier): Attention[] {
         what: `Routine orders are due: the last issue was ${gap.days} days ago`,
         detail: `An issue every ${EVERY_DAYS} days. The site drafts the next one from the record.`,
         href: "/routine-orders",
+      });
+    }
+
+    // Training: a course completed and not yet awarded.
+    const serving = new Set(fleet.people.filter((person) => SERVING.includes(person.status)).map((person) => person.id));
+    const qualificationName = new Map(fleet.qualifications.map((qualification) => [qualification.id, qualification.name]));
+    const completed = fleet.awaitingAward.filter((line) => serving.has(line.member_id));
+    if (completed.length > 0) {
+      list.push({
+        what: completed.length === 1 ? `${name.get(completed[0].member_id) ?? "A member"} has passed every lesson of ${qualificationName.get(completed[0].qualification_id) ?? "a course"}` : `${completed.length} members have passed every lesson of a course`,
+        detail: "An instructor awards the qualification from the training page.",
+        href: "/training#sign-off",
       });
     }
 

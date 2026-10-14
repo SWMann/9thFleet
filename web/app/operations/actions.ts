@@ -1007,17 +1007,26 @@ export async function acknowledgeAmendment(_previous: OpsResult, formData: FormD
 }
 
 /**
- * Sign off who passed at an event that teaches a qualification. Each pass is
- * an award in the instructor's own name, pointing back at the event. The
- * database decides who may award, and that the member was there.
+ * Sign off who passed at an event that teaches a qualification: the lessons
+ * each member passed, and the qualification for anyone who has passed them
+ * all. Each sign-off and award is in the instructor's own name, pointing back
+ * at the event. The database decides who may, and that the member was there.
  */
 export async function signOff(_previous: OpsResult, formData: FormData): Promise<OpsResult> {
   const session = await signedIn();
   if (!session) return NOT_CONNECTED;
   const id = uuid(formData.get("id"));
   if (!id) return notThisPage(session, "event.sign-off");
-  const passed = ticked(formData, "pass");
-  if (passed.length === 0) return { ok: false, message: "Tick who passed first." };
+  const awards = ticked(formData, "award");
+  const lessons: { member: string; lesson: string }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("lesson:")) continue;
+    const member = uuid(key.slice("lesson:".length));
+    const lesson = uuid(value);
+    if (!member || !lesson) return notThisPage(session, "event.sign-off");
+    lessons.push({ member, lesson });
+  }
+  if (awards.length === 0 && lessons.length === 0) return { ok: false, message: "Tick who passed first." };
 
   const event = await session.supabase.from("events").select("teaches_qualification_id").eq("id", id).maybeSingle();
   if (event.error) return failed(session, "event.sign-off", event.error, "The event could not be read. Try again.");
@@ -1025,25 +1034,38 @@ export async function signOff(_previous: OpsResult, formData: FormData): Promise
   if (!qualification) return notThisPage(session, "event.sign-off");
 
   let signed = 0;
-  for (const member of passed) {
+  let awarded = 0;
+  const done = () => {
+    if (signed + awarded > 0) refresh();
+  };
+  for (const { member, lesson } of lessons) {
+    const { error } = await session.supabase.from("lesson_passes").insert({ lesson_id: lesson, member_id: member, event_id: id });
+    if (error?.code === "23505") continue;
+    if (error) {
+      done();
+      return failed(session, "event.sign-off", error, explainRefusal(error, "That could not be signed off. Only an instructor signs off a lesson, and never their own."));
+    }
+    signed += 1;
+  }
+  for (const member of awards) {
     const { error } = await session.supabase
       .from("qualification_awards")
       .insert({ member_id: member, qualification_id: qualification, awarded_by: session.id, event_id: id });
     // Someone who already holds it has nothing to be signed off for.
     if (error?.code === "23505") continue;
     if (error) {
-      if (signed > 0) refresh();
-      const shown = explainRefusal(error, "That could not be signed off. Only an instructor signs off a qualification, and never their own.");
+      done();
+      const shown = explainRefusal(error, "That could not be awarded. Only an instructor awards a qualification, never their own, and only once every lesson is signed off.");
       return failed(session, "event.sign-off", error, shown);
     }
-    signed += 1;
+    awarded += 1;
   }
   refresh();
-  return {
-    ok: true,
-    message: signed === 0 ? "They already hold it." : signed === 1 ? "1 pass signed off." : `${signed} passes signed off.`,
-    stamp: Date.now(),
-  };
+  const parts = [
+    signed > 0 ? `${signed} ${signed === 1 ? "lesson" : "lessons"} signed off` : "",
+    awarded > 0 ? `${awarded} ${awarded === 1 ? "qualification" : "qualifications"} awarded` : "",
+  ].filter(Boolean);
+  return { ok: true, message: parts.length > 0 ? `${parts.join(", ")}.` : "Nothing new: they hold it already.", stamp: Date.now() };
 }
 
 /** Say how each objective turned out. One left unanswered has its answer taken away. */

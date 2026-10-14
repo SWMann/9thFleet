@@ -165,8 +165,8 @@ export default function PrivacyPage() {
             <dt>The serving fleet</dt>
             <dd>
               Each other&apos;s names, ranks, posts and qualifications, the events, who said they are attending, who is mentioned in an
-              event&apos;s report, the hostile list as it stands today, and routine orders, which name who was appointed, promoted and
-              qualified, who joined and left, and which names were declared hostile or placed on watch.
+              event&apos;s report, the hostile list as it stands today, the training syllabus, and routine orders, which name who was
+              appointed, promoted and qualified, who joined and left, and which names were declared hostile or placed on watch.
             </dd>
           </div>
           <div>
@@ -175,6 +175,10 @@ export default function PrivacyPage() {
               Everyone&apos;s record and Discord name, applications and their answers, interview notes except on their own, and who
               attended each event or was absent.
             </dd>
+          </div>
+          <div>
+            <dt>Instructors, staff and command</dt>
+            <dd>Which lessons each member has passed, when, and which instructor signed each off. A member sees their own.</dd>
           </div>
           <div>
             <dt>Command</dt>
@@ -212,7 +216,7 @@ export default function PrivacyPage() {
         <div className="prose">
           <p>
             Ask the fleet&apos;s staff to delete your record. That removes your account details, applications, appointments,
-            qualifications, mentions, your lines on every roll and your lines in the activity log. Where an issue of routine orders named
+            qualifications, lessons passed, mentions, your lines on every roll and your lines in the activity log. Where an issue of routine orders named
             you, it says &ldquo;a former member&rdquo; instead. The log of changes keeps a line saying that something changed and when,
             with what it held about you blanked.
           </p>

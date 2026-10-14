@@ -59,6 +59,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/credits` | Who took each picture on the site, and its licence |
 | `/privacy` | What the site records about visitors, members, people who send a piracy report and players the fleet names, who can read it and how to have it removed. Change it whenever the logging, the sign-in, the report line or the hostile list changes |
 | `/routine-orders` | Routine orders: numbered, dated notices from command to the serving fleet, each drafted by the site from the fleet's record and issued by command. Members mark each issue as read. See Routine orders below |
+| `/training` | The syllabus: each qualification as a course of lessons, with the reader's own progress. An instructor signs lessons off and awards qualifications from here; command edits the syllabus at `/admin/training`. See Training records below |
 | `/piracy` | The public report line: anyone may tell the fleet about piracy, without signing in. It says plainly that it is not an emergency line. Command reads the reports at `/admin/piracy`. See The piracy report line below |
 | `/visit` | Not a page. A public page posts its address here once it has been read, to be counted |
 | `/menu` | The menu as a page, for a browser that is not running scripts |
@@ -217,6 +218,32 @@ board's decisions published in the next issue.
   mount up; an issue's own page counts them for any issue. A member is told of an unread issue at
   the top of their record and of the operations page. The admin overview tells command when a
   draft is waiting and when the next issue is due.
+- **It is a members' page,** so it is in `MEMBER_PAGES` in `lib/supabase/proxy.ts` and in the
+  matcher in `proxy.ts`.
+
+## Training records
+
+`/training`, for the serving fleet. Each qualification is a course of lessons, drafted from the
+doctrine and edited by command at `/admin/training`.
+
+- **A lesson is signed off by an instructor, in their own name, never their own,** at a training
+  evolution or one to one. At an event that teaches a course, the event's Report tab lists each
+  member who was there with the course's lessons beside them, and an "Award it" box for anyone
+  who has now passed every lesson; the database checks the roll as it does for an award. One to
+  one, the instructor chooses a member at `/training#sign-off` and ticks the lessons. A course
+  that requires another waits for it; `lib/training.ts` reads the syllabus and the passes, and
+  `app/training/actions.ts` does the signing.
+- **The award is a separate step.** Once every lesson is passed the member appears under
+  "Awaiting the award" for every instructor, and on the admin overview, and an instructor awards
+  the qualification. A course with no lessons is awarded on the instructor's word, as before.
+- **A sign-off is withdrawn by the instructor who gave it,** until the qualification is awarded.
+  After that only the award can be taken back, by staff, as before.
+- **Who sees what.** A member sees their own passes, on `/training` and under "In training" on
+  their record; instructors, staff and command see everyone's, and staff see a member's courses
+  in progress on their record page. The syllabus itself is for the serving fleet and staff.
+- **Command edits the syllabus:** the lessons of each course, their order and what each course
+  requires first. A lesson someone has passed cannot be removed, only renamed or moved. The
+  qualifications themselves are still an admin's, under Structure.
 - **It is a members' page,** so it is in `MEMBER_PAGES` in `lib/supabase/proxy.ts` and in the
   matcher in `proxy.ts`.
 
@@ -405,6 +432,7 @@ to be tracked.
 | Formatted text: its format, how it is shown and how it is edited | `lib/rich/` and `components/rich/`. See Formatted text above |
 | The site's icons, and the symbol for each kind of unit | `components/Icon.tsx` and `components/UnitSymbol.tsx`. An icon goes with words and never stands in for them |
 | Routine orders | `app/routine-orders/`, the draft's wording in `lib/orders-form.ts`, and what is read for it in `lib/routine-orders.ts` |
+| Training | `app/training/` and `app/admin/training/`, what is read in `lib/training.ts`, and the lesson form in `lib/training-form.ts` |
 | The piracy report line | `app/piracy/` for the public form, `app/admin/piracy/` for command's page, and the checks, the limits' words and how long a report is kept in `lib/piracy-form.ts` |
 | What the site says it records | `app/privacy/page.tsx` |
 | The menu | `lib/menu.ts` |

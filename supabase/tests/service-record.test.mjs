@@ -297,6 +297,7 @@ test("an appointment with no note keeps no copy of one", async () => {
 test("what an instructor writes on an award is sent to nobody", async () => {
   const id = await fresh("Qualified", { status: "recruit" });
   const instructor = await fresh("Teacher", { roles: ["instructor"] });
+  await fleet.passLessons(id, "radio-user");
   await fleet.as(instructor).query(
     `insert into public.qualification_awards (member_id, qualification_id, awarded_by, note)
      select $1, id, $2, 'Passed on the second attempt.' from public.qualifications where code = 'radio-user'`,

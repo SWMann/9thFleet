@@ -959,7 +959,7 @@ try {
     assert.ok((await menuLabels()).includes("Fleet admin"), "the menu does not offer the admin pages");
     await page.goto(`${site}/admin`);
     await leadIs(/Stage 1: Cadre\. 3 active/);
-    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports"]);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports", "Syllabus"]);
     assert.equal(await stat("Events in 30 days"), "1 0 coming up");
     assert.match(await stat("Average turnout"), /^67% /);
 
@@ -1022,7 +1022,7 @@ try {
     await signInAs(founder);
     await page.goto(`${site}/admin`);
     await leadIs(/Stage 1: Cadre/);
-    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports", "Structure", "Logs"]);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports", "Syllabus", "Structure", "Logs"]);
     await adminTab("Logs").click();
     await headingIs("Logs");
     await page.locator(".log:visible").first().waitFor();
@@ -2139,7 +2139,7 @@ try {
     }
     await supabase.sql("update public.events set starts_at = now() - interval '1 hour', announced_at = now() - interval '3 days' where title = 'Radio course 001'");
   });
-  await check("an instructor signs off who passed, in their own name", async () => {
+  await check("an instructor signs off the lessons passed at the event, and awards the qualification", async () => {
     // Jo is command, and not an instructor, so has nobody to sign off.
     await signInAs(jo);
     await openCourse();
@@ -2151,19 +2151,34 @@ try {
     await openCourse();
     await tab("Report");
     const form = page.locator("form.picks:visible", { hasText: "Who passed" });
-    // An instructor does not sign off their own pass, so Kit is not on the list.
-    assert.deepEqual((await form.locator("li").allInnerTexts()).map((text) => text.trim()), ["Private First Class Lee Tanaka"]);
+    // An instructor does not sign off their own pass, so Kit is not on the list. The course's lessons are beside each name.
+    assert.deepEqual((await form.locator(".sign-off-who").allInnerTexts()).map((text) => text.trim()), ["Private First Class Lee Tanaka"]);
+    const leeId = (await memberOf(lee)).id;
+    const row = form.locator("li", { hasText: "Lee Tanaka" });
+    assert.equal(await row.locator(".sign-off-lesson").count(), 6, "five lessons and the award");
     await form.getByRole("button", { name: "Sign off the passes" }).click();
     await told(form, "Tick who passed first.");
-    await form.getByLabel(/Lee Tanaka/).check();
+    for (const box of await row.locator("input[type=checkbox]").all()) await box.check();
     await form.getByRole("button", { name: "Sign off the passes" }).click();
-    await page.getByText("Signed off here: Private First Class Lee Tanaka.").waitFor();
-    const award = await one("select * from public.qualification_awards where member_id = $1 and qualification_id = $2", [(await memberOf(lee)).id, await radioUser()]);
-    assert.equal(award.awarded_by, (await memberOf(kit)).id);
-    assert.equal(award.event_id, (await course()).id);
-    // Signed off once: the box is ticked and cannot be ticked again.
+    // Radio user requires General induction first, which Lee does not hold.
+    await told(form, "They must hold General induction first.");
+    assert.equal((await supabase.sql("select id from public.lesson_passes where member_id = $1", [leeId])).length, 0);
+    await supabase.sql("insert into public.qualification_awards (member_id, qualification_id) select $1, id from public.qualifications where code = 'induction'", [leeId]);
+    for (const box of await row.locator("input[type=checkbox]").all()) await box.check();
+    await form.getByRole("button", { name: "Sign off the passes" }).click();
+    await told(form, "5 lessons signed off, 1 qualification awarded.");
+    const passes = await supabase.sql("select signed_by, event_id from public.lesson_passes where member_id = $1", [leeId]);
+    assert.equal(passes.length, 5);
+    const kitId = (await memberOf(kit)).id;
+    const courseId = (await course()).id;
+    assert.ok(passes.every((pass) => pass.signed_by === kitId && pass.event_id === courseId));
+    const award = await one("select * from public.qualification_awards where member_id = $1 and qualification_id = $2", [leeId, await radioUser()]);
+    assert.equal(award.awarded_by, kitId);
+    assert.equal(award.event_id, courseId);
+    // Signed off once: the boxes are ticked and cannot be ticked again.
     await page.locator("form.picks:visible li", { hasText: "Holds it already" }).waitFor();
-    assert.equal(await page.locator("form.picks:visible").getByLabel(/Lee Tanaka/).isDisabled(), true);
+    assert.ok((await page.locator("form.picks:visible li input[type=checkbox]").all()).length > 0);
+    for (const box of await page.locator("form.picks:visible li input[type=checkbox]").all()) assert.equal(await box.isDisabled(), true);
     await shot("operation-sign-off");
 
     // Everyone else reads who was signed off, and the member finds it on their own record.
@@ -3993,6 +4008,172 @@ try {
     said(/Jo Reyes issued Routine Orders 1.*The first/);
     said(/Jo Reyes corrected Routine Orders 1/);
     said(/Jo Reyes discarded a draft of routine orders/);
+  });
+
+  console.log("Training records");
+  const pat = { discordId: "13", name: "pat_on_discord" };
+  let patId;
+  const courseCard = (name) => page.locator(".course:visible", { has: page.locator("h3", { hasText: new RegExp(`^${name}$`) }) });
+  const signOffCourse = (name) => page.locator("form.sign-off:visible", { has: page.locator("legend", { hasText: new RegExp(`^${name}$`) }) });
+  const lessonsOfCourse = (code) => supabase.sql("select l.id, l.name from public.lessons l join public.qualifications q on q.id = l.qualification_id where q.code = $1 order by l.sort_order", [code]);
+  const passesOfPat = () => supabase.sql("select lesson_id, signed_by, event_id from public.lesson_passes where member_id = $1", [patId]);
+
+  await check("training records are for the serving fleet, and show a member where they are in each course", async () => {
+    await signInAs(nix);
+    await page.goto(`${site}/training`);
+    await leadIs(/Training records are for the serving fleet\./);
+    // Pat joins as a recruit of the Navy.
+    await signInAs(pat);
+    await setNames("Pat Ortega", "Pat_Ortega");
+    patId = (await memberOf(pat)).id;
+    await supabase.sql("update public.members set status = 'recruit', service = 'navy' where id = $1", [patId]);
+    await signInAs(pat);
+    assert.ok((await menuLabels()).includes("Training"), "the menu offers training");
+    await page.goto(`${site}/training`);
+    await headingIs("Training");
+    await leadIs(/6 courses\. You hold none yet\./);
+    assert.equal(await page.locator(".course:visible").count(), 6);
+    assert.match(await courseCard("General induction").innerText(), /Not started/);
+    assert.match(await courseCard("Radio user").innerText(), /Requires General induction first/);
+    assert.equal(await courseCard("General induction").locator(".lesson").count(), 5);
+    // A member is not offered the instructor's tools.
+    assert.equal(await page.getByRole("heading", { name: "Sign off a lesson" }).count(), 0);
+    await shot("training-syllabus");
+  });
+  await check("an instructor signs off lessons one to one, withdraws a mistake, and awards the qualification", async () => {
+    await signInAs(kit);
+    await page.goto(`${site}/training`);
+    await headingIs("Training");
+    await page.getByRole("heading", { name: "Sign off a lesson" }).waitFor();
+    await page.getByText("Nobody is waiting.").waitFor();
+    // A recruit of the Navy is a Starman Recruit until they hold a post.
+    await page.getByLabel("Member").selectOption({ label: "Starman Recruit Pat Ortega" });
+    await page.getByRole("button", { name: "Show their training" }).click();
+    await page.locator(".sign-offs:visible h3", { hasText: "Starman Recruit Pat Ortega" }).waitFor();
+    await page.locator(".sign-off-course:visible .hint", { hasText: "Radio user requires General induction first." }).waitFor();
+    const induction = signOffCourse("General induction");
+    const lessons = await lessonsOfCourse("induction");
+    await induction.getByLabel(lessons[0].name).check();
+    await induction.getByLabel(lessons[1].name).check();
+    await induction.getByRole("button", { name: "Sign off the ticked lessons" }).click();
+    await told(induction, "2 lessons signed off.");
+    let passes = await passesOfPat();
+    assert.equal(passes.length, 2);
+    const kitId = (await memberOf(kit)).id;
+    assert.ok(passes.every((pass) => pass.signed_by === kitId && pass.event_id === null));
+    // The second was a mistake.
+    const wrong = signOffCourse("General induction").locator("li", { hasText: lessons[1].name });
+    await wrong.getByRole("button", { name: "Withdraw" }).click();
+    await told(signOffCourse("General induction"), "Sign-off withdrawn.");
+    passes = await passesOfPat();
+    assert.deepEqual(passes.map((pass) => pass.lesson_id), [lessons[0].id]);
+    // The rest, and the course is complete.
+    for (const lesson of lessons.slice(1)) await signOffCourse("General induction").getByLabel(lesson.name).check();
+    await signOffCourse("General induction").getByRole("button", { name: "Sign off the ticked lessons" }).click();
+    await told(signOffCourse("General induction"), "4 lessons signed off.");
+    await signOffCourse("General induction").getByRole("button", { name: "Award General induction" }).waitFor();
+    assert.match(await page.locator(".awaiting:visible").innerText(), /Starman Recruit Pat Ortega has passed every lesson of General induction/);
+    await shot("training-sign-off");
+
+    // Command is told on the overview, and the member sees the course complete on their own page.
+    await signInAs(jo);
+    await page.goto(`${site}/admin`);
+    const waiting = page.locator(".attention:visible li", { hasText: "Pat Ortega has passed every lesson of General induction" });
+    assert.equal(await waiting.getByRole("link").getAttribute("href"), "/training#sign-off");
+    await signInAs(pat);
+    await page.goto(`${site}/training`);
+    await leadIs(/in training for General induction\./);
+    assert.match(await courseCard("General induction").innerText(), /5 of 5 lessons/);
+    assert.equal(await courseCard("General induction").locator(".lesson-passed").count(), 5);
+    assert.match(await courseCard("General induction").innerText(), /Signed off .* by .*Kit Marlow/);
+
+    // The award is its own step, by an instructor.
+    await signInAs(kit);
+    await page.goto(`${site}/training?member=${patId}`);
+    await signOffCourse("General induction").getByRole("button", { name: "Award General induction" }).click();
+    await told(signOffCourse("General induction"), "Awarded.");
+    const award = await one("select awarded_by, event_id from public.qualification_awards where member_id = $1", [patId]);
+    assert.equal(award.awarded_by, (await memberOf(kit)).id);
+    assert.equal(award.event_id, null);
+    await page.getByText("Nobody is waiting.").waitFor();
+    // Radio user is open to them now. One lesson, so that the record has a course in progress.
+    const radio = await lessonsOfCourse("radio-user");
+    await signOffCourse("Radio user").getByLabel(radio[0].name).check();
+    await signOffCourse("Radio user").getByRole("button", { name: "Sign off the ticked lessons" }).click();
+    await told(signOffCourse("Radio user"), "1 lesson signed off.");
+  });
+  await check("the member's record shows the courses in progress, to them and to staff", async () => {
+    await signInAs(pat);
+    await page.goto(`${site}/training`);
+    await leadIs(/You hold one qualification, and are in training for Radio user\./);
+    assert.match(await courseCard("General induction").innerText(), /Held/);
+    await page.goto(`${site}/profile?tab=service`);
+    await page.getByRole("heading", { name: "What you have earned" }).waitFor();
+    const earned = (await page.locator(".earned:visible").innerText()).replace(/\s+/g, " ");
+    assert.match(earned, /General induction/);
+    assert.match(earned, /In training Radio user 1 of 5 lessons/i);
+    await signInAs(founder);
+    await page.goto(`${site}/admin/people/${patId}`);
+    await page.getByRole("heading", { name: "Earned" }).waitFor();
+    assert.match((await page.locator(".earned:visible").innerText()).replace(/\s+/g, " "), /In training Radio user 1 of 5 lessons/i);
+  });
+  await check("command edits the syllabus, and a lesson someone has passed stays", async () => {
+    await signInAs(jo);
+    await page.goto(`${site}/admin/training`);
+    await headingIs("The syllabus");
+    const net = page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: "Net controller" }) });
+    assert.match(await net.innerText(), /4 lessons/);
+    await net.locator("summary", { hasText: "Add a lesson to Net controller" }).click();
+    const adding = net.locator(".add-lesson form");
+    await adding.getByLabel("Name").fill("Night watch");
+    await adding.getByLabel(/What it covers/).fill("A watch after dark.");
+    await adding.getByLabel("Place in the list").fill("5");
+    await adding.getByRole("button", { name: "Add the lesson" }).click();
+    await told(adding, "Lesson added.");
+    await page.reload();
+    const added = page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: "Net controller" }) }).locator(".syllabus-lessons > li", { hasText: "Night watch" });
+    await added.locator("summary").click();
+    await added.getByLabel("Name").fill("Night watch as Zero");
+    await added.getByRole("button", { name: "Save" }).click();
+    await told(added, "Saved.");
+    assert.equal((await one("select name from public.lessons where name = 'Night watch as Zero'")).name, "Night watch as Zero");
+    await added.getByRole("button", { name: "Remove" }).click();
+    await added.waitFor({ state: "detached" });
+    assert.equal(await one("select id from public.lessons where name = 'Night watch as Zero'"), undefined);
+    // A lesson Pat has passed cannot be removed.
+    await page.reload();
+    const induction = page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: "General induction" }) });
+    const first = induction.locator(".syllabus-lessons > li").first();
+    await first.locator("summary").click();
+    await first.getByRole("button", { name: "Remove" }).click();
+    await told(first, "Someone has passed this lesson, so it stays on the syllabus.");
+    // What a course requires is command's to set.
+    const requires = induction.locator("form.requires-form");
+    await requires.getByLabel("Requires first").selectOption({ label: "Nothing" });
+    await requires.getByRole("button", { name: "Save" }).click();
+    await told(requires, "Saved.");
+    // A member is not offered the editor.
+    await signInAs(sam);
+    await page.goto(`${site}/admin/training`);
+    await leadIs(/The admin pages are for the people who run the fleet/);
+  });
+  await check("every sign-off, award and change to the syllabus is in the logs", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/admin/logs?show=personnel`);
+    await headingIs("Logs");
+    await page.locator(".log-line:visible").first().waitFor();
+    let lines = (await page.locator(".log-line:visible").allInnerTexts()).map((line) => line.replace(/\s+/g, " "));
+    const said = (pattern) => assert.ok(lines.some((line) => pattern.test(line)), `${pattern} is not in the logs`);
+    said(/Kit Marlow signed .*Pat Ortega off for the lesson The fleet and its values, of General induction/);
+    said(/Kit Marlow withdrew the sign-off of .*Pat Ortega for the lesson Conduct and the chain of command, of General induction/);
+    said(/Kit Marlow awarded .*Pat Ortega the General induction qualification/);
+    said(/Kit Marlow signed .*Lee Tanaka off for the lesson Nets and call signs, of Radio user, at Radio course 001/);
+    await page.goto(`${site}/admin/logs?show=structure`);
+    await page.locator(".log-line:visible").first().waitFor();
+    lines = (await page.locator(".log-line:visible").allInnerTexts()).map((line) => line.replace(/\s+/g, " "));
+    said(/Jo Reyes added the lesson Night watch to Net controller/);
+    said(/Jo Reyes changed the lesson Night watch of Net controller/);
+    said(/Jo Reyes removed the lesson Night watch as Zero from Net controller/);
   });
 
   await check("no page raised a script error", async () => {

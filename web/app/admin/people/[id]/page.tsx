@@ -9,6 +9,7 @@ import { gate, serviceNames, statusNames } from "@/lib/admin";
 import { formatDate } from "@/lib/application-form";
 import type { Role } from "@/lib/member";
 import { getRecordSubject, getServiceRecord } from "@/lib/service-record";
+import { getTrainingRecord } from "@/lib/training";
 
 export const metadata: Metadata = {
   title: "A member's record",
@@ -40,7 +41,7 @@ async function MemberRecord({ params }: { params: PageProps<"/admin/people/[id]"
 
   const subject = await getRecordSubject(id);
   if (!subject) notFound();
-  const record = await getServiceRecord(subject.id, subject.service);
+  const [record, training] = await Promise.all([getServiceRecord(subject.id, subject.service), getTrainingRecord(subject.id)]);
   const rank = subject.rankName ? `${subject.acting ? "Acting " : ""}${subject.rankName} ` : "";
 
   return (
@@ -75,7 +76,7 @@ async function MemberRecord({ params }: { params: PageProps<"/admin/people/[id]"
         </dl>
       </section>
 
-      <ServiceRecordView record={record} own={false} attendance notes />
+      <ServiceRecordView record={record} own={false} attendance notes training={training} />
     </>
   );
 }
