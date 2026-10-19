@@ -290,16 +290,19 @@ tables and Supabase's own default privileges. It is only for the tests.
 
 The migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
 database is compared with the tested copy after each one is applied: its functions, rules, columns,
-grants, triggers, constraints and views. It matched after the latest, `training_records`.
+grants, triggers, constraints and views. It matched after the latest, `ship_register`, but for
+the training lines below.
 
 Each file name starts with the version number Supabase recorded when it was applied, so this folder
 and the database's own migration history agree.
 
 Two exceptions. `piracy_reports` was recorded without its housekeeping function,
 `app.clear_old_piracy_reports`, and `training_records` without `app.retrain_on_revoke` and its
-trigger. The tool that applies migrations asks the Fleet Commander to confirm anything that
-deletes, and that confirmation did not reach him, so he created those himself in the SQL editor
-from the lines in the files. The comparison above covers them.
+trigger `qualification_awards_retrain`. The tool that applies migrations asks the Fleet Commander
+to confirm anything that deletes, and that confirmation did not reach him, so those lines are his
+to run in the SQL editor, from the files. The piracy function is in; the training function and
+its trigger are not yet, so until they are, taking a qualification away through the API does not
+clear the course's passes. The comparison above counts them once they are in.
 
 Three settings live in the Supabase dashboard, not in these files:
 
