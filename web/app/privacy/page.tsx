@@ -126,7 +126,17 @@ export default function PrivacyPage() {
             </li>
             <li>
               <strong>Your record.</strong> The character name and RSI handle you give, your status, service, rank, posts and
-              qualifications, any application and its answers, your replies to events and whether you attended.
+              qualifications, any application and its answers, your replies to events and whether you attended. You can download it as a
+              file from your record page.
+            </li>
+            <li>
+              <strong>Your calendar address.</strong> If you make one, a private key that lets a calendar app read your events and your
+              replies to them without signing in. Anyone who has the address can read them until you make a new one. The log of changes
+              does not hold the key.
+            </li>
+            <li>
+              <strong>Monthly returns.</strong> On the first of each month the database records how many were serving, joined and left,
+              how many hulls were ready, and how many events were held and attended. Figures only; no names.
             </li>
           </ul>
         </div>

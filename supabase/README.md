@@ -31,6 +31,7 @@ or let someone promote themselves.
 | `migrations/…_routine_orders.sql` | Routine orders: drafted and issued by command, numbered and dated by the database, read by the serving fleet, each member marking an issue as read |
 | `migrations/…_training_records.sql` | Training records: each qualification as a course of lessons, signed off by instructors, with the qualification awarded once every lesson is passed |
 | `migrations/…_ship_register.sql` | The ship register: models, crew templates by role, each member's hulls with a ready mark and a private note, what an event's plan needs by model, and what owners offer |
+| `migrations/…_quick_wins.sql` | Calendar feed keys and the feed view, the monthly returns and the job that writes them, and the terms of secondary duties |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -168,6 +169,23 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   named by its model and follows a rename. Models are an admin's, crew templates and their
   stations command's; one template is the standard for each model and stays while the model
   does, and a station stays with its template.
+- **A calendar feed key is the member's own, and the feed is read by nobody in particular.**
+  A serving member makes a key (`calendar_keys`; the database makes the key itself, 64 hex
+  characters, and a change to the line makes a new one). The `calendar_feed` view is the one view
+  that does not run with the reader's own rules: a calendar app has no session, so the view reads
+  as the database and lets through only the rows the key in the `x-feed-key` request header
+  earns, which is the key owner's announced events of the last 90 days and ahead with their own
+  reply, and nothing for an unknown key or one whose owner has left. Visitors may select from the
+  view; the structure test names it as the exception and its own tests hold it to this.
+- **The monthly return is the database's.** `app.record_monthly_return(month)` writes one line
+  of `fleet_returns` for a month: strength by status at the month's end and who joined and left,
+  worked out from the status record; events held and members present; and the register's hulls
+  and how many were ready, taken at the time and only for the month just ended, since the
+  register has no history. Where pg_cron is installed (the fleet's database; the test copy has
+  none) a job runs it at 00:05 UTC on the first of each month. Command reads the returns; nobody
+  writes them through the API. The migration wrote the months before it existed from the record.
+- **A secondary duty has a term.** Three months from the day it began or was last renewed
+  (`assignments.renewed_on`). Command renews a duty still held, on the day; a post is not renewed.
 - **Deleting a member takes their name out of every issue.** Before the record goes, every mention
   of them in an issue, and in what the audit log held of that issue, becomes "a former member".
 - **The record's days are days in UTC, everywhere.** `joined_on`, `started_on` and `awarded_on`
@@ -290,8 +308,8 @@ tables and Supabase's own default privileges. It is only for the tests.
 
 The migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
 database is compared with the tested copy after each one is applied: its functions, rules, columns,
-grants, triggers, constraints and views. It matched after the latest, `ship_register`, but for
-the training lines below.
+grants, triggers, constraints and views. It matched after the latest, `quick_wins`, but for the
+training lines below.
 
 Each file name starts with the version number Supabase recorded when it was applied, so this folder
 and the database's own migration history agree.

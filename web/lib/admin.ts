@@ -5,6 +5,7 @@ import { getSession, isServing, type Member, type Role, type Service, type Statu
 import { EVERY_DAYS, sinceIssue } from "@/lib/orders-form";
 import { manningOf, shortfall, unitsTakingPart, type Manning, type Place } from "@/lib/manning";
 import type { EventState, Reply, Returned } from "@/lib/operations-form";
+import { dutyTermEnds } from "@/lib/record";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -131,6 +132,7 @@ export type Fleet = {
     acting: boolean;
     started_on: string;
     ended_on: string | null;
+    renewed_on: string | null;
   }[];
   qualifications: { id: string; name: string }[];
   awards: { member_id: string; qualification_id: string; awarded_on: string }[];
@@ -203,7 +205,7 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       supabase.from("member_roles").select("member_id, role"),
       supabase.from("units").select("id, parent_id, name, kind, opens_at_stage"),
       supabase.from("positions").select("id, unit_id, title, kind, is_entry, opens_at_stage"),
-      supabase.from("assignments").select("id, member_id, position_id, kind, acting, started_on, ended_on"),
+      supabase.from("assignments").select("id, member_id, position_id, kind, acting, started_on, ended_on, renewed_on"),
       supabase.from("qualifications").select("id, name"),
       supabase.from("qualification_awards").select("member_id, qualification_id, awarded_on"),
       supabase
@@ -833,6 +835,23 @@ export function attention(fleet: Fleet, tier: Tier): Attention[] {
       if (short.length > 0) {
         list.push({ what: `${event.title} is short of ${short.join(", ")}`, detail: "The roll has closed with fewer hulls offered than the plan needs.", href: `/operations/${event.id}?tab=ships` });
       }
+    }
+
+    // Secondary duties: a term ending within a fortnight, or ended.
+    const todayUtc = new Date(now).toISOString().slice(0, 10);
+    const personName = new Map(fleet.people.map((person) => [person.id, person.name]));
+    const positionTitle = new Map(fleet.positions.map((position) => [position.id, position.title]));
+    for (const duty of fleet.assignments.filter((entry) => entry.kind === "duty" && !entry.ended_on)) {
+      const ends = dutyTermEnds({ startedOn: duty.started_on, renewedOn: duty.renewed_on });
+      const daysLeft = Math.round((Date.parse(`${ends}T00:00:00Z`) - Date.parse(`${todayUtc}T00:00:00Z`)) / (24 * 60 * 60 * 1000));
+      if (daysLeft > 14) continue;
+      const who = personName.get(duty.member_id) ?? "A member";
+      const title = positionTitle.get(duty.position_id) ?? "a duty";
+      list.push({
+        what: daysLeft < 0 ? `${who}'s term as ${title} ended ${-daysLeft === 1 ? "a day" : `${-daysLeft} days`} ago` : daysLeft === 0 ? `${who}'s term as ${title} ends today` : `${who}'s term as ${title} ends in ${daysLeft === 1 ? "a day" : `${daysLeft} days`}`,
+        detail: "A secondary duty runs three months at a time. Renew it for another term, or end it.",
+        href: `/admin/people/${duty.member_id}`,
+      });
     }
 
     // Training: a course completed and not yet awarded.

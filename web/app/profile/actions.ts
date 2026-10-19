@@ -97,6 +97,27 @@ function explain(error: { code?: string; message: string }): string {
   return "That could not be saved. Try again, and tell staff if it keeps happening.";
 }
 
+export type FeedResult = { ok: boolean; message: string; stamp?: number };
+
+/**
+ * Make the member a new calendar address. The database makes the key, and
+ * any earlier one stops working at once.
+ */
+export async function renewFeedKey(): Promise<FeedResult> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, message: "This site is not connected to the database yet." };
+  const { data: claims } = await supabase.auth.getClaims();
+  const id = claims?.claims?.sub;
+  if (!id) redirect("/sign-in");
+  // A line already there is changed, which makes a new key; otherwise one is made.
+  const changed = await supabase.from("calendar_keys").update({ made_at: new Date().toISOString() }).eq("member_id", id).select("member_id");
+  const made = changed.error || (changed.data && changed.data.length > 0) ? changed : await supabase.from("calendar_keys").insert({ member_id: id }).select("member_id");
+  if (made.error) return { ok: false, message: await turnedDown(supabase, "calendar.renew", made.error, "A calendar address could not be made. The feed is for the serving fleet."), stamp: Date.now() };
+  if (!made.data || made.data.length === 0) return { ok: false, message: await refused(supabase, "calendar.renew", "A calendar address could not be made."), stamp: Date.now() };
+  refresh();
+  return { ok: true, message: "Here is your new address. The old one no longer works.", stamp: Date.now() };
+}
+
 export async function signOut() {
   const supabase = await createClient();
   if (supabase) {

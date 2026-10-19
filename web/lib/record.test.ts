@@ -14,6 +14,7 @@ import {
   type EventLine,
   type GradeLine,
   type PostHeld,
+  dutyTermEnds,
 } from "./record";
 
 const post = (id: string, startedOn: string, endedOn: string | null, more: Partial<PostHeld> = {}): PostHeld => ({
@@ -264,4 +265,12 @@ test("activity counts the events a member was returned present at", () => {
   ];
   assert.deepEqual(activity(events, now), { in30: 2, in90: 3, all: 4, absent: 3, absentWithoutNotice90: 1, last: "2026-10-10T19:00:00Z" });
   assert.deepEqual(activity([], now), { in30: 0, in90: 0, all: 0, absent: 0, absentWithoutNotice90: 0, last: null });
+});
+
+test("a secondary duty's term runs three calendar months, and from the end of a month ends in a month that has that day", () => {
+  assert.equal(dutyTermEnds({ startedOn: "2026-08-01", renewedOn: null }), "2026-11-01");
+  assert.equal(dutyTermEnds({ startedOn: "2026-08-01", renewedOn: "2026-10-19" }), "2027-01-19");
+  assert.equal(dutyTermEnds({ startedOn: "2026-11-30", renewedOn: null }), "2027-02-28");
+  assert.equal(dutyTermEnds({ startedOn: "2026-08-31", renewedOn: null }), "2026-11-30");
+  assert.equal(dutyTermEnds({ startedOn: "2026-01-31", renewedOn: null }), "2026-04-30");
 });

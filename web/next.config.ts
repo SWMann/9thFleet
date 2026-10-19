@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   // The manual's words are read from files, so they must travel with its pages.
   outputFileTracingIncludes: { "/manual/**": ["./content/manual/**"] },
+  // The PDF renderer brings its own fonts and layout engine, and is left as it is.
+  serverExternalPackages: ["@react-pdf/renderer"],
 };
 
 export default nextConfig;

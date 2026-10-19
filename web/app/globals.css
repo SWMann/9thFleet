@@ -7921,3 +7921,127 @@ a.mention:hover {
 .row-short td {
   color: var(--amber);
 }
+
+/* ---------------------------------------------------------------------------
+   The calendar feed, the record download, duties and the lessons log
+   --------------------------------------------------------------------------- */
+
+.feed-box {
+  display: grid;
+  gap: 10px;
+  max-width: 720px;
+}
+
+.feed-address {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feed-address input {
+  flex: 1 1 320px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 4px;
+  background: rgb(9 13 22 / 0.8);
+  color: var(--text);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.record-download {
+  padding-bottom: 0;
+}
+
+.record-download .actions {
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+}
+
+.duties {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.duty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 18px;
+  padding: 12px 16px;
+  border: 1px solid var(--seam);
+  border-left: 3px solid var(--green);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.duty-over {
+  border-left-color: var(--amber);
+}
+
+.duty > div {
+  display: grid;
+  gap: 2px;
+}
+
+.duty small {
+  color: var(--text-2);
+  font-size: 0.8125rem;
+}
+
+.chip-link {
+  text-decoration: none;
+}
+
+.chip-link:hover {
+  border-color: rgb(255 255 255 / 0.4);
+}
+
+.lessons-log {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lesson-entry {
+  padding: 16px 18px 6px;
+  border: 1px solid var(--seam);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.lesson-head h3 {
+  margin: 0;
+  font-size: 1.0625rem;
+}
+
+.lesson-facts {
+  margin: 2px 0 8px;
+  color: var(--text-2);
+  font-size: 0.875rem;
+}
+
+.lesson-sections {
+  display: grid;
+  gap: 0 24px;
+}
+
+@media (min-width: 760px) {
+  .lesson-sections {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.data-returns th,
+.data-returns td {
+  white-space: nowrap;
+}

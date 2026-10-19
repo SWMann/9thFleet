@@ -1,16 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { ServiceRecordView } from "@/components/record/ServiceRecord";
 import { TabPanel, Tabs } from "@/components/Tabs";
+import { feedAddress } from "@/lib/calendar";
+import { getFeedKey } from "@/lib/feed";
 import { getSession, isServing, isStaff, type Member, type Role, type Service, type Status } from "@/lib/member";
+import { originOf } from "@/lib/origin";
 import { getServiceRecord } from "@/lib/service-record";
 import { getTrainingRecord } from "@/lib/training";
 import { orderName } from "@/lib/orders-form";
 import { getUnreadOrders } from "@/lib/routine-orders";
 import { site } from "@/lib/site";
 import { signOut } from "./actions";
+import { FeedBox } from "./FeedBox";
 import { NamesForm } from "./NamesForm";
 import { Icon, type IconName } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
@@ -89,8 +94,14 @@ async function Record() {
   const status = statusNames[member.status];
   // Someone who has served has a record. A new applicant has only the day they signed in, which is not worth a tab.
   // One who was sent back out still has what went before.
-  const [read, orders, training] = await Promise.all([getServiceRecord(member.id, member.service), getUnreadOrders(), isServing(member) ? getTrainingRecord(member.id) : Promise.resolve([])]);
+  const [read, orders, training, feed] = await Promise.all([
+    getServiceRecord(member.id, member.service),
+    getUnreadOrders(),
+    isServing(member) ? getTrainingRecord(member.id) : Promise.resolve([]),
+    isServing(member) ? getFeedKey(member.id) : Promise.resolve(null),
+  ]);
   const record = member.status !== "applicant" || read.posts.length > 0 || read.statusLines.length > 1 ? read : null;
+  const origin = isServing(member) ? originOf(await headers()) : "";
 
   const standing = (
     <>
@@ -159,6 +170,13 @@ async function Record() {
         </section>
       ) : null}
 
+      {isServing(member) ? (
+        <section className="wrap band" aria-labelledby="calendar">
+          <h2 id="calendar">Your calendar</h2>
+          <FeedBox address={feed && origin ? feedAddress(origin, feed.key) : null} />
+        </section>
+      ) : null}
+
       {isStaff(member) ? (
         <section className="wrap band" aria-labelledby="staff">
           <h2 id="staff">Staff work</h2>
@@ -221,6 +239,14 @@ async function Record() {
       >
         <TabPanel id="standing">{standing}</TabPanel>
         <TabPanel id="service">
+          <div className="wrap band record-download">
+            <p className="actions">
+              <a className="button button-quiet" href="/profile/record.pdf" download>
+                Download your record as a PDF
+              </a>
+              <span className="hint">The record below, as a file to keep or print.</span>
+            </p>
+          </div>
           <ServiceRecordView record={record} own attendance={isServing(member)} training={training} />
         </TabPanel>
       </Tabs>

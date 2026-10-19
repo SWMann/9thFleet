@@ -62,6 +62,10 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/training` | The syllabus: each qualification as a course of lessons, with the reader's own progress. An instructor signs lessons off and awards qualifications from here; command edits the syllabus at `/admin/training`. See Training records below |
 | `/ships` | The ship register: each member's hulls, by model, with a name, a ready mark and a private note; what could sail tonight by kind; the crew templates. Command keeps the templates at `/admin/ships`. See The ship register below |
 | `/piracy` | The public report line: anyone may tell the fleet about piracy, without signing in. It says plainly that it is not an emergency line. Command reads the reports at `/admin/piracy`. See The piracy report line below |
+| `/calendar/<key>.ics` | A member's calendar feed, for a calendar app. The key in the address is the member's own, made by the database; no session. See Four small things below |
+| `/profile/record.pdf` | The signed-in member's own service record as a PDF |
+| `/operations/lessons` | The lessons log: what every after-action report says to keep and to change, latest first, for the serving fleet |
+| `/admin/returns` | The monthly strength and readiness returns the database records on the first of each month. Command |
 | `/visit` | Not a page. A public page posts its address here once it has been read, to be counted |
 | `/menu` | The menu as a page, for a browser that is not running scripts |
 
@@ -289,6 +293,34 @@ correct any entry.
 - **It is a members' page,** so it is in `MEMBER_PAGES` in `lib/supabase/proxy.ts` and in the
   matcher in `proxy.ts`.
 
+## Four small things
+
+- **The calendar feed.** A serving member makes themselves a calendar address on their record
+  page (`FeedBox` in `app/profile/`), and subscribes to it from Google Calendar, Apple Calendar or
+  Outlook. The address is `/calendar/<key>.ics`; the key is the database's (`calendar_keys`), 64
+  hex characters, and a new one is made on request, which stops the old one. A calendar app has
+  no session, so the route (`app/calendar/[key]/route.ts`) reads as nobody, with the key in an
+  `x-feed-key` header, from the `calendar_feed` view, which reads as the database and sends only
+  what the key earns: the announced events of the last 90 days and ahead, with the owner's own
+  reply, and nothing at all for a key it does not know or whose owner has left. `lib/calendar.ts`
+  writes the file; the per-event download at `/operations/<id>/calendar` uses the same writer.
+  The feed is not in `MEMBER_PAGES` or the proxy matcher: it must work signed out.
+- **The record as a PDF.** `/profile/record.pdf` (`app/profile/record.pdf/route.ts`) renders the
+  signed-in member's own record with `@react-pdf/renderer` (`lib/record-pdf.tsx`), laid out like
+  the record page: time served, posts held, standing and promotions, events attended,
+  qualifications, courses in training, mentions. Text only, in the renderer's built-in fonts. The
+  package is left external to the server bundle (`serverExternalPackages` in `next.config.ts`).
+- **The lessons log.** `/operations/lessons` (`lib/lessons.ts`) gathers each after-action
+  report's "what to keep" and "what to change" across every event, latest first, narrowed by
+  event type. Nothing new is written: the report already holds them.
+- **Monthly returns.** `/admin/returns` (`lib/returns.ts`) lists `fleet_returns`, which the
+  database writes on the first of each month; see the database README.
+- **Secondary duties have terms.** A duty runs three months from the day it began or was last
+  renewed (`dutyTermEnds` in `lib/record.ts`). The record pages show each duty's term; the admin
+  overview lists a term ending within a fortnight or ended; command renews a duty from the
+  member's page under Fleet admin (`RenewDutyForm`), which is the site's first write to an
+  appointment. Appointments themselves are still made in the SQL editor.
+
 ## The piracy report line
 
 `/piracy` is the fleet's public request line. Anyone may send a report without signing in: their
@@ -476,6 +508,11 @@ to be tracked.
 | Routine orders | `app/routine-orders/`, the draft's wording in `lib/orders-form.ts`, and what is read for it in `lib/routine-orders.ts` |
 | Training | `app/training/` and `app/admin/training/`, what is read in `lib/training.ts`, and the lesson form in `lib/training-form.ts` |
 | Ships | `app/ships/` and `app/admin/ships/`, what is read in `lib/ships.ts`, the form in `lib/ships-form.ts`, and the Ships tab in `app/operations/[id]/page.tsx` |
+| Calendar feed | `app/calendar/[key]/route.ts`, the file in `lib/calendar.ts`, the key in `lib/feed.ts` and `app/profile/FeedBox.tsx` |
+| Record PDF | `app/profile/record.pdf/route.ts` and `lib/record-pdf.tsx` |
+| Lessons log | `app/operations/lessons/` and `lib/lessons.ts` |
+| Monthly returns | `app/admin/returns/` and `lib/returns.ts` |
+| Duty terms | `dutyTermEnds` in `lib/record.ts`, the attention items in `lib/admin.ts`, and `app/admin/people/[id]/DutyTools.tsx` |
 | The piracy report line | `app/piracy/` for the public form, `app/admin/piracy/` for command's page, and the checks, the limits' words and how long a report is kept in `lib/piracy-form.ts` |
 | What the site says it records | `app/privacy/page.tsx` |
 | The menu | `lib/menu.ts` |

@@ -959,7 +959,7 @@ try {
     assert.ok((await menuLabels()).includes("Fleet admin"), "the menu does not offer the admin pages");
     await page.goto(`${site}/admin`);
     await leadIs(/Stage 1: Cadre\. 3 active/);
-    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports", "Syllabus", "Crew templates"]);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports", "Syllabus", "Crew templates", "Returns"]);
     assert.equal(await stat("Events in 30 days"), "1 0 coming up");
     assert.match(await stat("Average turnout"), /^67% /);
 
@@ -1022,7 +1022,7 @@ try {
     await signInAs(founder);
     await page.goto(`${site}/admin`);
     await leadIs(/Stage 1: Cadre/);
-    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports", "Syllabus", "Crew templates", "Structure", "Logs"]);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports", "Syllabus", "Crew templates", "Returns", "Structure", "Logs"]);
     await adminTab("Logs").click();
     await headingIs("Logs");
     await page.locator(".log:visible").first().waitFor();
@@ -4401,6 +4401,154 @@ try {
     said(/Jo Reyes added the Army support crew template to the Redeemer/);
     said(/Jo Reyes set 2 Medic stations on the Army support template of the Redeemer/);
     said(/Jo Reyes removed the Boarding crew template from the Redeemer/);
+  });
+
+  console.log("Four small things");
+  await check("a serving member makes a calendar address, a calendar app reads their events with it, and a new address stops the old", async () => {
+    await signInAs(nix);
+    await page.goto(`${site}/profile`);
+    assert.equal(await page.getByRole("heading", { name: "Your calendar" }).count(), 0, "an applicant has no calendar address to make");
+    await signInAs(pat);
+    await page.goto(`${site}/profile`);
+    await page.getByRole("heading", { name: "Your calendar" }).waitFor();
+    await page.getByRole("button", { name: "Make my calendar address" }).click();
+    await page.locator(".form-result:visible", { hasText: "Here is your new address." }).waitFor();
+    const address = await page.getByLabel("Your calendar address").inputValue();
+    assert.match(address, new RegExp(`^${site}/calendar/[0-9a-f]{64}\\.ics$`));
+    const key = (await one("select key from public.calendar_keys where member_id = $1", [patId])).key;
+    assert.ok(address.endsWith(`${key}.ics`));
+
+    // A calendar app fetches it with no session at all.
+    const feed = await fetch(address);
+    assert.equal(feed.status, 200);
+    assert.match(feed.headers.get("content-type"), /^text\/calendar/);
+    assert.match(feed.headers.get("cache-control"), /no-store/);
+    const text = (await feed.text()).replace(/\r\n /g, "");
+    assert.match(text, /X-WR-CALNAME:9th Fleet\r\n/);
+    assert.match(text, /SUMMARY:Escort 003\r\n/);
+    assert.match(text, /DESCRIPTION:Patrol\. You are attending\. The orders and the roll are on the fleet's site: /);
+    assert.match(text, /SUMMARY:Patrol 001\r\n/, "a past event still within 90 days is kept");
+    assert.doesNotMatch(text, /Gunnery 002/, "a draft is not in it");
+    // Nothing for a key that is not a member's.
+    const wrong = await fetch(`${site}/calendar/${"0".repeat(64)}.ics`);
+    assert.equal(wrong.status, 200);
+    assert.doesNotMatch(await wrong.text(), /BEGIN:VEVENT/);
+    assert.equal((await fetch(`${site}/calendar/not-a-key.ics`)).status, 404);
+
+    // A new address, and the old one is dead.
+    await page.getByRole("button", { name: "Make a new address" }).click();
+    await page.locator(".form-result:visible", { hasText: "The old one no longer works." }).waitFor();
+    await page.waitForFunction((old) => document.getElementById("feed_address")?.value !== old, address);
+    const renewed = await page.getByLabel("Your calendar address").inputValue();
+    assert.notEqual(renewed, address);
+    assert.doesNotMatch((await (await fetch(address)).text()), /BEGIN:VEVENT/);
+    assert.match((await (await fetch(renewed)).text()), /SUMMARY:Escort 003\r\n/);
+    // The log of changes does not hold the key.
+    const logged = await supabase.sql("select count(*)::int as n from public.audit_log where table_name = 'calendar_keys' or old_row::text like $1 or new_row::text like $1", [`%${key}%`]);
+    assert.deepEqual(logged, [{ n: 0 }]);
+  });
+  await check("a member downloads their own record as a PDF", async () => {
+    await signInAs(pat);
+    await page.goto(`${site}/profile?tab=service`);
+    assert.equal(await page.getByRole("link", { name: "Download your record as a PDF" }).getAttribute("href"), "/profile/record.pdf");
+    const file = await page.request.get(`${site}/profile/record.pdf`);
+    assert.equal(file.status(), 200);
+    assert.match(file.headers()["content-type"], /^application\/pdf/);
+    assert.match(file.headers()["content-disposition"], /attachment; filename="service-record-pat-ortega\.pdf"/);
+    assert.match(file.headers()["cache-control"], /no-store/);
+    const body = await file.body();
+    assert.ok(body.length > 2000, `the file has something in it: ${body.length} bytes`);
+    assert.equal(body.subarray(0, 5).toString(), "%PDF-");
+    // Signed out, there is no record to download.
+    await context.clearCookies();
+    const refused = await page.request.get(`${site}/profile/record.pdf`, { maxRedirects: 0 });
+    assert.equal(refused.status(), 307);
+  });
+  await check("the lessons log gathers what each report said to keep and to change", async () => {
+    await signInAs(nix);
+    await page.goto(`${site}/operations/lessons`);
+    await leadIs(/The lessons log is for the serving fleet\./);
+    await signInAs(sam);
+    await page.goto(`${site}/operations`);
+    assert.equal(await page.getByRole("link", { name: "Lessons log" }).getAttribute("href"), "/operations/lessons");
+    await page.goto(`${site}/operations/lessons`);
+    await headingIs("Lessons log");
+    await leadIs(/What one after-action report says to keep and to change/);
+    const entry = page.locator(".lesson-entry:visible", { hasText: "Patrol 001" });
+    assert.match(await entry.innerText(), /Patrol, .*Report by .*Ada Vance/);
+    assert.match(await entry.innerText(), /What to change\s+Brief the fallback sooner\./);
+    assert.doesNotMatch(await entry.innerText(), /What to keep/);
+    assert.equal(await entry.getByRole("link", { name: "Patrol 001" }).getAttribute("href"), `/operations/${(await patrol()).id}`);
+    await shot("lessons-log");
+  });
+  await check("the monthly returns are command's, and the database writes them from the record", async () => {
+    await signInAs(sam);
+    await page.goto(`${site}/admin/returns`);
+    await headingIs("Monthly returns");
+    assert.equal(await page.locator(".data-returns").count(), 0, "a member is shown no figures");
+    await signInAs(jo);
+    await page.goto(`${site}/admin/returns`);
+    await leadIs(/The database writes the first on the first of next month/);
+    // The database records a month, as the job does on the first.
+    await supabase.sql("select app.record_monthly_return((date_trunc('month', (now() at time zone 'utc')::date) - interval '1 month')::date)");
+    await page.reload();
+    await leadIs(/The latest is for/);
+    const cells = (await page.locator(".data-returns tbody tr").first().locator("td").allInnerTexts()).map((cell) => cell.trim());
+    const recorded = await one("select * from public.fleet_returns order by month desc limit 1");
+    assert.deepEqual(cells.slice(0, 10), [
+      String(recorded.serving),
+      String(recorded.members),
+      String(recorded.auxiliaries),
+      String(recorded.recruits),
+      String(recorded.reserve),
+      String(recorded.joined),
+      String(recorded.departed),
+      recorded.hulls === null ? "Not kept" : `${recorded.hulls_ready} of ${recorded.hulls}`,
+      String(recorded.events_held),
+      String(recorded.attendances),
+    ]);
+    // The month just ended counts the register as it is.
+    assert.ok(recorded.hulls !== null && recorded.hulls >= 1, "the register is counted for the month just ended");
+    await shot("monthly-returns");
+  });
+  await check("a secondary duty has a term, which the overview flags and command renews", async () => {
+    // Pat holds the Instructor duty, taken up long enough ago that its term is nearly up.
+    await supabase.sql("insert into public.qualification_awards (member_id, qualification_id) select $1, id from public.qualifications where code = 'instructor' and not exists (select 1 from public.qualification_awards a where a.member_id = $1 and a.qualification_id = qualifications.id)", [patId]);
+    await supabase.sql("update public.members set status = 'member' where id = $1", [patId]);
+    const duty = await one(
+      `insert into public.assignments (member_id, position_id, kind, started_on)
+       select $1, p.id, 'duty', (now() at time zone 'utc')::date - interval '80 days'
+       from public.positions p join public.units u on u.id = p.unit_id where u.name = 'Fleet Staff' and p.title = 'Instructor' returning id`,
+      [patId],
+    );
+    await signInAs(jo);
+    await page.goto(`${site}/admin`);
+    const told = page.locator(".attention:visible li", { hasText: /Pat Ortega's term as Instructor ends in 1[0-3] days/ });
+    await told.waitFor();
+    assert.equal(await told.getByRole("link").getAttribute("href"), `/admin/people/${patId}`);
+    await told.getByRole("link").click();
+    await page.getByRole("heading", { name: "Secondary duties" }).waitFor();
+    const line = page.locator(".duty:visible", { hasText: "Instructor" });
+    assert.match(await line.innerText(), /Term to .*, 1[0-3] days left\./);
+    await line.getByRole("button", { name: "Renew for three months" }).click();
+    await line.locator(".form-result", { hasText: "Renewed for another term, from today." }).waitFor();
+    const renewed = await one("select renewed_on::text as day from public.assignments where id = $1", [duty.id]);
+    assert.equal(renewed.day, (await one("select (now() at time zone 'utc')::date::text as day")).day);
+    await page.reload();
+    assert.match(await page.locator(".duty:visible", { hasText: "Instructor" }).innerText(), /Term to .*, 3 months left\. Last renewed/);
+    // The record shows the term, the overview no longer flags it, and the logs say so.
+    assert.match(await page.locator(".data-record:visible").first().innerText(), /Instructor[\s\S]*Duty\s*Term to/);
+    await page.goto(`${site}/admin`);
+    assert.equal(await page.locator(".attention:visible li", { hasText: "Pat Ortega's term as Instructor" }).count(), 0);
+    await signInAs(founder);
+    await page.goto(`${site}/admin/logs?show=personnel`);
+    await page.locator(".log-line:visible").first().waitFor();
+    const lines = (await page.locator(".log-line:visible").allInnerTexts()).map((line) => line.replace(/\s+/g, " "));
+    assert.ok(lines.some((line) => /Jo Reyes renewed Pat Ortega's duty as Instructor, Fleet Staff for another term/.test(line)), `the renewal is in the logs: ${lines.slice(0, 5).join(" | ")}`);
+    // Only command renews, only a duty, and only on the day.
+    await signInAs(sam);
+    await page.goto(`${site}/admin/people/${patId}`);
+    assert.equal(await page.getByRole("heading", { name: "Secondary duties" }).count(), 0);
   });
 
   await check("no page raised a script error", async () => {
