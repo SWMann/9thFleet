@@ -54,10 +54,15 @@ export async function getLessonsLog(): Promise<LessonsLog> {
   }
   const reportRows = ((reports.data ?? []) as Row[]).filter((row) => (row.to_keep as string) || (row.to_change as string));
   const eventIds = reportRows.map((row) => row.event_id as string);
-  const events = eventIds.length > 0 ? await supabase.from("events").select("id, title, kind, starts_at").in("id", eventIds) : { data: [], error: null };
-  if (events.error) throw new Error(`The lessons log could not be read: ${events.error.message}`);
+  // A hundred ids at a time, so the address never grows too long to send.
+  const eventRows: Row[] = [];
+  for (let from = 0; from < eventIds.length; from += 100) {
+    const events = await supabase.from("events").select("id, title, kind, starts_at").in("id", eventIds.slice(from, from + 100));
+    if (events.error) throw new Error(`The lessons log could not be read: ${events.error.message}`);
+    eventRows.push(...((events.data ?? []) as Row[]));
+  }
   const typeName = new Map(((types.data ?? []) as Row[]).map((row) => [row.key as string, row.name as string]));
-  const eventOf = new Map(((events.data ?? []) as Row[]).map((row) => [row.id as string, row]));
+  const eventOf = new Map(eventRows.map((row) => [row.id as string, row]));
   const names: Record<string, string> = {};
   const fullNames: Record<string, string> = {};
   for (const row of (roster.data ?? []) as Row[]) {

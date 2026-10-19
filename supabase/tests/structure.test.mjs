@@ -116,9 +116,13 @@ test("views apply the reader's own access rules", async () => {
   assert.ok(views.length >= 1);
   for (const view of views) {
     // The calendar feed is read by a calendar app with no session, so it reads
-    // as the database and lets through only what its key earns. Its own tests
-    // hold it to that.
-    if (view.relname === "calendar_feed") continue;
+    // as the database and lets through only what its key earns, as a security
+    // barrier, so a reader's own conditions never reach the tables underneath.
+    // Its own tests hold it to that.
+    if (view.relname === "calendar_feed") {
+      assert.match(view.options, /security_barrier=true/, view.relname);
+      continue;
+    }
     assert.match(view.options, /security_invoker=true/, view.relname);
   }
 });

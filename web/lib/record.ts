@@ -28,7 +28,10 @@ export const DUTY_TERM_MONTHS = 3;
 /** The day a duty's current term ends. */
 export function dutyTermEnds(post: Pick<PostHeld, "startedOn" | "renewedOn">): string {
   const from = new Date(`${(post.renewedOn ?? post.startedOn).slice(0, 10)}T00:00:00Z`);
+  const day = from.getUTCDate();
   from.setUTCMonth(from.getUTCMonth() + DUTY_TERM_MONTHS);
+  // A term from the 31st ends on the last day the month has, as the calendar counts it, not in the month after.
+  if (from.getUTCDate() !== day) from.setUTCDate(0);
   return from.toISOString().slice(0, 10);
 }
 

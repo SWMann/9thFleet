@@ -67,6 +67,17 @@ test("the feed sends a key's owner their events and their own replies, and nobod
   assert.deepEqual(await feedWith(undefined), []);
   assert.deepEqual(await feedWith(""), []);
   assert.deepEqual(await feedWith("0".repeat(64)), []);
+  // A reader's own condition is applied to the rows the key earns, never to the tables underneath, whatever plan is chosen.
+  for (const plan of ["on", "off"]) {
+    const probed = await fleet.db.transaction(async (tx) => {
+      await tx.query(`set local enable_indexscan = ${plan}`);
+      await tx.query(`set local enable_bitmapscan = ${plan}`);
+      await tx.query("set local role anon");
+      await tx.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ role: "anon" })]);
+      return (await tx.query("select id from public.calendar_feed where 1 / (case when title = 'Patrol 001' then 0 else 1 end) = 1")).rows;
+    });
+    assert.deepEqual(probed, [], `plan ${plan}`);
+  }
   assert.deepEqual(await feedWith(key.toUpperCase()), []);
   // Another member's key sees the same event with their own reply, which is none.
   await fleet.as(who.other).query("insert into public.calendar_keys (member_id) values ($1)", [who.other]);
@@ -97,6 +108,9 @@ test("the monthly return records the month just ended, from the record, and is c
 
   await fleet.sql("select app.record_monthly_return(date '2026-07-01')");
   await fleet.sql("select app.record_monthly_return(date '2026-08-01')");
+  // Not a month that has not ended.
+  await assert.rejects(fleet.sql("select app.record_monthly_return(current_date)"), /A return is for a month that has ended/);
+  await assert.rejects(fleet.sql("select app.record_monthly_return(date '2030-06-01')"), /A return is for a month that has ended/);
   const july = await fleet.one("select * from public.fleet_returns where month = '2026-07-01'");
   const august = await fleet.one("select * from public.fleet_returns where month = '2026-08-01'");
   // Only the two back-dated members were in the fleet in July; the rest joined today.
@@ -146,8 +160,14 @@ test("command renews a secondary duty on the day, and nothing else is renewed", 
   await assert.rejects(fleet.as(who.command).query("update public.assignments set renewed_on = null where id = $1", [held.id]).then(() => fleet.as(who.command).query("update public.assignments set renewed_on = (now() at time zone 'utc')::date + 1 where id = $1", [held.id])), /renewed on the day/);
   assert.equal(await fleet.as(who.command).changed("update public.assignments set renewed_on = (now() at time zone 'utc')::date where id = $1", [held.id]), 1);
   assert.equal((await fleet.one("select renewed_on::text as day from public.assignments where id = $1", [held.id])).day, (await fleet.one("select (now() at time zone 'utc')::date::text as day")).day);
-  // Not by the holder, not a post, not an ended duty.
+  // Not by the holder, not a post, not an ended duty. Command holding a duty does not renew their own.
   assert.equal(await fleet.as(who.member).changed("update public.assignments set renewed_on = (now() at time zone 'utc')::date where id = $1", [held.id]), 0);
+  await fleet.qualify(who.command, "induction", "radio-user", "navy-crew", "instructor");
+  const own = await fleet.one("select p.id from public.positions p join public.units u on u.id = p.unit_id where p.kind = 'duty' and p.title = 'Instructor' and u.name = 'Fleet Staff'");
+  const theirs = await fleet.as(who.admin).one("insert into public.assignments (member_id, position_id, kind) values ($1, $2, 'duty') returning id", [who.command, own.id]);
+  await assert.rejects(fleet.as(who.command).query("update public.assignments set renewed_on = (now() at time zone 'utc')::date where id = $1", [theirs.id]), /You cannot renew your own duty/);
+  assert.equal(await fleet.as(who.admin).changed("update public.assignments set renewed_on = (now() at time zone 'utc')::date where id = $1", [theirs.id]), 1);
+  await fleet.sql("update public.assignments set ended_on = current_date where id = $1", [theirs.id]);
   const post = await fleet.one("select p.id from public.positions p where p.kind = 'primary' and p.is_entry and not exists (select 1 from public.assignments a where a.position_id = p.id and a.ended_on is null) limit 1");
   const primary = await fleet.as(who.command).one("insert into public.assignments (member_id, position_id, kind) values ($1, $2, 'primary') returning id", [who.member, post.id]);
   await assert.rejects(fleet.as(who.command).query("update public.assignments set renewed_on = (now() at time zone 'utc')::date where id = $1", [primary.id]), /Only a secondary duty is renewed/);

@@ -51,7 +51,9 @@ create trigger calendar_keys_guard before insert or update on public.calendar_ke
 -- The key comes in a request header, since a calendar app has no session. The
 -- view reads as the database itself and lets through only the rows the key
 -- earns: nothing without a key, and nothing for a key whose owner has left.
-create view public.calendar_feed as
+-- It is a security barrier, so a reader's own conditions are applied to the
+-- rows the key earns and never to the tables underneath.
+create view public.calendar_feed with (security_barrier = true) as
 select
   e.id,
   e.title,
@@ -117,6 +119,10 @@ declare
   hull_count integer;
   ready_count integer;
 begin
+  if m > last_month then
+    raise exception 'A return is for a month that has ended.' using errcode = '23514';
+  end if;
+
   with latest as (
     select distinct on (c.member_id) c.member_id, c.status
     from public.member_status_changes c
@@ -229,6 +235,10 @@ begin
   if new.renewed_on is distinct from old.renewed_on and not app.is_trusted_context() then
     if new.kind <> 'duty' then
       raise exception 'Only a secondary duty is renewed. A post is held until it is left.' using errcode = '23514';
+    end if;
+    -- A term is a check on the holder, so the holder does not renew their own, as they do not promote themselves.
+    if new.member_id = (select auth.uid()) and not app.has_role('admin') then
+      raise exception 'You cannot renew your own duty.' using errcode = '42501';
     end if;
     if new.renewed_on is null or new.renewed_on <> current_date then
       raise exception 'A duty is renewed on the day it is renewed.' using errcode = '23514';
