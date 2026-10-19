@@ -60,6 +60,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/privacy` | What the site records about visitors, members, people who send a piracy report and players the fleet names, who can read it and how to have it removed. Change it whenever the logging, the sign-in, the report line or the hostile list changes |
 | `/routine-orders` | Routine orders: numbered, dated notices from command to the serving fleet, each drafted by the site from the fleet's record and issued by command. Members mark each issue as read. See Routine orders below |
 | `/training` | The syllabus: each qualification as a course of lessons, with the reader's own progress. An instructor signs lessons off and awards qualifications from here; command edits the syllabus at `/admin/training`. See Training records below |
+| `/ships` | The ship register: each member's hulls, by model, with a name, a ready mark and a private note; what could sail tonight by kind; the crew templates. Command keeps the templates at `/admin/ships`. See The ship register below |
 | `/piracy` | The public report line: anyone may tell the fleet about piracy, without signing in. It says plainly that it is not an emergency line. Command reads the reports at `/admin/piracy`. See The piracy report line below |
 | `/visit` | Not a page. A public page posts its address here once it has been read, to be counted |
 | `/menu` | The menu as a page, for a browser that is not running scripts |
@@ -251,6 +252,43 @@ doctrine and edited by command at `/admin/training`.
 - **It is a members' page,** so it is in `MEMBER_PAGES` in `lib/supabase/proxy.ts` and in the
   matcher in `proxy.ts`.
 
+## The ship register and readiness
+
+`/ships`, for the serving fleet. Ships are member-owned for now, so the register is each member's
+own hulls, which the fleet can see; command may register a hull for anyone or as the fleet's, and
+correct any entry.
+
+- **Models.** Every hull is one of the ship models an admin keeps under Structure (`ship_models`:
+  name, maker, kind, crew, whether it can be flown yet). The seed list is the hulls that could be
+  flown when it was written, with crew sizes from the game's own specifications; command adds what
+  it lacks. Nobody registers a model marked not flyable.
+- **Crew templates** (`/admin/ships`, command). Each model has a standard template and may have
+  variants: the stations aboard, each a role of the order of battle with a count, as Volume 1 lays
+  the Idris out. The seed gives the Idris its 25, the corvettes and gunships their escort crews,
+  and single-seat fighters a pilot. `lib/ships.ts` reads them.
+- **Standing readiness.** An owner marks each ship ready or not; the database dates the mark. The
+  register's top shows, by kind, how many hulls are ready. A ship marked not ready is withdrawn
+  from every event it was offered for whose roll is still open; where the roll has closed, the
+  offer stands and the event's Ships tab shows the ship as down, so that whoever runs it knows.
+  A hull whose owner has left the serving fleet is left off the register and its counts until
+  they are back.
+- **Per event.** The plan's Ships part names what the event needs by model and count
+  (`event_ships.model_id`, `count`; the `ship` text is filled from the model and follows a
+  rename). A line typed as words before the list existed keeps them until a model is chosen. On
+  an announced event, an owner who is attending offers the ready ships they will bring from the
+  Ships tab, until the roll closes; command offers the fleet's hulls whether or not they are
+  attending themselves. The tab shows offered against wanted, counted by model, with a model's
+  offered hulls shared out across the plan lines that name it; the seats aboard what is offered
+  by station, against how many of those attending can fill it (they hold a post of that role, or
+  the qualifications a post of it asks for); and the member's own ready ships to offer. Someone
+  no longer attending brings nothing of their own. The admin overview tells command when a roll
+  has closed short of a hull the plan needs. The reads that grow with the fleet (the hulls, the
+  notes, attendees' awards and posts) are paged, as the routine orders' marks are.
+- **A note on a ship** is the owner's and command's. The log records that one was written, not
+  what it said.
+- **It is a members' page,** so it is in `MEMBER_PAGES` in `lib/supabase/proxy.ts` and in the
+  matcher in `proxy.ts`.
+
 ## The piracy report line
 
 `/piracy` is the fleet's public request line. Anyone may send a report without signing in: their
@@ -437,6 +475,7 @@ to be tracked.
 | The site's icons, and the symbol for each kind of unit | `components/Icon.tsx` and `components/UnitSymbol.tsx`. An icon goes with words and never stands in for them |
 | Routine orders | `app/routine-orders/`, the draft's wording in `lib/orders-form.ts`, and what is read for it in `lib/routine-orders.ts` |
 | Training | `app/training/` and `app/admin/training/`, what is read in `lib/training.ts`, and the lesson form in `lib/training-form.ts` |
+| Ships | `app/ships/` and `app/admin/ships/`, what is read in `lib/ships.ts`, the form in `lib/ships-form.ts`, and the Ships tab in `app/operations/[id]/page.tsx` |
 | The piracy report line | `app/piracy/` for the public form, `app/admin/piracy/` for command's page, and the checks, the limits' words and how long a report is kept in `lib/piracy-form.ts` |
 | What the site says it records | `app/privacy/page.tsx` |
 | The menu | `lib/menu.ts` |

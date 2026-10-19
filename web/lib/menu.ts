@@ -55,9 +55,10 @@ export const menu: MenuGroup[] = [
       { href: "/operations", label: "Operations" },
       { href: "/routine-orders", label: "Routine orders" },
       { href: "/training", label: "Training" },
+      { href: "/ships", label: "Ships" },
       { href: "/hostiles", label: "Hostile list" },
     ],
     admin: [{ href: "/admin", label: "Fleet admin" }],
-    note: "Your record, the order of battle, operations, routine orders, training and the hostile list appear here once you have signed in.",
+    note: "Your record, the order of battle, operations, routine orders, training, ships and the hostile list appear here once you have signed in.",
   },
 ];

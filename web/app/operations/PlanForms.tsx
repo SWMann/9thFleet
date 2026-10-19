@@ -40,6 +40,7 @@ export function PlanEditor({
   part,
   rows,
   members = [],
+  models = [],
   wide = false,
 }: {
   id: string;
@@ -47,6 +48,8 @@ export function PlanEditor({
   rows: PlanRow[];
   /** Who can be chosen, for a list with a member in it. */
   members?: Choice[];
+  /** The ship models, for a list with a model in it. */
+  models?: Choice[];
   /** Among cards, take the whole row. */
   wide?: boolean;
 }) {
@@ -69,7 +72,7 @@ export function PlanEditor({
               <span>{note.join(" · ")}</span>
             </summary>
             <div className="record-body">
-              <RowForm id={id} part={spec.key} one={spec.one} fields={spec.fields} row={row} members={members} />
+              <RowForm id={id} part={spec.key} one={spec.one} fields={spec.fields} row={row} members={members} models={models} />
               <RemoveRow id={id} part={spec.key} one={spec.one} row={row} title={row.values[spec.titled]} />
             </div>
           </details>
@@ -80,7 +83,7 @@ export function PlanEditor({
           Add {article} {spec.one}
         </summary>
         <div className="record-body">
-          <RowForm id={id} part={spec.key} one={spec.one} fields={spec.fields} row={null} members={members} />
+          <RowForm id={id} part={spec.key} one={spec.one} fields={spec.fields} row={null} members={members} models={models} />
         </div>
       </details>
     </div>
@@ -94,6 +97,7 @@ function RowForm({
   fields,
   row,
   members,
+  models,
 }: {
   id: string;
   part: PlanPartKey;
@@ -101,6 +105,7 @@ function RowForm({
   fields: PlanField[];
   row: PlanRow | null;
   members: Choice[];
+  models: Choice[];
 }) {
   const [result, action, pending] = useActionState(savePlanRow, untouched);
   // After a save is turned down the form shows what was typed. A form that added a record empties itself.
@@ -114,6 +119,28 @@ function RowForm({
       {fields.map((field) => {
         const name = `${part}-${at}-${field.key}`;
         const described = field.hint ? `${name}-hint` : undefined;
+        if (field.kind === "model") {
+          // A line typed as words before the list existed keeps them until a model is chosen.
+          const typed = row && !row.values[field.key] ? row.values.ship : "";
+          return (
+            <div className="field" key={field.key}>
+              <label htmlFor={name}>{field.label}</label>
+              {field.hint ? (
+                <p className="hint" id={`${name}-hint`}>
+                  {field.hint}
+                </p>
+              ) : null}
+              <select id={name} name={field.key} defaultValue={held(field.key)} required={!typed} aria-describedby={described}>
+                {typed ? <option value="">Keep &ldquo;{typed}&rdquo; as typed</option> : <option value="" disabled>Choose a model</option>}
+                {models.map((model) => (
+                  <option key={model.value} value={model.value}>
+                    {model.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        }
         // Who a record is about is chosen when it is added. Afterwards it heads the record and is not a field.
         if (field.kind === "member" && row) return null;
         if (field.kind === "member") {

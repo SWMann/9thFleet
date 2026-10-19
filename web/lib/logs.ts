@@ -87,17 +87,17 @@ const PAGE = 100;
 
 /** The tables whose history belongs to each kind of line. A table can feed more than one. */
 const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
-  personnel: ["members", "member_roles", "assignments", "qualification_awards", "event_mentions", "lesson_passes"],
+  personnel: ["members", "member_roles", "assignments", "qualification_awards", "event_mentions", "lesson_passes", "ships", "ship_notes"],
   recruiting: ["applications", "application_notes", "fleet_settings"],
   operations: [
     "events", "event_orders", "event_units", "event_key_posts", "event_posts", "event_objectives", "event_elements",
     "event_timings", "event_ships", "event_nets", "event_amendments", "event_acknowledgements", "attendance",
     "attendance_returns", "after_action_reports", "event_objective_outcomes", "event_losses", "event_opfor",
-    "event_opfor_members", "event_unit_tasks", "hostiles", "piracy_reports", "routine_orders",
+    "event_opfor_members", "event_unit_tasks", "hostiles", "piracy_reports", "routine_orders", "event_ship_offers",
   ],
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
-    "grades", "ranks", "fleet_settings", "event_types", "lessons",
+    "grades", "ranks", "fleet_settings", "event_types", "lessons", "ship_models", "crew_templates", "crew_template_stations",
   ],
   records: ["members"],
 };
@@ -139,6 +139,10 @@ type Names = {
   qualification: (id: unknown) => string;
   /** A lesson, with its course: "Radio check, of General induction". */
   lesson: (id: unknown) => string;
+  /** A ship model by id, a ship on the register by id, and a crew template by id. */
+  model: (id: unknown) => string;
+  ship: (id: unknown) => string;
+  template: (id: unknown) => string;
   role: (id: unknown) => string;
   area: (id: unknown) => string;
   event: (id: unknown) => string;
@@ -263,7 +267,7 @@ export async function readLog(filters: Filters): Promise<LogPage> {
 
 /** Everything a line needs to name the people and things it mentions. */
 async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>) {
-  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons] = await Promise.all([
+  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates] = await Promise.all([
     supabase.from("members").select("id, character_name, service"),
     supabase.from("member_accounts").select("member_id, discord_name"),
     supabase.from("positions").select("id, title, unit_id"),
@@ -278,8 +282,11 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     supabase.from("event_posts").select("id, title"),
     supabase.from("event_objectives").select("id, title"),
     supabase.from("lessons").select("id, name, qualification_id"),
+    supabase.from("ship_models").select("id, name"),
+    supabase.from("ships").select("id, model_id, name, owner_id"),
+    supabase.from("crew_templates").select("id, model_id, name"),
   ]);
-  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons]) {
+  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates]) {
     if (result.error) throw new Error(`The names for the log could not be read: ${result.error.message}`);
   }
 
@@ -298,6 +305,14 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
   );
   const qualificationName = new Map((qualifications.data ?? []).map((row) => [row.id as string, row.name as string]));
   const lessonName = new Map((lessons.data ?? []).map((row) => [row.id as string, `${row.name}, of ${qualificationName.get(row.qualification_id as string) ?? "a course that is gone"}`]));
+  const modelName = new Map((models.data ?? []).map((row) => [row.id as string, row.name as string]));
+  const shipName = new Map(
+    (ships.data ?? []).map((row) => {
+      const model = modelName.get(row.model_id as string) ?? "a model that is gone";
+      return [row.id as string, row.name ? `${row.name} (${model})` : `a ${model}`];
+    }),
+  );
+  const templateName = new Map((templates.data ?? []).map((row) => [row.id as string, `the ${row.name} template of the ${modelName.get(row.model_id as string) ?? "model that is gone"}`]));
   const eventTitle = new Map((events.data ?? []).map((row) => [row.id as string, row.title as string]));
   const roleName = new Map((roles.data ?? []).map((row) => [row.id as string, row.name as string]));
   const areaName = new Map((areas.data ?? []).map((row) => [row.id as string, row.name as string]));
@@ -314,6 +329,9 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     unit: (id) => (typeof id === "string" ? (unitName.get(id) ?? "a unit that is gone") : "no unit"),
     qualification: (id) => (typeof id === "string" ? (qualificationName.get(id) ?? "a qualification that is gone") : "a qualification"),
     lesson: (id) => (typeof id === "string" ? (lessonName.get(id) ?? "a lesson that is gone") : "a lesson"),
+    model: (id) => (typeof id === "string" ? (modelName.get(id) ?? "a model that is gone") : "a model"),
+    ship: (id) => (typeof id === "string" ? (shipName.get(id) ?? "a ship that is off the register") : "a ship"),
+    template: (id) => (typeof id === "string" ? (templateName.get(id) ?? "a template that is gone") : "a template"),
     event: (id) => (typeof id === "string" ? (eventTitle.get(id) ?? "an event that is gone") : "an event"),
     eventType: (key) => (typeof key === "string" ? (typeName.get(key) ?? key) : "no type"),
     extraPost: (id) => (typeof id === "string" ? (extraPostTitle.get(id) ?? "a post that is gone") : "a post"),
@@ -370,6 +388,9 @@ function shown(key: string, value: unknown, names: Names, table: string): string
     if (key === "unit_id" || key === "parent_id") return names.unit(value);
     if (key === "qualification_id" || key === "requires_qualification_id" || key === "teaches_qualification_id") return names.qualification(value);
     if (key === "lesson_id") return names.lesson(value);
+    if (key === "model_id") return names.model(value);
+    if (key === "ship_id") return names.ship(value);
+    if (key === "template_id") return names.template(value);
     if (key === "objective_id") return names.objective(value);
     if (key === "event_post_id") return names.extraPost(value);
     if (key === "role_id" || key === "next_role_id") return names.role(value);
@@ -517,6 +538,53 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       if (row.action === "insert") return line("structure", `${actor} added the lesson ${now.name} to ${course}`);
       if (row.action === "delete") return line("structure", `${actor} removed the lesson ${was.name} from ${course}`);
       return line("structure", `${actor} changed the lesson ${was.name} of ${course}`, changes(row, names));
+    }
+
+    case "ships": {
+      const model = names.model(any.model_id);
+      const called = any.name ? ` named ${any.name}` : "";
+      const ownerWords = row.subject ? (own ? "" : ` for ${subject}`) : " as the fleet's";
+      const owned = row.subject ? whose : "the fleet's";
+      if (row.action === "insert") return line("personnel", `${actor} registered a ${model}${called}${ownerWords}`);
+      if (row.action === "delete") return line("personnel", `${actor} took a ${model}${called} off the register${ownerWords}`);
+      if (changed("ready")) return line("personnel", `${actor} marked ${owned} ${model}${called} ${now.ready ? "ready" : "not ready"}`);
+      return line("personnel", `${actor} changed ${owned} ${model}${called} on the register`, changes(row, names));
+    }
+
+    case "ship_notes": {
+      const ship = names.ship(any.ship_id);
+      if (row.action === "insert") return line("personnel", `${actor} wrote a note on ${ship}`);
+      if (row.action === "delete") return line("personnel", `${actor} removed the note on ${ship}`);
+      return line("personnel", `${actor} changed the note on ${ship}`);
+    }
+
+    case "event_ship_offers": {
+      const ship = names.ship(any.ship_id);
+      const event = names.event(any.event_id);
+      if (row.action === "insert") return line("operations", `${actor} offered ${ship} for ${event}`);
+      return line("operations", `${actor} withdrew ${ship} from ${event}`);
+    }
+
+    case "ship_models": {
+      if (row.action === "insert") return line("structure", `${actor} added the ship model ${now.name}`);
+      if (row.action === "delete") return line("structure", `${actor} removed the ship model ${was.name}`);
+      return line("structure", `${actor} changed the ship model ${was.name}`, changes(row, names));
+    }
+
+    case "crew_templates": {
+      const model = names.model(any.model_id);
+      if (row.action === "insert") return line("structure", `${actor} added the ${now.name} crew template to the ${model}`);
+      if (row.action === "delete") return line("structure", `${actor} removed the ${was.name} crew template from the ${model}`);
+      if (changed("is_default") && now.is_default === true) return line("structure", `${actor} made ${now.name} the standard crew template of the ${model}`);
+      return line("structure", `${actor} changed the ${was.name} crew template of the ${model}`, changes(row, names));
+    }
+
+    case "crew_template_stations": {
+      const template = names.template(any.template_id);
+      const role = names.role(any.role_id);
+      if (row.action === "insert") return line("structure", `${actor} set ${now.count} ${role} ${Number(now.count) === 1 ? "station" : "stations"} on ${template}`);
+      if (row.action === "delete") return line("structure", `${actor} took the ${role} ${Number(was.count) === 1 ? "station" : "stations"} off ${template}`);
+      return line("structure", `${actor} set ${now.count} ${role} ${Number(now.count) === 1 ? "station" : "stations"} on ${template}`, changes(row, names));
     }
 
     case "applications": {

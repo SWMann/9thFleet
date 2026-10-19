@@ -42,7 +42,8 @@ function rowsOf(plan: Plan): Record<keyof Plan, PlanRow[]> {
     elements: plan.elements.map((entry) => ({ id: entry.id, values: { name: entry.name, callsign: entry.callsign, task: entry.task } })),
     // A timing is entered as its time of day in UTC.
     timings: plan.timings.map((entry) => ({ id: entry.id, values: { time: toFields(entry.at).time, label: entry.label } })),
-    ships: plan.ships.map((entry) => ({ id: entry.id, values: { ship: entry.ship, note: entry.note } })),
+    // The record is headed by its ship's name, which the database fills from the model.
+    ships: plan.ships.map((entry) => ({ id: entry.id, values: { ship: entry.ship, model_id: entry.modelId ?? "", count: String(entry.count), note: entry.note } })),
     nets: plan.nets.map((entry) => ({ id: entry.id, values: { name: entry.name, purpose: entry.purpose, controller: entry.controller } })),
   };
 }
@@ -168,7 +169,7 @@ async function EditEvent({ params }: { params: Props["params"] }) {
               </Pane>
               <PlanEditor id={event.id} part="objectives" rows={rows.objectives} />
               <PlanEditor id={event.id} part="timings" rows={rows.timings} />
-              <PlanEditor id={event.id} part="ships" rows={rows.ships} />
+              <PlanEditor id={event.id} part="ships" rows={rows.ships} models={choices.models.map((model) => ({ value: model.id, label: model.name }))} />
               <PlanEditor id={event.id} part="nets" rows={rows.nets} />
               <Pane id="pane-reading" icon="book" title="Reading" wide>
                 <ReadingForm id={event.id} reading={event.reading} />

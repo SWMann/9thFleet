@@ -167,9 +167,10 @@ export type PlanField = {
   label: string;
   /**
    * A time is entered as the time of day in UTC, and kept as minutes before or after the start.
-   * A member is chosen from a list the page provides, and is set once.
+   * A member is chosen from a list the page provides, and is set once. A model is chosen from the
+   * ship models the page provides.
    */
-  kind: "text" | "long" | "time" | "number" | "member";
+  kind: "text" | "long" | "time" | "number" | "member" | "model";
   /** For a long text that sits in a line of the page: bold, italic and links, and nothing that makes a block. */
   line?: boolean;
   /** The longest a text can be, or the largest a number can be. */
@@ -239,12 +240,13 @@ export const planParts: PlanPart[] = [
     table: "event_ships",
     one: "ship",
     many: "Ships",
-    about: "The ships and vehicles the event uses.",
+    about: "The hulls the event needs, by model and how many. Owners who are attending offer theirs, and the Readiness tab shows offered against wanted.",
     titled: "ship",
     ordered: true,
     fields: [
-      { key: "ship", label: "Ship", kind: "text", max: 80, required: true, hint: "Such as Hammerhead, or UEES Nexus (Polaris)." },
-      { key: "note", label: "Note", kind: "text", max: 200, hint: "What it is for, who brings it, or where it starts." },
+      { key: "model_id", label: "Model", kind: "model", max: 36, required: true, hint: "From the fleet's list of models. A hull it lacks is added under Structure." },
+      { key: "count", label: "How many", kind: "number", max: 99, required: true },
+      { key: "note", label: "Note", kind: "text", max: 200, hint: "What it is for, or where it starts." },
     ],
   },
   {
