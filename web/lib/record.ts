@@ -18,7 +18,19 @@ export type PostHeld = {
   gradeCode: string | null;
   startedOn: string;
   endedOn: string | null;
+  /** For a duty: the day it was last renewed. Its term runs three months from that day, or from the day it began. */
+  renewedOn?: string | null;
 };
+
+/** How long a secondary duty's term runs, per Volume 2. */
+export const DUTY_TERM_MONTHS = 3;
+
+/** The day a duty's current term ends. */
+export function dutyTermEnds(post: Pick<PostHeld, "startedOn" | "renewedOn">): string {
+  const from = new Date(`${(post.renewedOn ?? post.startedOn).slice(0, 10)}T00:00:00Z`);
+  from.setUTCMonth(from.getUTCMonth() + DUTY_TERM_MONTHS);
+  return from.toISOString().slice(0, 10);
+}
 
 /** One line the database wrote when a post was taken up at a grade, or the grade changed in post. */
 export type GradeLine = { id: number; assignmentId: string; gradeCode: string; acting: boolean; since: string };

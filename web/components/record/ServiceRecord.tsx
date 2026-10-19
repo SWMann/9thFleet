@@ -5,6 +5,7 @@ import { RichLine } from "@/components/rich/Rich";
 import {
   activity,
   currentPost,
+  dutyTermEnds,
   gradeChanges,
   gradePeriods,
   gradeSince,
@@ -142,6 +143,7 @@ export function ServiceRecordView({
                     <td>
                       {entry.kind === "duty" ? "Duty" : rank(entry.gradeCode, entry.acting)}
                       {entry.kind === "primary" && entry.gradeCode ? <small>{entry.gradeCode}</small> : null}
+                      {entry.kind === "duty" && !entry.endedOn ? <small>{dutyTermEnds(entry) < on ? `Term ended ${day(dutyTermEnds(entry))}` : `Term to ${day(dutyTermEnds(entry))}`}</small> : null}
                     </td>
                     <td>{day(entry.startedOn)}</td>
                     <td>{entry.endedOn ? day(entry.endedOn) : <span className="chip chip-on">Now</span>}</td>

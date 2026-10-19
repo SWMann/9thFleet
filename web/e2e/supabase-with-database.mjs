@@ -105,6 +105,8 @@ export async function startSupabaseWithDatabase(port) {
       await tx.query("select set_config('request.jwt.claims', $1, true)", [
         JSON.stringify(claims?.sub ? { sub: claims.sub, role } : { role }),
       ]);
+      // The request's headers, as the real API gives them to the database: the calendar feed reads its key from them.
+      await tx.query("select set_config('request.headers', $1, true)", [JSON.stringify(request.headers)]);
       return tx.query(text, params);
     });
   }

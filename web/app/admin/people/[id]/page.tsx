@@ -5,8 +5,10 @@ import { Suspense } from "react";
 import { AdminHead, AdminShut } from "@/components/admin/AdminHead";
 import { Icon, type IconName } from "@/components/Icon";
 import { ServiceRecordView } from "@/components/record/ServiceRecord";
-import { gate, serviceNames, statusNames } from "@/lib/admin";
+import { gate, reaches, serviceNames, statusNames } from "@/lib/admin";
 import { formatDate } from "@/lib/application-form";
+import { dutyTermEnds, lengthBetween, today } from "@/lib/record";
+import { RenewDutyForm } from "./DutyTools";
 import type { Role } from "@/lib/member";
 import { getRecordSubject, getServiceRecord } from "@/lib/service-record";
 import { getTrainingRecord } from "@/lib/training";
@@ -43,6 +45,9 @@ async function MemberRecord({ params }: { params: PageProps<"/admin/people/[id]"
   if (!subject) notFound();
   const [record, training] = await Promise.all([getServiceRecord(subject.id, subject.service), getTrainingRecord(subject.id)]);
   const rank = subject.rankName ? `${subject.acting ? "Acting " : ""}${subject.rankName} ` : "";
+  // The duties held now, each with its term, for command to renew.
+  const on = today(record.readAt);
+  const duties = reaches(access.tier, "command") ? record.posts.filter((post) => post.kind === "duty" && !post.endedOn).map((post) => ({ ...post, ends: dutyTermEnds(post) })) : [];
 
   return (
     <>
@@ -75,6 +80,32 @@ async function MemberRecord({ params }: { params: PageProps<"/admin/people/[id]"
           <Line icon="calendar" label="First signed in" value={subject.joinedOn ? formatDate(subject.joinedOn) : "Unknown"} />
         </dl>
       </section>
+
+      {duties.length > 0 ? (
+        <section className="wrap band" aria-labelledby="duties">
+          <h2 id="duties">
+            Secondary <strong>duties</strong>
+          </h2>
+          <p className="intro">A duty runs for three months at a time. Renewing it starts another term from today; ending it is done where the appointment was made.</p>
+          <ul className="duties">
+            {duties.map((duty) => (
+              <li key={duty.id} className={duty.ends < on ? "duty duty-over" : "duty"}>
+                <div>
+                  <strong>{duty.title}</strong>
+                  <span className="aside">{duty.unit}</span>
+                  <small>
+                    {duty.ends < on
+                      ? `Term ended ${formatDate(duty.ends)}, ${lengthBetween(duty.ends, on).toLowerCase()} ago.`
+                      : `Term to ${formatDate(duty.ends)}, ${lengthBetween(on, duty.ends).toLowerCase()} left.`}
+                    {duty.renewedOn ? ` Last renewed ${formatDate(duty.renewedOn)}.` : ""}
+                  </small>
+                </div>
+                <RenewDutyForm assignment={duty.id} title={duty.title} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <ServiceRecordView record={record} own={false} attendance notes training={training} />
     </>

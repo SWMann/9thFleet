@@ -47,7 +47,7 @@ export async function getServiceRecord(memberId: string, service: Service | null
   if (!supabase) return emptyRecord();
 
   const [assignments, notes, units, gradeLines, statusLines, grades, ranks, returns, eventTypes, awards, qualifications, mentions] = await Promise.all([
-    supabase.from("assignments").select("id, position_id, kind, grade_code, acting, started_on, ended_on").eq("member_id", memberId),
+    supabase.from("assignments").select("id, position_id, kind, grade_code, acting, started_on, ended_on, renewed_on").eq("member_id", memberId),
     // What command wrote on each appointment. The database sends these to staff and to nobody else.
     supabase.from("assignment_notes").select("assignment_id, note").eq("member_id", memberId),
     supabase.from("units").select("id, name"),
@@ -84,7 +84,7 @@ export async function getServiceRecord(memberId: string, service: Service | null
   const eventIds = [
     ...new Set([...returnRows.map((row) => row.event_id), ...awardRows.map((row) => row.event_id), ...mentionRows.map((row) => row.event_id)].filter((id): id is string => Boolean(id))),
   ];
-  const assignmentRows = rows(assignments) as { id: string; position_id: string; kind: "primary" | "duty"; grade_code: string | null; acting: boolean; started_on: string; ended_on: string | null }[];
+  const assignmentRows = rows(assignments) as { id: string; position_id: string; kind: "primary" | "duty"; grade_code: string | null; acting: boolean; started_on: string; ended_on: string | null; renewed_on: string | null }[];
   const [events, positions] = await Promise.all([
     byIds("events", "id, title, starts_at, kind", eventIds),
     byIds("positions", "id, unit_id, title", [...new Set(assignmentRows.map((row) => row.position_id))]),
@@ -110,6 +110,7 @@ export async function getServiceRecord(memberId: string, service: Service | null
         gradeCode: row.grade_code,
         startedOn: row.started_on,
         endedOn: row.ended_on,
+        renewedOn: row.renewed_on ?? null,
         note: noteOf.get(row.id) ?? "",
       };
     }),

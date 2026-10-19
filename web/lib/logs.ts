@@ -498,6 +498,7 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       }
       if (row.action === "delete") return line("personnel", `${actor} deleted ${whose} appointment as ${post}, to put right a mistake`);
       if (changed("ended_on") && now.ended_on) return line("personnel", `${actor} ended ${whose} ${duty ? "duty" : "appointment"} as ${post}`);
+      if (changed("renewed_on") && now.renewed_on) return line("personnel", `${actor} renewed ${whose} duty as ${post} for another term`);
       if (changed("grade_code")) {
         const up = names.higher(was.grade_code, now.grade_code);
         const verb = up === null ? "changed the grade of" : up ? "promoted" : "reduced";
