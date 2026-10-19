@@ -21,6 +21,7 @@ import { pictures, type PictureName } from "@/lib/pictures";
 import { fleetMentions, manualLinks } from "@/lib/rich/offer";
 import type { RichSources } from "@/lib/rich/sources";
 import { audienceOf, indexFleet, passableTo, readsLine, standingIn, taskLevels, unitsAbove, type TaskLevel } from "@/lib/tasks";
+import { byModel, getModels, getReadiness, type Readiness } from "@/lib/ships";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -593,6 +594,8 @@ export type Choices = {
   posts: { unit: string; posts: { id: string; title: string }[] }[];
   roles: { id: string; name: string }[];
   qualifications: { id: string; name: string }[];
+  /** The ship models that can be flown, for saying what the plan needs. */
+  models: { id: string; name: string }[];
 };
 
 /** The parts of the plan that are lists: each as the editor and the event's page need it. */
@@ -601,7 +604,7 @@ export type Plan = {
   elements: { id: string; name: string; callsign: string; task: string }[];
   /** In order of time. `at` is the moment itself, worked out from the event's start. */
   timings: { id: string; offsetMinutes: number; label: string; at: string }[];
-  ships: { id: string; ship: string; note: string }[];
+  ships: { id: string; ship: string; note: string; modelId: string | null; count: number }[];
   nets: { id: string; name: string; purpose: string; controller: string }[];
 };
 
@@ -729,6 +732,8 @@ export type Operation =
       signOff: SignOff | null;
       /** Everyone who was there, for whoever writes the report to mention. Empty for anyone else. */
       present: Person[];
+      /** What the plan wants against what is offered, and the member's own ships to offer. Null for a draft. */
+      readiness: Readiness | null;
       /** Each unit's task, in the order of battle's own order. */
       tasks: UnitTask[];
       /** The units taking part that have no task yet. Empty for anyone who does not write the orders. */
@@ -784,7 +789,7 @@ export async function getOperation(id: string): Promise<Operation> {
       supabase.from("event_objectives").select("id, title, sort_order").eq("event_id", id),
       supabase.from("event_elements").select("id, name, callsign, task, sort_order").eq("event_id", id),
       supabase.from("event_timings").select("id, offset_minutes, label").eq("event_id", id),
-      supabase.from("event_ships").select("id, ship, note, sort_order").eq("event_id", id),
+      supabase.from("event_ships").select("id, ship, note, sort_order, model_id, count").eq("event_id", id),
       supabase.from("event_nets").select("id, name, purpose, controller, sort_order").eq("event_id", id),
       supabase.from("event_amendments").select("number, body, issued_by, issued_at").eq("event_id", id),
       // The database returns this member's own line, or every line to whoever runs the event.
@@ -843,6 +848,20 @@ export async function getOperation(id: string): Promise<Operation> {
   const edits = runs || (row.state === "draft" && row.created_by === member.id);
   const myLine = attendance.find((line) => line.memberId === member.id);
 
+  // The hulls: the models for whoever edits the plan, and for an announced event what is offered against what is wanted.
+  const models = edits ? await getModels(supabase) : { models: [], templates: [] };
+  const readiness =
+    row.state === "draft"
+      ? null
+      : await getReadiness(
+          supabase,
+          id,
+          member,
+          isCommand(member),
+          attendance.filter((line) => line.reply === "attending").map((line) => line.memberId),
+          event.rollOpen,
+        );
+
   // Whether the event is open to this member. Whoever is named to run it or to observe always is.
   const isNamed = [row.commander_id, row.second_id, row.observer_id].includes(member.id);
   const held = new Set(((awards.data ?? []) as { qualification_id: string }[]).map((award) => award.qualification_id));
@@ -900,7 +919,13 @@ export async function getOperation(id: string): Promise<Operation> {
     timings: ((timings.data ?? []) as { id: string; offset_minutes: number; label: string }[])
       .sort((a, b) => a.offset_minutes - b.offset_minutes || a.label.localeCompare(b.label))
       .map((entry) => ({ id: entry.id, offsetMinutes: entry.offset_minutes, label: entry.label, at: offsetFrom(row.starts_at, entry.offset_minutes) })),
-    ships: inOrder<Ordered & Plan["ships"][number]>(ships.data).map((entry) => ({ id: entry.id, ship: entry.ship, note: entry.note })),
+    ships: inOrder<Ordered & { id: string; ship: string; note: string; model_id: string | null; count: number }>(ships.data).map((entry) => ({
+      id: entry.id,
+      ship: entry.ship,
+      note: entry.note,
+      modelId: entry.model_id ?? null,
+      count: Number(entry.count ?? 1),
+    })),
     nets: inOrder<Ordered & Plan["nets"][number]>(nets.data).map((entry) => ({
       id: entry.id,
       name: entry.name,
@@ -1138,8 +1163,9 @@ export async function getOperation(id: string): Promise<Operation> {
           posts: groups.map((group) => ({ unit: group.unit, posts: group.posts.map((post) => ({ id: post.id, title: post.title })) })),
           roles: [...roles.entries()].map(([roleId, role]) => ({ id: roleId, name: role.name })).sort((a, b) => a.name.localeCompare(b.name)),
           qualifications,
+          models: models.models.filter((model) => model.flyable).sort(byModel).map((model) => ({ id: model.id, name: model.name })),
         }
-      : { force: null, posts: [], roles: [], qualifications: [] },
+      : { force: null, posts: [], roles: [], qualifications: [], models: [] },
     plan,
     amendments: issued,
     acknowledged: acknowledgedBy.get(member.id) ?? null,
@@ -1151,6 +1177,7 @@ export async function getOperation(id: string): Promise<Operation> {
     signOff,
     // Whoever writes the report mentions someone who was there, and never themselves.
     present: runs ? present.filter((person) => person.id !== member.id) : [],
+    readiness,
     tasks,
     taskUnits,
     opfor,

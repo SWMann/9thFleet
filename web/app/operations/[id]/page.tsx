@@ -29,6 +29,8 @@ import {
   StandInButton,
   ToReserve,
 } from "../OpsForms";
+import { OfferForm } from "@/app/ships/ShipForms";
+import { shipLabel, type Readiness } from "@/lib/ships";
 import { AcknowledgeButton, AmendmentForm, OutcomesForm, PlanEditor, SignOffForm } from "../PlanForms";
 import { LevelChip, PassDown } from "../TaskForms";
 
@@ -150,6 +152,7 @@ async function Event({ params }: { params: Props["params"] }) {
     { id: "orders", label: "Orders", icon: "book" },
     { id: "tasks", label: "Tasks", icon: "flag", badge: withheld > 0 ? `${withheld} withheld` : undefined },
     ...(event.state !== "draft" ? [{ id: "roll", label: "Roll", icon: "people" } as const] : []),
+    ...(result.readiness ? [{ id: "ships", label: "Ships", icon: "ship", badge: shipsBadge(result.readiness) } as const] : []),
     { id: "report", label: "Report", icon: "pen" },
     ...(result.opfor ? [{ id: "opfor", label: "Opposing force", icon: "shield" } as const] : []),
     ...(running ? [{ id: "run", label: "Run it", icon: "anchor" } as const] : []),
@@ -570,6 +573,14 @@ async function Event({ params }: { params: Props["params"] }) {
           </TabPanel>
         ) : null}
 
+        {result.readiness ? (
+          <TabPanel id="ships">
+            <div className="wrap band tab-band">
+              <Readiness event={event} readiness={result.readiness} runs={runs} />
+            </div>
+          </TabPanel>
+        ) : null}
+
         <TabPanel id="report">
           <div className="wrap band tab-band">
             <Panes>
@@ -846,6 +857,7 @@ function PlanBeside({ result }: { result: Ready }) {
             <thead>
               <tr>
                 <th scope="col">Ship</th>
+                <th scope="col">How many</th>
                 <th scope="col">Note</th>
               </tr>
             </thead>
@@ -853,6 +865,7 @@ function PlanBeside({ result }: { result: Ready }) {
               {plan.ships.map((ship) => (
                 <tr key={ship.id}>
                   <th scope="row">{ship.ship}</th>
+                  <td>{ship.count}</td>
                   <td>{ship.note}</td>
                 </tr>
               ))}
@@ -1242,5 +1255,128 @@ function TheRoll({ result }: { result: Ready }) {
         </div>
       ) : null}
     </>
+  );
+}
+
+/** The badge on the Ships tab: how many hulls are offered against how many the plan wants, counted by model. */
+function shipsBadge(readiness: Readiness): string | undefined {
+  const wanted = readiness.byModel.reduce((sum, line) => sum + line.wanted, 0);
+  if (wanted === 0) return readiness.offered.length > 0 ? `${readiness.offered.length} offered` : undefined;
+  const met = readiness.byModel.reduce((sum, line) => sum + Math.min(line.wanted, line.offered), 0);
+  return `${met} of ${wanted}`;
+}
+
+/**
+ * The Ships tab: what the plan wants against what owners have offered, the
+ * seats aboard what is offered against who is attending, and the member's own
+ * ready ships to offer until the roll closes.
+ */
+function Readiness({ event, readiness, runs }: { event: FleetEvent; readiness: Readiness; runs: boolean }) {
+  const short = readiness.byModel.filter((line) => line.offered < line.wanted);
+  const offerable = readiness.mine.filter((line) => line.may);
+  const held = readiness.mine.filter((line) => line.offered);
+  return (
+    <Panes>
+      <Pane id="wanted" icon="target" title="What the plan needs">
+        {readiness.wanted.length === 0 ? (
+          <p>The plan names no ships. {runs ? "Add them under Ships when changing the event." : ""}</p>
+        ) : (
+          <>
+            <table className="plan-table">
+              <thead>
+                <tr>
+                  <th scope="col">Hull</th>
+                  <th scope="col">Wanted</th>
+                  <th scope="col">Offered</th>
+                </tr>
+              </thead>
+              <tbody>
+                {readiness.wanted.map((line, index) => (
+                  <tr key={`${line.name}-${index}`} className={line.model ? (line.offered >= line.count ? "row-good" : "row-short") : undefined}>
+                    <th scope="row">{line.name}</th>
+                    <td>{line.count}</td>
+                    <td>{line.model ? line.offered : "Not on the list"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="hint">
+              {short.length === 0
+                ? "Every hull the plan needs is offered."
+                : `Short of ${short.map((line) => `${line.wanted - line.offered} ${line.model.name}`).join(", ")}. ${event.rollOpen ? "Owners offer theirs until the roll closes." : "The roll has closed."}`}
+            </p>
+          </>
+        )}
+      </Pane>
+
+      <Pane id="offered" icon="ship" title="Offered">
+        {readiness.offered.length === 0 ? (
+          <p>Nothing is offered yet.</p>
+        ) : (
+          <ul className="offered">
+            {readiness.offered.map((line) => (
+              <li key={line.ship.id}>
+                <strong>{line.ship.name || line.ship.model.name}</strong>
+                <span>
+                  {line.ship.name ? `${line.ship.model.name}, ` : ""}
+                  {line.ship.owner}
+                  {line.template ? ` · ${line.template.seats} ${line.template.seats === 1 ? "seat" : "seats"}` : ""}
+                </span>
+                {line.ship.ready ? null : <span className="chip chip-amber">Marked not ready</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Pane>
+
+      {readiness.seats.length > 0 ? (
+        <Pane id="seats" icon="people" title="Seats to fill" wide>
+          <p className="hint">
+            {readiness.totalSeats} {readiness.totalSeats === 1 ? "seat" : "seats"} aboard what is offered, {readiness.attending} attending. Each station is a role; the
+            count beside it is how many of those attending can fill it: they hold a post of that role, or the qualifications a post of it asks for.
+          </p>
+          <table className="plan-table">
+            <thead>
+              <tr>
+                <th scope="col">Station</th>
+                <th scope="col">Seats</th>
+                <th scope="col">Attending who can fill it</th>
+              </tr>
+            </thead>
+            <tbody>
+              {readiness.seats.map((line) => (
+                <tr key={line.roleId} className={line.qualified >= line.seats ? "row-good" : "row-short"}>
+                  <th scope="row">{line.role}</th>
+                  <td>{line.seats}</td>
+                  <td>{line.qualified}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Pane>
+      ) : null}
+
+      <Pane id="bring" icon="anchor" title="What you can bring" wide>
+        {readiness.mine.length === 0 ? (
+          <p>
+            You have no ship marked ready on <Link href="/ships">the register</Link>.
+          </p>
+        ) : offerable.length === 0 ? (
+          <p>
+            {event.rollOpen ? "Reply that you are attending, then offer the ships you will bring." : "The roll has closed."}
+            {held.length > 0 ? ` Offered: ${held.map((line) => shipLabel(line.ship)).join(", ")}.` : ""}
+          </p>
+        ) : (
+          <>
+            <p className="hint">
+              {offerable.some((line) => line.ship.ownerId !== null)
+                ? "Your ready ships. Offer the ones you will bring; withdraw one if your plans change, until the roll closes."
+                : "The fleet's ready hulls, which command offers whether or not they are attending themselves. Reply that you are attending to offer your own."}
+            </p>
+            <OfferForm event={event.id} ships={offerable.map((line) => ({ id: line.ship.id, label: shipLabel(line.ship), offered: line.offered }))} />
+          </>
+        )}
+      </Pane>
+    </Panes>
   );
 }

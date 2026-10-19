@@ -96,7 +96,7 @@ function RecordForm({ sheet, fields, record }: { sheet: SheetInfo; fields: Field
           return (
             <div className="field" key={field.key}>
               <label className="choice" htmlFor={name}>
-                <input id={name} name={field.key} type="checkbox" defaultChecked={result.values ? result.values[field.key] === "on" : held(field.key) === "yes"} />
+                <input id={name} name={field.key} type="checkbox" defaultChecked={result.values ? result.values[field.key] === "on" : starts(field) === "yes"} />
                 <span>{field.label}</span>
               </label>
             </div>

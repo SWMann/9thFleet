@@ -864,6 +864,13 @@ export async function savePlanRow(_previous: OpsResult, formData: FormData): Pro
       record[field.key] = member;
       continue;
     }
+    if (field.kind === "model") {
+      const model = uuid(text);
+      // A line that already exists may keep the words it was typed with; a new one picks a model.
+      if (!model && (!row || text !== "")) return { ok: false, message: `Choose "${field.label}" from the list.`, ...again };
+      if (model) record[field.key] = model;
+      continue;
+    }
     if (field.kind === "number") {
       const value = Number(text);
       if (text === "" || !Number.isInteger(value) || value < 1 || value > field.max) {

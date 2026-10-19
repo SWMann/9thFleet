@@ -165,8 +165,9 @@ export default function PrivacyPage() {
             <dt>The serving fleet</dt>
             <dd>
               Each other&apos;s names, ranks, posts and qualifications, the events, who said they are attending, who is mentioned in an
-              event&apos;s report, the hostile list as it stands today, the training syllabus, and routine orders, which name who was
-              appointed, promoted and qualified, who joined and left, and which names were declared hostile or placed on watch.
+              event&apos;s report, the hostile list as it stands today, the training syllabus, the ship register (each hull, its name, its
+              owner and whether it is marked ready, and what is offered for each event), and routine orders, which name who was appointed,
+              promoted and qualified, who joined and left, and which names were declared hostile or placed on watch.
             </dd>
           </div>
           <div>
@@ -184,7 +185,8 @@ export default function PrivacyPage() {
             <dt>Command</dt>
             <dd>
               Piracy reports. Names put forward for the hostile list, and entries that were declined, lifted or have lapsed, which
-              whoever put a name forward also sees. Who has marked each issue of routine orders as read.
+              whoever put a name forward also sees. Who has marked each issue of routine orders as read. The note an owner writes on
+              a ship, which the owner also sees.
             </dd>
           </div>
           <div>
@@ -216,7 +218,8 @@ export default function PrivacyPage() {
         <div className="prose">
           <p>
             Ask the fleet&apos;s staff to delete your record. That removes your account details, applications, appointments,
-            qualifications, lessons passed, mentions, your lines on every roll and your lines in the activity log. Where an issue of routine orders named
+            qualifications, lessons passed, mentions, your ships and their notes, your lines on every roll and your lines in the
+            activity log. Where an issue of routine orders named
             you, it says &ldquo;a former member&rdquo; instead. The log of changes keeps a line saying that something changed and when,
             with what it held about you blanked.
           </p>

@@ -47,11 +47,11 @@ export type FieldSpec =
 /** A field as the form is given it, with its choices filled in. */
 export type Field = Exclude<FieldSpec, { kind: "record" }> | (Common & { kind: "record"; source: Source; options: Option[] });
 
-export type SheetKey = "areas" | "roles" | "units" | "posts" | "qualifications" | "event-types";
+export type SheetKey = "areas" | "roles" | "units" | "posts" | "qualifications" | "event-types" | "ships";
 
 export type Sheet = {
   key: SheetKey;
-  table: "areas" | "fleet_roles" | "units" | "positions" | "qualifications" | "event_types";
+  table: "areas" | "fleet_roles" | "units" | "positions" | "qualifications" | "event_types" | "ship_models";
   /** What one record is called, and several. */
   one: string;
   many: string;
@@ -116,6 +116,25 @@ const unitKinds = [
 
 export const GRADES = ["E1", "E2", "E3", "E4", "E5", "E6", "E7", "OC", "O1", "O2", "O3", "O4", "O5", "O6", "O7", "O8", "O9", "O10"];
 const grades: Option[] = GRADES.map((code) => ({ value: code, label: code }));
+
+/** The kinds of hull, in the order the register lists them. */
+export const shipKinds: { key: string; name: string; many: string }[] = [
+  { key: "capital", name: "Capital ship", many: "Capital ships" },
+  { key: "frigate", name: "Frigate", many: "Frigates" },
+  { key: "corvette", name: "Corvette", many: "Corvettes" },
+  { key: "gunship", name: "Gunship", many: "Gunships" },
+  { key: "dropship", name: "Dropship", many: "Dropships" },
+  { key: "fighter", name: "Fighter", many: "Fighters" },
+  { key: "bomber", name: "Bomber", many: "Bombers" },
+  { key: "transport", name: "Transport", many: "Transports" },
+  { key: "medical", name: "Medical ship", many: "Medical ships" },
+  { key: "support", name: "Support ship", many: "Support ships" },
+  { key: "exploration", name: "Exploration ship", many: "Exploration ships" },
+  { key: "salvage", name: "Salvage ship", many: "Salvage ships" },
+  { key: "mining", name: "Mining ship", many: "Mining ships" },
+  { key: "runabout", name: "Runabout", many: "Runabouts" },
+];
+export const shipKindOf = (key: string) => shipKinds.find((kind) => kind.key === key) ?? { key, name: key, many: key };
 
 export const sheets: Sheet[] = [
   {
@@ -290,6 +309,32 @@ export const sheets: Sheet[] = [
       order,
     ],
   },
+  {
+    key: "ships",
+    table: "ship_models",
+    one: "ship model",
+    many: "Ship models",
+    about: "The hulls the fleet flies: each model's maker, kind and crew. Members register their own ships from this list, and command keeps each model's crew templates under Fleet admin.",
+    inUse: "Someone has registered a ship of this model. Take those off the register first. A plan that named it keeps its words.",
+    taken: "Another model already has that name or address.",
+    fields: [
+      { key: "name", label: "Name", kind: "text", max: 60, required: true, hint: "As the game names it: Idris-M, F7C Hornet Mk II." },
+      { key: "slug", label: "Address", kind: "slug", required: true, onlyWhenNew: true, hint: "A short name for it that never changes: idris-m." },
+      { key: "maker", label: "Maker", kind: "text", max: 60, hint: "Aegis Dynamics, Anvil Aerospace, and so on." },
+      {
+        key: "kind",
+        label: "Kind",
+        kind: "choice",
+        required: true,
+        options: shipKinds.map((kind) => ({ value: kind.key, label: kind.name })),
+        hint: "What the hull is for. The register and the readiness view group by it.",
+      },
+      { key: "crew_min", label: "Smallest crew", kind: "number", min: 1, max: 200, required: true, initial: "1", hint: "The game's listed minimum." },
+      { key: "crew_max", label: "Largest crew", kind: "number", min: 1, max: 200, required: true, initial: "1", hint: "The game's listed maximum. The crew template says who they are." },
+      { key: "flyable", label: "Can be flown in the game today", kind: "yes-no", initial: "yes", hint: "Nobody registers a hull that cannot be flown yet." },
+      order,
+    ],
+  },
 ];
 
 export const sheetOf = (key: string) => sheets.find((sheet) => sheet.key === key) ?? null;
@@ -400,6 +445,12 @@ export async function loadSheet(sheet: Sheet): Promise<Loaded> {
             note: row.instructors_may_draft === true ? "Drafted by command and instructors" : "Drafted by command",
             group: "",
           };
+        case "ships":
+          return {
+            title: row.name as string,
+            note: `${row.maker ? `${row.maker}, ` : ""}crew ${row.crew_min === row.crew_max ? row.crew_min : `${row.crew_min} to ${row.crew_max}`}${row.flyable === true ? "" : ", not flyable yet"}`,
+            group: shipKindOf(row.kind as string).many,
+          };
         default:
           return { title: row.name as string, note: String(row.code ?? ""), group: "" };
       }
@@ -444,7 +495,7 @@ export async function countStructure(): Promise<{ state: "no-database" } | { sta
     if (error) throw new Error(`The ${table} could not be counted: ${error.message}`);
     return (data ?? []).length;
   };
-  const [areas, roles, units, posts, qualifications, grades, eventTypes] = await Promise.all([
+  const [areas, roles, units, posts, qualifications, grades, eventTypes, ships] = await Promise.all([
     read("areas", "id"),
     read("fleet_roles", "id"),
     read("units", "id"),
@@ -452,8 +503,9 @@ export async function countStructure(): Promise<{ state: "no-database" } | { sta
     read("qualifications", "id"),
     read("grades", "code"),
     read("event_types", "id"),
+    read("ship_models", "id"),
   ]);
-  return { state: "ready", counts: { areas, roles, units, posts, qualifications, grades, "event-types": eventTypes } };
+  return { state: "ready", counts: { areas, roles, units, posts, qualifications, grades, "event-types": eventTypes, ships } };
 }
 
 export type RankTable =

@@ -7646,3 +7646,278 @@ a.mention:hover {
   color: var(--gold);
   cursor: pointer;
 }
+
+/* ---------------------------------------------------------------------------
+   The ship register and readiness
+   --------------------------------------------------------------------------- */
+
+.strength-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.strength-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--seam);
+  border-left: 3px solid var(--seam-2);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--text-2);
+  font-size: 0.875rem;
+}
+
+.strength-tile strong {
+  color: var(--white);
+  font-size: 1.5rem;
+  line-height: 1.1;
+}
+
+.strength-tile-good {
+  border-left-color: var(--green);
+}
+
+.strength-tile-bad {
+  border-left-color: var(--amber);
+}
+
+.hull-group + .hull-group {
+  margin-top: 28px;
+}
+
+.hull-group h3 {
+  margin: 0 0 10px;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hulls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
+  align-items: start;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hull {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--seam);
+  border-top: 3px solid var(--green);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.hull-down {
+  border-top-color: var(--amber);
+}
+
+.hull-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.hull-head h4 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+}
+
+.hull-name {
+  color: var(--white);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.hull-model {
+  color: var(--text-2);
+  font-size: 0.9375rem;
+}
+
+.hull-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+}
+
+.hull-facts .with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.hull-note {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--seam-2);
+  color: var(--text-2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.hull-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 4px;
+}
+
+.hull-edit summary {
+  color: var(--gold);
+  cursor: pointer;
+}
+
+.hull-edit .ship-form {
+  margin-top: 10px;
+}
+
+.ship-form {
+  max-width: 42rem;
+}
+
+.templates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
+  align-items: start;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.template-card {
+  padding: 16px 18px;
+  border: 1px solid var(--seam);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.template-card h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0 0 8px;
+  color: var(--white);
+  font-size: 1.0625rem;
+}
+
+.template-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.template-line strong {
+  color: var(--text);
+}
+
+.template-stations {
+  flex-basis: 100%;
+  color: var(--text-3);
+}
+
+.template-editor summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--seam);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.template-editor summary strong {
+  color: var(--white);
+}
+
+.template-form,
+.stations-form {
+  margin: 8px 0 12px;
+  max-width: 42rem;
+}
+
+.stations-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px 16px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--seam);
+}
+
+@media (min-width: 640px) {
+  .stations-form {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+    align-items: end;
+  }
+
+  .stations-form .hint {
+    grid-column: 1 / -1;
+  }
+}
+
+.offers ul,
+.offered {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.offers li,
+.offered li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--seam);
+  color: var(--text-2);
+}
+
+.offered li strong {
+  color: var(--white);
+}
+
+.offered li span {
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+.row-good th,
+.row-good td {
+  color: var(--text);
+}
+
+.row-short th,
+.row-short td {
+  color: var(--amber);
+}

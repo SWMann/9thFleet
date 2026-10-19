@@ -179,6 +179,10 @@ export type Fleet = {
   orders: { id: string; state: "draft" | "issued"; number: number | null; issued_at: string | null }[];
   /** Training: who has passed every lesson of a course and does not yet hold the qualification. */
   awaitingAward: { member_id: string; qualification_id: string }[];
+  /** What the plan of each announced event still to come wants by model, what is offered for it, and the hulls offered. */
+  wantedShips: { event_id: string; model_id: string | null; ship: string; count: number }[];
+  offeredShips: { event_id: string; ship_id: string }[];
+  ships: { id: string; model_id: string; ready: boolean }[];
 };
 
 export type Loaded = { state: "no-database" } | { state: "ready"; fleet: Fleet };
@@ -226,6 +230,21 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
   for (const [name, result] of Object.entries(results)) {
     if (result.error) throw new Error(`The ${name} could not be read: ${result.error.message}`);
   }
+  // Ships: what the announced events still to come want and are offered, and the hulls offered, read once the events are known.
+  const upcoming = ((events.data ?? []) as { id: string; state: string; starts_at: string }[])
+    .filter((event) => event.state === "announced" && Date.parse(event.starts_at) >= Date.now())
+    .map((event) => event.id);
+  const none = { data: [], error: null };
+  const [wantedShips, offeredShips] = await Promise.all([
+    upcoming.length > 0 ? supabase.from("event_ships").select("event_id, model_id, ship, count").in("event_id", upcoming) : none,
+    upcoming.length > 0 ? supabase.from("event_ship_offers").select("event_id, ship_id").in("event_id", upcoming) : none,
+  ]);
+  for (const result of [wantedShips, offeredShips]) {
+    if (result.error) throw new Error(`The ships could not be read: ${result.error.message}`);
+  }
+  const offeredIds = [...new Set(((offeredShips.data ?? []) as { ship_id: string }[]).map((row) => row.ship_id))];
+  const ships = offeredIds.length > 0 ? await supabase.from("ships").select("id, model_id, ready").in("id", offeredIds) : none;
+  if (ships.error) throw new Error(`The ships could not be read: ${ships.error.message}`);
 
   const now = Date.now();
   const rows = <T>(result: { data: unknown }) => (result.data ?? []) as T[];
@@ -330,6 +349,9 @@ export const loadFleet = cache(async (): Promise<Loaded> => {
       piracy: rows<Fleet["piracy"][number]>(piracy),
       orders: rows<Fleet["orders"][number]>(orders),
       awaitingAward: rows<Fleet["awaitingAward"][number]>(awaiting),
+      wantedShips: rows<Fleet["wantedShips"][number]>(wantedShips),
+      offeredShips: rows<Fleet["offeredShips"][number]>(offeredShips),
+      ships: rows<Fleet["ships"][number]>(ships),
     },
   };
 });
@@ -787,6 +809,30 @@ export function attention(fleet: Fleet, tier: Tier): Attention[] {
         detail: `An issue every ${EVERY_DAYS} days. The site drafts the next one from the record.`,
         href: "/routine-orders",
       });
+    }
+
+    // Ships: an announced event whose roll has closed, short of a hull the plan needs.
+    const modelOfShip = new Map(fleet.ships.map((ship) => [ship.id, ship.model_id]));
+    const rollClosed = new Set(fleet.events.filter((event) => event.roll_closes_at !== null && now >= Date.parse(event.roll_closes_at)).map((event) => event.id));
+    for (const event of figures.events.filter((entry) => entry.state === "announced" && Date.parse(entry.startsAt) >= now && rollClosed.has(entry.id))) {
+      const offered = new Map<string, number>();
+      for (const line of fleet.offeredShips.filter((entry) => entry.event_id === event.id)) {
+        const model = modelOfShip.get(line.ship_id);
+        if (model) offered.set(model, (offered.get(model) ?? 0) + 1);
+      }
+      // Wanted is summed by model, since a plan may name a model on more than one line.
+      const wanted = new Map<string, { name: string; count: number }>();
+      for (const line of fleet.wantedShips.filter((entry) => entry.event_id === event.id && entry.model_id)) {
+        const entry = wanted.get(line.model_id!) ?? { name: line.ship, count: 0 };
+        entry.count += line.count;
+        wanted.set(line.model_id!, entry);
+      }
+      const short = [...wanted.entries()]
+        .filter(([modelId, entry]) => (offered.get(modelId) ?? 0) < entry.count)
+        .map(([modelId, entry]) => `${entry.count - (offered.get(modelId) ?? 0)} ${entry.name}`);
+      if (short.length > 0) {
+        list.push({ what: `${event.title} is short of ${short.join(", ")}`, detail: "The roll has closed with fewer hulls offered than the plan needs.", href: `/operations/${event.id}?tab=ships` });
+      }
     }
 
     // Training: a course completed and not yet awarded.
