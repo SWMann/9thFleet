@@ -24,8 +24,40 @@ export type ShipModel = {
   roles: ModelRole[];
 };
 
-export type Station = { roleId: string; role: string; count: number };
-export type CrewTemplate = { id: string; modelId: string; name: string; isDefault: boolean; stations: Station[]; seats: number };
+export type Station = {
+  id: string;
+  roleId: string;
+  role: string;
+  /** The role's page: /roles/<area>/<role>, where the role has one. */
+  roleHref: string | null;
+  /** The station's own name, where the role alone is vague; otherwise empty, and the role names it. */
+  name: string;
+  count: number;
+  /** How many of it are needed to sail: the minimum watch bill. */
+  minimum: number;
+  groupId: string | null;
+  /** What the station does aboard this model. */
+  brief: string;
+  /** Another station of the same template that covers it when empty. */
+  standInId: string | null;
+};
+/** A department of command's own choosing, within one template. */
+export type StationGroup = { id: string; name: string; sortOrder: number };
+export type CrewTemplate = {
+  id: string;
+  modelId: string;
+  name: string;
+  isDefault: boolean;
+  /** Where the crew comes from: a section of the manual, or who approved a variant. */
+  source: string;
+  groups: StationGroup[];
+  stations: Station[];
+  seats: number;
+  /** Seats needed to sail. */
+  minimumSeats: number;
+};
+/** A station's name as a page shows it: its own, or its role's. */
+export const stationName = (station: Pick<Station, "name" | "role">) => station.name || station.role;
 
 export type Ship = {
   id: string;
@@ -91,18 +123,33 @@ export const byModel = (a: ShipModel, b: ShipModel) =>
 
 /** Every model with its roles, every crew template with its stations, and the roles themselves. */
 export async function getModels(supabase: Client): Promise<{ models: ShipModel[]; templates: CrewTemplate[]; roles: ShipRole[] }> {
-  const [models, templates, stations, roles, shipRoles, modelRoles] = await Promise.all([
+  const [models, templates, stations, groups, roles, areas, shipRoles, modelRoles] = await Promise.all([
     supabase.from("ship_models").select("id, slug, name, maker, kind, crew_min, crew_max, flyable, sort_order"),
-    supabase.from("crew_templates").select("id, model_id, name, is_default"),
-    supabase.from("crew_template_stations").select("template_id, role_id, count, sort_order"),
-    supabase.from("fleet_roles").select("id, name"),
+    supabase.from("crew_templates").select("id, model_id, name, is_default, source"),
+    supabase.from("crew_template_stations").select("id, template_id, role_id, name, count, minimum, group_id, brief, stand_in_id, sort_order"),
+    supabase.from("crew_template_groups").select("id, template_id, name, sort_order"),
+    supabase.from("fleet_roles").select("id, name, slug, area_id"),
+    supabase.from("areas").select("id, slug"),
     supabase.from("ship_roles").select("id, slug, name, description, sort_order"),
     supabase.from("ship_model_roles").select("model_id, role_id, is_primary"),
   ]);
-  for (const result of [models, templates, stations, roles, shipRoles, modelRoles]) {
+  for (const result of [models, templates, stations, groups, roles, areas, shipRoles, modelRoles]) {
     if (result.error) throw new Error(`The ship models could not be read: ${result.error.message}`);
   }
+  const areaSlug = new Map(((areas.data ?? []) as Row[]).map((row) => [row.id as string, row.slug as string]));
   const roleName = new Map(((roles.data ?? []) as Row[]).map((row) => [row.id as string, row.name as string]));
+  const roleHref = new Map(
+    ((roles.data ?? []) as Row[]).map((row) => {
+      const area = areaSlug.get(row.area_id as string);
+      return [row.id as string, area && row.slug ? `/roles/${area}/${row.slug as string}` : null];
+    }),
+  );
+  const groupsOf = new Map<string, StationGroup[]>();
+  for (const row of ((groups.data ?? []) as Row[]).sort((a, b) => Number(a.sort_order) - Number(b.sort_order) || String(a.name).localeCompare(String(b.name)))) {
+    const list = groupsOf.get(row.template_id as string) ?? [];
+    list.push({ id: row.id as string, name: row.name as string, sortOrder: Number(row.sort_order ?? 0) });
+    groupsOf.set(row.template_id as string, list);
+  }
   const roleList: ShipRole[] = ((shipRoles.data ?? []) as Row[])
     .map((row) => ({ id: row.id as string, slug: row.slug as string, name: row.name as string, description: (row.description as string) ?? "", sortOrder: Number(row.sort_order ?? 0) }))
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
@@ -117,9 +164,20 @@ export async function getModels(supabase: Client): Promise<{ models: ShipModel[]
   }
   for (const list of rolesOf.values()) list.sort((a, b) => Number(b.primary) - Number(a.primary) || (roleOf.get(a.id)?.sortOrder ?? 0) - (roleOf.get(b.id)?.sortOrder ?? 0));
   const stationsOf = new Map<string, Station[]>();
-  for (const row of ((stations.data ?? []) as Row[]).sort((a, b) => Number(a.sort_order) - Number(b.sort_order))) {
+  for (const row of ((stations.data ?? []) as Row[]).sort((a, b) => Number(a.sort_order) - Number(b.sort_order) || String(a.name).localeCompare(String(b.name)))) {
     const list = stationsOf.get(row.template_id as string) ?? [];
-    list.push({ roleId: row.role_id as string, role: roleName.get(row.role_id as string) ?? "A role", count: Number(row.count) });
+    list.push({
+      id: row.id as string,
+      roleId: row.role_id as string,
+      role: roleName.get(row.role_id as string) ?? "A role",
+      roleHref: roleHref.get(row.role_id as string) ?? null,
+      name: (row.name as string) ?? "",
+      count: Number(row.count),
+      minimum: Number(row.minimum ?? 0),
+      groupId: (row.group_id as string | null) ?? null,
+      brief: (row.brief as string) ?? "",
+      standInId: (row.stand_in_id as string | null) ?? null,
+    });
     stationsOf.set(row.template_id as string, list);
   }
   return {
@@ -128,7 +186,17 @@ export async function getModels(supabase: Client): Promise<{ models: ShipModel[]
     templates: ((templates.data ?? []) as Row[])
       .map((row) => {
         const list = stationsOf.get(row.id as string) ?? [];
-        return { id: row.id as string, modelId: row.model_id as string, name: row.name as string, isDefault: row.is_default === true, stations: list, seats: list.reduce((sum, station) => sum + station.count, 0) };
+        return {
+          id: row.id as string,
+          modelId: row.model_id as string,
+          name: row.name as string,
+          isDefault: row.is_default === true,
+          source: (row.source as string) ?? "",
+          groups: groupsOf.get(row.id as string) ?? [],
+          stations: list,
+          seats: list.reduce((sum, station) => sum + station.count, 0),
+          minimumSeats: list.reduce((sum, station) => sum + station.minimum, 0),
+        };
       })
       .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name)),
   };
@@ -249,6 +317,14 @@ export async function readRegister(member: Member): Promise<Register> {
   };
 }
 
+/**
+ * Whether the reader could fill a station of a role: they hold a post of it
+ * now; or they hold every qualification the role asks for and every one some
+ * post of it asks for; or what they would still need; or, for a role whose
+ * posts ask for nothing, that it is filled by appointment alone.
+ */
+export type Fit = { state: "holds" } | { state: "qualified" } | { state: "needs"; qualifications: string[] } | { state: "appointed" };
+
 export type ModelPage =
   | Outside
   | { state: "not-found" }
@@ -258,28 +334,84 @@ export type ModelPage =
       command: boolean;
       model: ShipModel;
       templates: CrewTemplate[];
+      /** The reader's fit for each role a station of this model is of, by role id. */
+      fit: Record<string, Fit>;
       /** The fleet's hulls of this model, the fleet's own first, then by owner. */
       hulls: Ship[];
       readAt: number;
     };
 
-/** One model's page: the model, its crew templates, and the fleet's hulls of it. */
+/** One model's page: the model, its crew templates with the reader's own fit, and the fleet's hulls of it. */
 export async function getModel(slug: string): Promise<ModelPage> {
   const register = await getRegister();
   if (register.state !== "ready") return register;
   const model = register.models.find((candidate) => candidate.slug === slug);
   if (!model) return { state: "not-found" };
+  const templates = register.templates.filter((template) => template.modelId === model.id);
+  const supabase = await createClient();
+  const roleIds = [...new Set(templates.flatMap((template) => template.stations.map((station) => station.roleId)))];
+  const fit = supabase && roleIds.length > 0 ? await fitFor(supabase, register.member.id, roleIds) : {};
   return {
     state: "ready",
     member: register.member,
     command: register.command,
     model,
-    templates: register.templates.filter((template) => template.modelId === model.id),
+    templates,
+    fit,
     hulls: register.ships
       .filter((ship) => ship.model.id === model.id)
       .sort((a, b) => Number(a.ownerId !== null) - Number(b.ownerId !== null) || a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name)),
     readAt: register.readAt,
   };
+}
+
+/** The reader's fit for each role asked about, by the same rule the event's readiness counts who could fill a station. */
+async function fitFor(supabase: Client, memberId: string, roleIds: string[]): Promise<Record<string, Fit>> {
+  const [posts, held, needs, positions, asks, qualifications] = await Promise.all([
+    supabase.from("assignments").select("position_id").eq("member_id", memberId).eq("kind", "primary").is("ended_on", null),
+    supabase.from("qualification_awards").select("qualification_id").eq("member_id", memberId),
+    supabase.from("fleet_role_qualifications").select("role_id, qualification_id").in("role_id", roleIds),
+    supabase.from("positions").select("id, role_id").in("role_id", roleIds),
+    supabase.from("position_qualifications").select("position_id, qualification_id"),
+    supabase.from("qualifications").select("id, name"),
+  ]);
+  for (const result of [posts, held, needs, positions, asks, qualifications]) {
+    if (result.error) throw new Error(`Your fit for the stations could not be read: ${result.error.message}`);
+  }
+  const qualificationName = new Map(((qualifications.data ?? []) as Row[]).map((row) => [row.id as string, row.name as string]));
+  const have = new Set(((held.data ?? []) as Row[]).map((row) => row.qualification_id as string));
+  const roleOfPosition = new Map(((positions.data ?? []) as Row[]).map((row) => [row.id as string, row.role_id as string]));
+  const holdsRole = new Set(((posts.data ?? []) as Row[]).map((row) => roleOfPosition.get(row.position_id as string)).filter((id): id is string => Boolean(id)));
+  const roleNeeds = new Map<string, string[]>();
+  for (const row of (needs.data ?? []) as Row[]) roleNeeds.set(row.role_id as string, [...(roleNeeds.get(row.role_id as string) ?? []), row.qualification_id as string]);
+  const asksOfPosition = new Map<string, string[]>();
+  for (const row of (asks.data ?? []) as Row[]) {
+    if (!roleOfPosition.has(row.position_id as string)) continue;
+    asksOfPosition.set(row.position_id as string, [...(asksOfPosition.get(row.position_id as string) ?? []), row.qualification_id as string]);
+  }
+  const asksOfRole = new Map<string, string[][]>();
+  for (const [positionId, list] of asksOfPosition) {
+    const role = roleOfPosition.get(positionId)!;
+    asksOfRole.set(role, [...(asksOfRole.get(role) ?? []), list]);
+  }
+  const fit: Record<string, Fit> = {};
+  for (const roleId of roleIds) {
+    if (holdsRole.has(roleId)) {
+      fit[roleId] = { state: "holds" };
+      continue;
+    }
+    const sets = asksOfRole.get(roleId) ?? [];
+    if (sets.length === 0) {
+      fit[roleId] = { state: "appointed" };
+      continue;
+    }
+    // The post of the role that asks for the least the reader lacks, counting the role's own asks with it.
+    const missing = sets
+      .map((list) => [...new Set([...(roleNeeds.get(roleId) ?? []), ...list])].filter((id) => !have.has(id)))
+      .sort((a, b) => a.length - b.length)[0];
+    fit[roleId] = missing.length === 0 ? { state: "qualified" } : { state: "needs", qualifications: missing.map((id) => qualificationName.get(id) ?? "a qualification") };
+  }
+  return fit;
 }
 
 /**

@@ -3,7 +3,8 @@
 import { useActionState } from "react";
 import { SHIP_NAME_LIMIT, SHIP_NOTE_LIMIT } from "@/lib/ships-form";
 import { shipKinds } from "@/lib/ship-kinds";
-import { deleteTemplate, markShip, offerShip, registerShip, removeShip, saveModelRoles, saveShip, saveStation, saveTemplate, type ShipResult } from "./actions";
+import { TEMPLATE_SOURCE_LIMIT } from "@/lib/crew-form";
+import { copyTemplate, deleteTemplate, markShip, offerShip, registerShip, removeShip, saveModelRoles, saveShip, saveTemplate, type ShipResult } from "./actions";
 
 const untouched: ShipResult = { ok: false, message: "" };
 
@@ -215,8 +216,8 @@ export function OfferForm({ event, ships }: { event: string; ships: { id: string
   );
 }
 
-/** Command: a crew template's name, and whether it is the standard. */
-export function TemplateForm({ model, template }: { model: string; template: { id: string; name: string; isDefault: boolean } | null }) {
+/** Command: a crew template's name, where it comes from, and whether it is the standard. */
+export function TemplateForm({ model, template }: { model: string; template: { id: string; name: string; isDefault: boolean; source: string } | null }) {
   const [result, action, pending] = useActionState(saveTemplate, untouched);
   const at = template?.id ?? `new_${model}`;
   return (
@@ -226,6 +227,13 @@ export function TemplateForm({ model, template }: { model: string; template: { i
       <div className="field">
         <label htmlFor={`template_name_${at}`}>Template</label>
         <input id={`template_name_${at}`} name="name" type="text" defaultValue={template?.name ?? ""} maxLength={60} required autoComplete="off" placeholder="Army support" />
+      </div>
+      <div className="field">
+        <label htmlFor={`template_source_${at}`}>
+          Where it comes from <span className="optional">Optional</span>
+        </label>
+        <p className="hint">A section of the manual, or who approved a variant and when. Shown with the template.</p>
+        <input id={`template_source_${at}`} name="source" type="text" defaultValue={template?.source ?? ""} maxLength={TEMPLATE_SOURCE_LIMIT} autoComplete="off" placeholder="Volume 1, Organisation: Flagship crew" />
       </div>
       <div className="field">
         <label className="choice" htmlFor={`template_default_${at}`}>
@@ -256,38 +264,36 @@ export function DeleteTemplateButton({ template }: { template: string }) {
   );
 }
 
-/** Command: the stations of a template, one line per role, with how many. */
-export function StationsForm({ template, roles, stations }: { template: string; roles: { id: string; name: string }[]; stations: { roleId: string; count: number }[] }) {
-  const [result, action, pending] = useActionState(saveStation, untouched);
-  const countOf = new Map(stations.map((station) => [station.roleId, station.count]));
+/** Command: a new variant for a model, copied from any template of any model. */
+export function CopyTemplateForm({ model, sources }: { model: string; sources: { id: string; label: string }[] }) {
+  const [result, action, pending] = useActionState(copyTemplate, untouched);
   return (
-    <form action={action} className="stations-form" key={result.stamp ?? 0}>
-      <input type="hidden" name="template" value={template} />
-      <div className="field field-short">
-        <label htmlFor={`station_role_${template}`}>Station</label>
-        <select id={`station_role_${template}`} name="role" required defaultValue="">
+    <form action={action} className="fields copy-form" key={result.stamp ?? 0}>
+      <input type="hidden" name="model" value={model} />
+      <div className="field">
+        <label htmlFor={`copy_from_${model}`}>Copy from</label>
+        <select id={`copy_from_${model}`} name="from" required defaultValue="">
           <option value="" disabled>
-            Choose a role
+            Choose a template
           </option>
-          {roles.map((role) => (
-            <option key={role.id} value={role.id}>
-              {role.name}
-              {countOf.has(role.id) ? ` (${countOf.get(role.id)} now)` : ""}
+          {sources.map((source) => (
+            <option key={source.id} value={source.id}>
+              {source.label}
             </option>
           ))}
         </select>
       </div>
-      <div className="field field-short">
-        <label htmlFor={`station_count_${template}`}>How many</label>
-        <input id={`station_count_${template}`} name="count" type="number" min={0} max={99} defaultValue={1} required />
+      <div className="field">
+        <label htmlFor={`copy_name_${model}`}>Call the copy</label>
+        <input id={`copy_name_${model}`} name="name" type="text" maxLength={60} required autoComplete="off" placeholder="Boarding" />
       </div>
       <div className="form-end">
         <button className="button button-quiet" type="submit" disabled={pending}>
-          {pending ? "Saving" : "Set the station"}
+          {pending ? "Copying" : "Copy the template"}
         </button>
         <Result result={result} />
       </div>
-      <p className="hint">Set a role to 0 to take its station away.</p>
+      <p className="hint">The departments, stations and stand-ins come across as a new variant of this model, to edit from there.</p>
     </form>
   );
 }

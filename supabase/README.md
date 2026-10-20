@@ -32,6 +32,7 @@ or let someone promote themselves.
 | `migrations/…_training_records.sql` | Training records: each qualification as a course of lessons, signed off by instructors, with the qualification awarded once every lesson is passed |
 | `migrations/…_ship_register.sql` | The ship register: models, crew templates by role, each member's hulls with a ready mark and a private note, what an event's plan needs by model, and what owners offer |
 | `migrations/…_ship_board.sql` | The fleet board: ship roles (an admin's sheet) and each model's roles with one primary (command's); a hull in claim, a third mark beside ready and not ready; a first classification of the models |
+| `migrations/…_crew_templates_depth.sql` | Crew templates in depth: departments per template, stations with a name, a minimum to sail, a brief and a stand-in, and a source line; the Idris as Volume 1 sets it out |
 | `migrations/…_quick_wins.sql` | Calendar feed keys and the feed view, the monthly returns and the job that writes them, and the terms of secondary duties |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
@@ -174,7 +175,9 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   their ships marked not ready and their offers withdrawn. A plan's ship picked from the models is
   named by its model and follows a rename. Models are an admin's, crew templates and their
   stations command's; one template is the standard for each model and stays while the model
-  does, and a station stays with its template. Ship roles are an admin's, and a role some model
+  does, and a station stays with its template, as does a department. A station's department and
+  its stand-in are of its own template (never itself), its minimum to sail is within its count,
+  and a role may hold two stations of a template told apart by name. Ship roles are an admin's, and a role some model
   holds is not removed; which roles a model fills is command's, and the database keeps exactly one
   primary per model, handing it on when the primary is taken away.
 - **A calendar feed key is the member's own, and the feed is read by nobody in particular.**

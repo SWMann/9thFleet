@@ -4,6 +4,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { refused, turnedDown, type Attempt } from "@/lib/activity";
 import { explainRefusal } from "@/lib/refusals";
+import { HIDDEN, readCrew, TEMPLATE_SOURCE_LIMIT } from "@/lib/crew-form";
 import { readShip } from "@/lib/ships-form";
 import { createClient } from "@/lib/supabase/server";
 
@@ -211,13 +212,16 @@ export async function saveTemplate(_previous: ShipResult, formData: FormData): P
   const model = uuid(formData.get("model"));
   const template = uuid(formData.get("template"));
   const name = text(formData.get("name"));
+  const source = text(formData.get("source"));
   const makeDefault = formData.get("default") === "on";
   if (!model) return notThisPage(session, "ship.templates");
   if (name.length === 0 || name.length > 60) return { ok: false, message: "Give the template a name of up to 60 characters." };
+  if (source.length > TEMPLATE_SOURCE_LIMIT) return { ok: false, message: `Keep where it comes from under ${TEMPLATE_SOURCE_LIMIT} characters.` };
+  if (HIDDEN.test(source)) return { ok: false, message: "Where it comes from has a hidden character in it. Type it again." };
   // The name first, so that a name already taken changes nothing else.
   const saved = template
-    ? await session.supabase.from("crew_templates").update({ name }).eq("id", template).eq("model_id", model).select("id")
-    : await session.supabase.from("crew_templates").insert({ model_id: model, name }).select("id");
+    ? await session.supabase.from("crew_templates").update({ name, source }).eq("id", template).eq("model_id", model).select("id")
+    : await session.supabase.from("crew_templates").insert({ model_id: model, name, source }).select("id");
   if (saved.error) {
     const shown = saved.error.code === "23505" ? "This model already has a template of that name." : explainRefusal(saved.error, "That could not be saved. Command keeps the crew templates.");
     return { ok: false, message: await turnedDown(session.supabase, "ship.templates", saved.error, shown) };
@@ -250,26 +254,229 @@ export async function deleteTemplate(_previous: ShipResult, formData: FormData):
   return { ok: true, message: "Template removed.", stamp: Date.now() };
 }
 
-/** Command: set a station on a template: a role and how many of it. A count of zero removes it. */
-export async function saveStation(_previous: ShipResult, formData: FormData): Promise<ShipResult> {
+/**
+ * Command: the whole crew of a template, as the editor sends it. The server
+ * works out what changed and writes only that: departments and stations
+ * removed, then changed, then added, then the stand-ins that point at new
+ * stations. Two stations trading names, or two departments, are given a
+ * passing name first so that the database's uniqueness rule is never tripped
+ * on the way. Each step asks the database for the row back, so a quiet
+ * refusal is a refusal. The steps are separate requests, so a failure midway
+ * leaves the crew part-saved; the page then shows what the database holds.
+ */
+export async function saveCrew(_previous: ShipResult, formData: FormData): Promise<ShipResult> {
   const session = await signedIn();
   if (!session) return NOT_CONNECTED;
   const template = uuid(formData.get("template"));
-  const role = uuid(formData.get("role"));
-  const count = text(formData.get("count"));
-  if (!template || !role) return notThisPage(session, "ship.templates");
-  if (!/^\d{1,2}$/.test(count)) return { ok: false, message: "How many is a whole number from 0 to 99." };
-  const n = Number(count);
-  const result =
-    n === 0
-      ? await session.supabase.from("crew_template_stations").delete().eq("template_id", template).eq("role_id", role).select("id")
-      : await (async () => {
-          const changed = await session.supabase.from("crew_template_stations").update({ count: n }).eq("template_id", template).eq("role_id", role).select("id");
-          if (changed.error || (changed.data && changed.data.length > 0)) return changed;
-          return session.supabase.from("crew_template_stations").insert({ template_id: template, role_id: role, count: n }).select("id");
-        })();
-  if (result.error) return { ok: false, message: await turnedDown(session.supabase, "ship.templates", result.error, explainRefusal(result.error, "That could not be saved. Command keeps the crew templates.")) };
-  if (n > 0 && (!result.data || result.data.length === 0)) return { ok: false, message: await refused(session.supabase, "ship.templates", "That could not be saved. Command keeps the crew templates.") };
+  const raw = formData.get("crew");
+  if (!template || typeof raw !== "string") return notThisPage(session, "ship.templates");
+  const read = readCrew(raw);
+  if ("problem" in read) return { ok: false, message: read.problem };
+  const { crew } = read;
+  const db = session.supabase;
+  const notSaved = "The crew could not be saved. Command keeps the crew templates.";
+  const partWay = "Part of the crew may have been saved; the page shows what the database holds.";
+  const fail = async (error: { message: string; code?: string } | null, begun: boolean) => {
+    refresh();
+    const shown = error?.code === "23505" ? "Two stations of one role, or two departments, share a name. Give each its own." : error ? explainRefusal(error, notSaved) : notSaved;
+    const message = error ? await turnedDown(db, "ship.templates", error, shown) : await refused(db, "ship.templates", notSaved);
+    return { ok: false, message: begun ? `${message} ${partWay}` : message, stamp: Date.now() };
+  };
+  const ok = (result: { data: unknown; error: { message: string; code?: string } | null }) => !result.error && Array.isArray(result.data) && result.data.length > 0;
+
+  const [haveGroups, haveStations] = await Promise.all([
+    db.from("crew_template_groups").select("id, name, sort_order").eq("template_id", template),
+    db.from("crew_template_stations").select("id, role_id, name, count, minimum, group_id, brief, stand_in_id, sort_order").eq("template_id", template),
+  ]);
+  if (haveGroups.error) return fail(haveGroups.error, false);
+  if (haveStations.error) return fail(haveStations.error, false);
+  type GroupRow = { id: string; name: string; sort_order: number };
+  type StationRow = { id: string; role_id: string; name: string; count: number; minimum: number; group_id: string | null; brief: string; stand_in_id: string | null; sort_order: number };
+  const groupNow = new Map(((haveGroups.data ?? []) as GroupRow[]).map((row) => [row.id, row]));
+  const stationNow = new Map(((haveStations.data ?? []) as StationRow[]).map((row) => [row.id, row]));
+  // An id the editor sends that is not this template's is treated as new, so nothing of another template is touched.
+  const groups = crew.groups.map((group) => ({ ...group, id: group.id && groupNow.has(group.id) ? group.id : null }));
+  const stations = crew.stations.map((station) => ({ ...station, id: station.id && stationNow.has(station.id) ? station.id : null }));
+  let begun = false;
+
+  // Removals first, so that a name freed can be used again below.
+  for (const id of stationNow.keys()) {
+    if (stations.some((station) => station.id === id)) continue;
+    begun = true;
+    const gone = await db.from("crew_template_stations").delete().eq("id", id).select("id");
+    if (!ok(gone)) return fail(gone.error, begun);
+    stationNow.delete(id);
+  }
+  for (const id of groupNow.keys()) {
+    if (groups.some((group) => group.id === id)) continue;
+    begun = true;
+    const gone = await db.from("crew_template_groups").delete().eq("id", id).select("id");
+    if (!ok(gone)) return fail(gone.error, begun);
+    groupNow.delete(id);
+  }
+
+  // A passing name for a department or station whose new name is one another still holds.
+  const passing = (id: string) => `~${id.slice(0, 8)}`;
+  const groupNamesNow = new Map([...groupNow.values()].map((row) => [row.name.toLowerCase(), row.id]));
+  for (const group of groups) {
+    if (!group.id) continue;
+    const holder = groupNamesNow.get(group.name.toLowerCase());
+    if (holder && holder !== group.id) {
+      begun = true;
+      const moved = await db.from("crew_template_groups").update({ name: passing(holder) }).eq("id", holder).select("id");
+      if (!ok(moved)) return fail(moved.error, begun);
+      groupNow.get(holder)!.name = passing(holder);
+    }
+  }
+  const stationKeysNow = new Map([...stationNow.values()].map((row) => [`${row.role_id}:${row.name.toLowerCase()}`, row.id]));
+  for (const station of stations) {
+    const holder = stationKeysNow.get(`${station.roleId}:${station.name.toLowerCase()}`);
+    if (holder && holder !== station.id) {
+      begun = true;
+      const moved = await db.from("crew_template_stations").update({ name: passing(holder) }).eq("id", holder).select("id");
+      if (!ok(moved)) return fail(moved.error, begun);
+      stationNow.get(holder)!.name = passing(holder);
+    }
+  }
+
+  // Departments: changed, then added, so that stations can point at them.
+  const groupIdOf = new Map<string, string>();
+  for (const group of groups) {
+    if (group.id) {
+      const now = groupNow.get(group.id)!;
+      if (now.name !== group.name || now.sort_order !== group.sortOrder) {
+        begun = true;
+        const saved = await db.from("crew_template_groups").update({ name: group.name, sort_order: group.sortOrder }).eq("id", group.id).select("id");
+        if (!ok(saved)) return fail(saved.error, begun);
+      }
+      groupIdOf.set(group.key, group.id);
+    }
+  }
+  for (const group of groups) {
+    if (group.id) continue;
+    begun = true;
+    const saved = await db.from("crew_template_groups").insert({ template_id: template, name: group.name, sort_order: group.sortOrder }).select("id");
+    if (!ok(saved)) return fail(saved.error, begun);
+    groupIdOf.set(group.key, (saved.data as { id: string }[])[0].id);
+  }
+
+  // Stations: changed, then added. A stand-in that already has an id is set here; one pointing at a new station waits.
+  const stationIdOf = new Map<string, string>();
+  for (const station of stations) if (station.id) stationIdOf.set(station.key, station.id);
+  const fieldsOf = (station: (typeof stations)[number]) => ({
+    role_id: station.roleId,
+    name: station.name,
+    count: station.count,
+    minimum: station.minimum,
+    group_id: station.groupKey ? (groupIdOf.get(station.groupKey) ?? null) : null,
+    brief: station.brief,
+    sort_order: station.sortOrder,
+  });
+  const standInOf = (station: (typeof stations)[number]) => (station.standInKey ? (stationIdOf.get(station.standInKey) ?? null) : null);
+  for (const station of stations) {
+    if (!station.id) continue;
+    const now = stationNow.get(station.id)!;
+    const fields = fieldsOf(station);
+    const standIn = standInOf(station);
+    const changed =
+      now.role_id !== fields.role_id ||
+      now.name !== fields.name ||
+      now.count !== fields.count ||
+      now.minimum !== fields.minimum ||
+      now.group_id !== fields.group_id ||
+      now.brief !== fields.brief ||
+      now.sort_order !== fields.sort_order ||
+      now.stand_in_id !== standIn;
+    if (!changed) continue;
+    begun = true;
+    const saved = await db.from("crew_template_stations").update({ ...fields, stand_in_id: standIn }).eq("id", station.id).select("id");
+    if (!ok(saved)) return fail(saved.error, begun);
+  }
+  for (const station of stations) {
+    if (station.id) continue;
+    begun = true;
+    const saved = await db.from("crew_template_stations").insert({ template_id: template, ...fieldsOf(station), stand_in_id: standInOf(station) }).select("id");
+    if (!ok(saved)) return fail(saved.error, begun);
+    stationIdOf.set(station.key, (saved.data as { id: string }[])[0].id);
+  }
+  // Stand-ins that point at a station added above, now that it has an id. The rest were set with their stations.
+  for (const station of stations) {
+    if (!station.standInKey) continue;
+    const target = stations.find((other) => other.key === station.standInKey);
+    if (!target || target.id) continue;
+    begun = true;
+    const saved = await db.from("crew_template_stations").update({ stand_in_id: stationIdOf.get(target.key) ?? null }).eq("id", stationIdOf.get(station.key)!).select("id");
+    if (!ok(saved)) return fail(saved.error, begun);
+  }
   refresh();
-  return { ok: true, message: n === 0 ? "Station removed." : "Saved.", stamp: Date.now() };
+  return { ok: true, message: "Saved.", stamp: Date.now() };
+}
+
+/** Command: a new variant for a model, copied from any template: its departments, stations and stand-ins. */
+export async function copyTemplate(_previous: ShipResult, formData: FormData): Promise<ShipResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const model = uuid(formData.get("model"));
+  const from = uuid(formData.get("from"));
+  const name = text(formData.get("name"));
+  if (!model || !from) return notThisPage(session, "ship.templates");
+  if (name.length === 0 || name.length > 60) return { ok: false, message: "Give the new template a name of up to 60 characters." };
+  const db = session.supabase;
+  const notCopied = "The template could not be copied. Command keeps the crew templates.";
+  const [source, groups, stations] = await Promise.all([
+    db.from("crew_templates").select("id, name, model_id").eq("id", from),
+    db.from("crew_template_groups").select("id, name, sort_order").eq("template_id", from),
+    db.from("crew_template_stations").select("id, role_id, name, count, minimum, group_id, brief, stand_in_id, sort_order").eq("template_id", from),
+  ]);
+  if (source.error || groups.error || stations.error) return { ok: false, message: await turnedDown(db, "ship.templates", (source.error ?? groups.error ?? stations.error)!, notCopied) };
+  if (!source.data || source.data.length === 0) return notThisPage(session, "ship.templates");
+  const sourceModel = await db.from("ship_models").select("name").eq("id", source.data[0].model_id as string);
+  const fromWords = `Copied from the ${sourceModel.data?.[0]?.name ?? "model"}'s ${source.data[0].name as string} template`;
+  const made = await db.from("crew_templates").insert({ model_id: model, name, source: fromWords }).select("id");
+  if (made.error) {
+    const shown = made.error.code === "23505" ? "This model already has a template of that name." : explainRefusal(made.error, notCopied);
+    return { ok: false, message: await turnedDown(db, "ship.templates", made.error, shown) };
+  }
+  if (!made.data || made.data.length === 0) return { ok: false, message: await refused(db, "ship.templates", notCopied) };
+  const to = made.data[0].id as string;
+  const undo = async (error: { message: string; code?: string } | null) => {
+    const removed = await db.from("crew_templates").delete().eq("id", to).select("id");
+    refresh();
+    const message = error ? await turnedDown(db, "ship.templates", error, explainRefusal(error, notCopied)) : await refused(db, "ship.templates", notCopied);
+    const left = removed.error || !removed.data || removed.data.length === 0 ? ` A part-made template called ${name} was left behind; remove it.` : "";
+    return { ok: false, message: `${message}${left}`, stamp: Date.now() };
+  };
+  const groupIdOf = new Map<string, string>();
+  for (const group of groups.data ?? []) {
+    const saved = await db.from("crew_template_groups").insert({ template_id: to, name: group.name as string, sort_order: group.sort_order as number }).select("id");
+    if (saved.error || !saved.data || saved.data.length === 0) return undo(saved.error);
+    groupIdOf.set(group.id as string, saved.data[0].id as string);
+  }
+  const stationIdOf = new Map<string, string>();
+  for (const station of stations.data ?? []) {
+    const saved = await db
+      .from("crew_template_stations")
+      .insert({
+        template_id: to,
+        role_id: station.role_id as string,
+        name: station.name as string,
+        count: station.count as number,
+        minimum: station.minimum as number,
+        group_id: station.group_id ? (groupIdOf.get(station.group_id as string) ?? null) : null,
+        brief: station.brief as string,
+        sort_order: station.sort_order as number,
+      })
+      .select("id");
+    if (saved.error || !saved.data || saved.data.length === 0) return undo(saved.error);
+    stationIdOf.set(station.id as string, saved.data[0].id as string);
+  }
+  for (const station of stations.data ?? []) {
+    if (!station.stand_in_id) continue;
+    const standIn = stationIdOf.get(station.stand_in_id as string);
+    if (!standIn) continue;
+    const saved = await db.from("crew_template_stations").update({ stand_in_id: standIn }).eq("id", stationIdOf.get(station.id as string)!).select("id");
+    if (saved.error || !saved.data || saved.data.length === 0) return undo(saved.error);
+  }
+  refresh();
+  return { ok: true, message: `Copied as ${name}.`, stamp: Date.now() };
 }

@@ -281,9 +281,21 @@ correct any entry.
   per model: the first role given is it, a new primary steps the old down, and taking the primary
   away hands it to the first of the rest.
 - **Crew templates** (`/admin/ships`, command). Each model has a standard template and may have
-  variants: the stations aboard, each a role of the order of battle with a count, as Volume 1 lays
-  the Idris out. The seed gives the Idris its 25, the corvettes and gunships their escort crews,
-  and single-seat fighters a pilot. `lib/ships.ts` reads them.
+  variants. A template is a crew as a captain would brief it: departments of command's own
+  choosing (`crew_template_groups`), and stations, each a role of the order of battle with a
+  count, a name of its own where the role alone is vague (Turret gunner and Remote weapons
+  operator are both Gunner stations), how many of it are needed to sail (the minimum watch bill),
+  a line on what it does aboard this model, and a stand-in (another station of the same template
+  that covers it when empty). A template says where it comes from: a section of the manual, or who
+  approved a variant. The seed gives the Idris its 25 in seven departments with Volume 1's eight to
+  sail and the Navigator as the backup helm, the corvettes and gunships their escort crews, and
+  single-seat fighters a pilot. Command edits a template on one screen (`TemplateEditor.tsx`,
+  which sends the whole crew; `lib/crew-form.ts` reads and checks it, with tests; `saveCrew` in
+  `app/ships/actions.ts` works out what changed), and copies any template into a model as a new
+  variant. `lib/ships.ts` reads them. The model's page shows the crew by department with the
+  seats and the watch bill, and tells the reader which stations they could fill: they hold a post
+  of the role, they hold the qualifications a post of it asks for, what they would still need, or
+  the role is filled by appointment alone (`CrewTemplateView.tsx`, `fitFor` in `lib/ships.ts`).
 - **Your ships.** A member's own hulls are on their record under a Ships tab
   (`app/profile/YourShips.tsx`): the register form, and each hull with its marks, Change and
   Remove. Command has the fleet's own hulls, a form to register for anyone, and every serving
@@ -529,7 +541,7 @@ to be tracked.
 | The site's icons, and the symbol for each kind of unit | `components/Icon.tsx` and `components/UnitSymbol.tsx`. An icon goes with words and never stands in for them |
 | Routine orders | `app/routine-orders/`, the draft's wording in `lib/orders-form.ts`, and what is read for it in `lib/routine-orders.ts` |
 | Training | `app/training/` and `app/admin/training/`, what is read in `lib/training.ts`, and the lesson form in `lib/training-form.ts` |
-| Ships | `app/ships/` (the board and the model pages), `app/profile/YourShips.tsx`, `app/admin/ships/`, `components/ships/HullCard.tsx`, what is read in `lib/ships.ts`, the board's sums in `lib/ships-board.ts`, the kinds in `lib/ship-kinds.ts`, the form in `lib/ships-form.ts`, and the Ships tab in `app/operations/[id]/page.tsx` |
+| Ships | `app/ships/` (the board and the model pages), `app/profile/YourShips.tsx`, `app/admin/ships/` (with the crew editor), `components/ships/` (the hull card and the crew view), what is read in `lib/ships.ts`, the board's sums in `lib/ships-board.ts`, the kinds in `lib/ship-kinds.ts`, the forms in `lib/ships-form.ts` and `lib/crew-form.ts`, and the Ships tab in `app/operations/[id]/page.tsx` |
 | Calendar feed | `app/calendar/[key]/route.ts`, the file in `lib/calendar.ts`, the key in `lib/feed.ts` and `app/profile/FeedBox.tsx` |
 | Record PDF | `app/profile/record.pdf/route.ts` and `lib/record-pdf.tsx` |
 | Lessons log | `app/operations/lessons/` and `lib/lessons.ts` |
