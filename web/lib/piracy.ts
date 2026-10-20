@@ -31,7 +31,7 @@ export type PiracyReport = {
   handledBy: string | null;
   handledAt: string | null;
   outcomeNote: string;
-  /** The Response event drafted from it, while that event is still there. */
+  /** The Quick reaction event drafted from it, while that event is still there. */
   event: { id: string; title: string } | null;
   /** The hostile-list entries started from it. */
   entries: ReportEntry[];

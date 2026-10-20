@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { RichField } from "@/components/rich/RichField";
 import type { EditRecord, Field, Option } from "@/lib/structure";
 import { removeRecord, saveNeeds, saveRecord, type EditResult } from "./actions";
@@ -49,21 +49,35 @@ export function Editor({
         return (
           <div key={record.id}>
             {heading ? <h3 className="record-group">{heading}</h3> : null}
-            <details className="record">
-              <summary>
-                <strong>{record.title}</strong>
-                <span>{record.note}</span>
-              </summary>
-              <div className="record-body">
-                <RecordForm sheet={sheet} fields={fields} record={record} />
-                {sheet.needsAbout ? <NeedsForm sheet={sheet} record={record} qualifications={qualifications} /> : null}
-                <RemoveForm sheet={sheet} record={record} />
-              </div>
-            </details>
+            <Record sheet={sheet} fields={fields} record={record} qualifications={qualifications} />
           </div>
         );
       })}
     </>
+  );
+}
+
+/**
+ * One record, folded. Its forms are drawn only once it is opened: a sheet
+ * of a few hundred records, each with several lists of every role, would
+ * otherwise be a page of hundreds of thousands of choices.
+ */
+function Record({ sheet, fields, record, qualifications }: { sheet: SheetInfo; fields: Field[]; record: EditRecord; qualifications: Option[] }) {
+  const [opened, setOpened] = useState(false);
+  return (
+    <details className="record" onToggle={(event) => (event.currentTarget.open ? setOpened(true) : undefined)}>
+      <summary>
+        <strong>{record.title}</strong>
+        <span>{record.note}</span>
+      </summary>
+      {opened ? (
+        <div className="record-body">
+          <RecordForm sheet={sheet} fields={fields} record={record} />
+          {sheet.needsAbout ? <NeedsForm sheet={sheet} record={record} qualifications={qualifications} /> : null}
+          <RemoveForm sheet={sheet} record={record} />
+        </div>
+      ) : null}
+    </details>
   );
 }
 

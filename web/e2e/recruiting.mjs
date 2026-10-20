@@ -1970,7 +1970,7 @@ try {
     assert.match(await strike.innerText(), /Opens at Stage 3[\s\S]*Planned[\s\S]*Deliberate attack on a known hostile asset[\s\S]*At least\s+Two ships with air[\s\S]*Tasks\s+\d+ live, \d+ later/);
     assert.match(await page.locator(".type-card", { has: page.getByRole("link", { name: "Landing", exact: true }) }).innerText(), /no tasks of its own yet/);
     assert.equal(await page.locator(".situation-line").count(), 16);
-    assert.match(await page.locator(".situation-line", { hasText: "Casualty" }).innerText(), /Called by\s+Medic; owned by[\s\S]*3 in the drill/);
+    assert.match((await page.locator(".situation-line", { hasText: "Casualty" }).innerText()).replace(/\s+/g, " "), /Called by Medic ; owned by Medic for the Lead Medic · 3 in the drill/);
     await shot("operation-types");
 
     await page.getByRole("link", { name: "Patrol", exact: true }).click();
@@ -4004,7 +4004,7 @@ try {
     assert.match(await cardText("BLACKSUN"), /Two ships jumped my Prospector/);
     assert.doesNotMatch(await cardText("BLACKSUN"), /Started from|piracy report sent/i);
   });
-  await check("command drafts a Response event from a report, which starts from where it happened", async () => {
+  await check("command drafts a Quick reaction event from a report, which starts from where it happened", async () => {
     await signInAs(jo);
     await openPiracy();
     await piracyCard("Lost_Miner").getByRole("link", { name: "Draft a Quick reaction event" }).click();

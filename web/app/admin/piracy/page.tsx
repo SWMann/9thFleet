@@ -155,7 +155,7 @@ async function Reports() {
               </Link>
               {report.event ? null : (
                 <Link className="button button-quiet" href={`/operations/new?report=${report.id}`}>
-                  Draft a Response event
+                  Draft a Quick reaction event
                 </Link>
               )}
               <CloseForms id={report.id} from={report.reporterHandle} />

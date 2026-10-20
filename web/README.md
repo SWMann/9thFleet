@@ -366,7 +366,7 @@ addresses of a screenshot or a clip. A report can be marked as happening now.
   report arrives. Command is told on the admin overview and at the top of the operations page, so
   learns of one the next time one of them opens either.
 - **Command alone reads a report,** at `/admin/piracy`. From one, command starts a hostile-list
-  entry or drafts a Response event, marks the report handled or dismisses it with a word of what
+  entry or drafts a Quick reaction event, marks the report handled or dismisses it with a word of what
   came of it, reopens it, or deletes it.
 - **A stranger's words stay plain words.** A report is shown as the text that was typed: nothing
   in it is formatting or a link. Only the web addresses given as evidence are linked, each checked

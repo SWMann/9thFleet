@@ -113,7 +113,7 @@ export function readReport(get: (name: string) => string, today: string): { fiel
 }
 
 /**
- * What a Response event drafted from a report starts with: where it happened,
+ * What a Quick reaction event drafted from a report starts with: where it happened,
  * and nothing about who sent the report. An event is read by the whole serving
  * fleet once it is announced, and a report by command alone, so naming the
  * sender to the fleet is command's choice to make, not the form's.

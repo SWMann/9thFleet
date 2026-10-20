@@ -905,7 +905,7 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
         return line("operations", `${actor} reopened a piracy report`);
       }
       if (changed("event_id")) {
-        return line("operations", now.event_id ? `${actor} drafted ${names.event(now.event_id)} from a piracy report` : "The Response event drafted from a piracy report was deleted");
+        return line("operations", now.event_id ? `${actor} drafted ${names.event(now.event_id)} from a piracy report` : "The Quick reaction event drafted from a piracy report was deleted");
       }
       if (changed("handled_by") && !now.handled_by) {
         return line("operations", "The member who had handled a piracy report was deleted, and their name was cleared from it");

@@ -876,7 +876,7 @@ export function attention(fleet: Fleet, tier: Tier): Attention[] {
       const now = reports.filter((report) => report.urgent).length;
       list.push({
         what: `${reports.length} piracy ${reports.length === 1 ? "report waits" : "reports wait"} for command${now > 0 ? `, ${now} marked as happening now` : ""}`,
-        detail: "Anyone may send one. Start a hostile-list entry or a Response event from it, then mark it handled or dismiss it.",
+        detail: "Anyone may send one. Start a hostile-list entry or a Quick reaction event from it, then mark it handled or dismiss it.",
         href: "/admin/piracy",
       });
     }

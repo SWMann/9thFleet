@@ -115,7 +115,7 @@ test("evidence is web addresses, one to a line", () => {
   assert.match(problem({ evidence: `https://example.com/${String.fromCharCode(0x202e)}gnp.exe` }) ?? "", /plain web address/);
 });
 
-test("a Response event starts from where it happened, and does not name who sent the report", () => {
+test("a Quick reaction event starts from where it happened, and does not name who sent the report", () => {
   assert.deepEqual(responseStart({ location: "Stanton, the ring at Yela" }), {
     title: "Piracy at Stanton, the ring at Yela",
     summary: "Answering a piracy report sent to the fleet.",
