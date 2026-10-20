@@ -959,7 +959,7 @@ try {
     assert.ok((await menuLabels()).includes("Fleet admin"), "the menu does not offer the admin pages");
     await page.goto(`${site}/admin`);
     await leadIs(/Stage 1: Cadre\. 3 active/);
-    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports", "Syllabus", "Crew templates", "Returns"]);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports", "Syllabus", "Ships", "Returns"]);
     assert.equal(await stat("Events in 30 days"), "1 0 coming up");
     assert.match(await stat("Average turnout"), /^67% /);
 
@@ -1022,7 +1022,7 @@ try {
     await signInAs(founder);
     await page.goto(`${site}/admin`);
     await leadIs(/Stage 1: Cadre/);
-    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports", "Syllabus", "Crew templates", "Returns", "Structure", "Logs"]);
+    assert.deepEqual(await adminTabs(), ["Overview", "People", "Recruiting", "Operations", "Piracy reports", "Syllabus", "Ships", "Returns", "Structure", "Logs"]);
     await adminTab("Logs").click();
     await headingIs("Logs");
     await page.locator(".log:visible").first().waitFor();
@@ -4184,65 +4184,105 @@ try {
   console.log("The ship register");
   const hullCard = (name) => page.locator(".hull:visible", { has: page.locator(".hull-name", { hasText: new RegExp(`^${name}$`) }) });
   const shipRow = (name) => one("select * from public.ships where name = $1", [name]);
+  const boardRow = (model) => page.locator(".data-board:visible tbody tr", { has: page.locator("th a", { hasText: new RegExp(`^${model}$`) }) });
+  const rowWords = async (model) => (await boardRow(model).innerText()).replace(/\s+/g, " ");
 
-  await check("the register is for the serving fleet, and a member registers their own ships and marks them ready", async () => {
+  await check("the board is for the serving fleet; a member registers their own ships from their record and marks them, and the board sums them by model", async () => {
     await signInAs(nix);
     await page.goto(`${site}/ships`);
-    await leadIs(/The register is for the serving fleet\./);
+    await leadIs(/The fleet board is for the serving fleet\./);
     await signInAs(pat);
-    assert.ok((await menuLabels()).includes("Ships"), "the menu offers the register");
+    assert.ok((await menuLabels()).includes("Ships"), "the menu offers the board");
     await page.goto(`${site}/ships`);
-    await headingIs("The register");
+    await headingIs("The fleet board");
     await leadIs(/Nothing is registered yet\./);
+    await page.getByRole("link", { name: "Register a ship" }).click();
+    await page.waitForURL(`${site}/profile?tab=ships`);
+    await recordTab("Ships");
     const form = page.locator("form.ship-form:visible").last();
-    await form.getByLabel("Model").selectOption({ label: "Gladius (crew 1)" });
+    // The models are offered by kind, with the maker and crew.
+    assert.deepEqual(await form.getByLabel("Model").locator("optgroup").evaluateAll((groups) => groups.slice(0, 3).map((group) => group.label)), ["Capital ships", "Frigates", "Corvettes"]);
+    await form.getByLabel("Model").selectOption({ label: "Gladius (Aegis Dynamics, crew 1)" });
     await form.getByLabel("Name").fill("Kestrel");
     await form.getByLabel(/^Note/).fill("Kept at Area18.");
     await form.getByRole("button", { name: "Register the ship" }).click();
     await told(form, "Registered.");
     const kestrel = await shipRow("Kestrel");
     assert.equal(kestrel.owner_id, patId);
-    assert.equal(kestrel.ready, true);
+    assert.deepEqual([kestrel.ready, kestrel.in_claim], [true, false]);
     assert.equal((await one("select note from public.ship_notes where ship_id = $1", [kestrel.id])).note, "Kept at Area18.");
     // A member is not offered an owner to choose.
     assert.equal(await form.getByLabel("Owner").count(), 0);
     // A second, marked not ready from the start.
     await page.reload();
+    await recordTab("Ships");
     const again = page.locator("form.ship-form:visible").last();
-    await again.getByLabel("Model").selectOption({ label: "Pisces C8X (crew 1 to 3)" });
+    await again.getByLabel("Model").selectOption({ label: "Pisces C8X (Anvil Aerospace, crew 1 to 3)" });
     await again.getByLabel("Name").fill("Tender");
     await again.getByLabel(/Ready/).uncheck();
     await again.getByRole("button", { name: "Register the ship" }).click();
     await told(again, "Registered.");
     await page.reload();
-    await leadIs(/2 hulls on the register, 1 of 2 ready\. 2 are yours\./);
+    await recordTab("Ships");
+    assert.match(await page.locator('nav[aria-label="Parts of your record"]:visible').innerText(), /2 hulls/);
+    assert.match(await page.locator("section[aria-labelledby='your-ships']:visible .intro").innerText(), /^2 hulls, 1 of 2 ready\./);
     assert.match(await hullCard("Kestrel").innerText(), /Ready/);
     assert.match(await hullCard("Kestrel").innerText(), /Kept at Area18\./);
     assert.match(await hullCard("Tender").innerText(), /Not ready/);
-    // The strength tiles count by kind.
-    const tiles = (await page.locator(".strength-tiles:visible").innerText()).replace(/\s+/g, " ");
-    assert.match(tiles, /1 of 1 fighter ready/);
-    assert.match(tiles, /0 of 1 runabout ready/);
-    await shot("ships-register");
+    await shot("profile-ships");
     // Marked ready from its line, and dated.
     await hullCard("Tender").getByRole("button", { name: "Mark ready" }).click();
     await hullCard("Tender").locator(".chip", { hasText: /^Ready$/ }).waitFor();
     assert.equal((await shipRow("Tender")).ready, true);
+    // The board: the tiles count by kind, the seats line counts aboard what is ready, and each model is a row.
+    await page.goto(`${site}/ships`);
+    await leadIs(/2 hulls on the register, 2 of 2 ready\. 2 are yours\./);
+    const tiles = (await page.locator(".strength-tiles:visible").innerText()).replace(/\s+/g, " ");
+    assert.match(tiles, /1 of 1 fighter ready/);
+    assert.match(tiles, /1 of 1 runabout ready/);
+    assert.match(await page.locator(".seats-line:visible").innerText(), /^1 seat aboard what is ready, by the models with stations set; \d+ serving\.$/);
+    assert.match(await rowWords("Gladius"), /^Gladius Aegis Dynamics\. Escort, Training Fighter 1 1 1 ready 1 Starman Recruit Pat Ortega$/);
+    assert.match(await rowWords("Pisces C8X"), /^Pisces C8X Anvil Aerospace\. Assault transport, Training Runabout 1 1 1 ready No stations set Starman Recruit Pat Ortega$/);
+    await shot("ships-board");
   });
-  await check("the fleet sees each other's hulls without their notes; command sees the notes and registers the fleet's", async () => {
+  await check("the fleet sees each other's hulls on the board and the model's page, without notes or tools; command registers the fleet's under Fleet admin", async () => {
     await signInAs(sam);
     await page.goto(`${site}/ships`);
-    await headingIs("The register");
+    await headingIs("The fleet board");
+    assert.match(await rowWords("Gladius"), /Pat Ortega/);
+    await boardRow("Gladius").getByRole("link", { name: "Gladius" }).click();
+    await headingIs("Gladius");
+    await leadIs(/Fighter by Aegis Dynamics, crew of 1\. Escort, training\./);
     const card = hullCard("Kestrel");
     assert.match(await card.innerText(), /Pat Ortega/);
     assert.doesNotMatch(await card.innerText(), /Kept at Area18/);
-    assert.equal(await card.getByRole("button", { name: /Mark/ }).count(), 0, "another member's ship has no tools");
+    assert.equal(await card.getByRole("button").count(), 0, "another member's ship has no tools");
+    assert.match((await page.locator("section[aria-labelledby='crew']:visible").innerText()).replace(/\s+/g, " "), /Standard 1 × Fighter Pilot \(1 seat\)/);
+    // The models index lists every model by kind, narrowed by role; a model's page has its crew as Volume 1 sets it.
+    await page.goto(`${site}/ships/models`);
+    await headingIs("The models");
+    await leadIs(/^6\d models the fleet flies, by kind, each with the roles it fills/);
+    assert.match((await page.locator(".model-line:visible", { hasText: /^Gladius/ }).innerText()).replace(/\s+/g, " "), /Gladius Aegis Dynamics\. Crew 1, 1 seat\. Escort, Training\. 1 on the register/);
+    await page.locator(".chips:visible").getByRole("link", { name: "Reconnaissance", exact: true }).click();
+    await page.waitForURL(/role=reconnaissance/);
+    const index = (await page.locator(".model-list:visible").allInnerTexts()).join(" ").replace(/\s+/g, " ");
+    assert.match(index, /Arrow/);
+    assert.doesNotMatch(index, /Gladius/);
+    await page.goto(`${site}/ships/models/idris-m`);
+    await headingIs("Idris-M");
+    assert.match((await page.locator("section[aria-labelledby='crew']:visible").innerText()).replace(/\s+/g, " "), /Standard .*9 × Gunner.*\(25 seats\)/);
+    assert.match(await page.locator("section[aria-labelledby='hulls']:visible").innerText(), /Nobody has registered one\./);
+    await page.goto(`${site}/ships/models/no-such-model`);
+    await leadIs(/That page does not exist\./);
 
     await signInAs(jo);
-    await page.goto(`${site}/ships`);
-    assert.match(await hullCard("Kestrel").innerText(), /Kept at Area18\./);
-    const form = page.locator("form.ship-form:visible").last();
-    await form.getByLabel("Model").selectOption({ label: "Hammerhead (crew 7 to 9)" });
+    await page.goto(`${site}/admin/ships`);
+    await headingIs("The ships");
+    const fleets = page.locator("section[aria-labelledby='fleets']:visible");
+    assert.match(await fleets.innerText(), /None yet\./);
+    await fleets.locator("details.add-lesson summary", { hasText: "Register a hull" }).click();
+    const form = fleets.locator("form.ship-form");
+    await form.getByLabel("Model").selectOption({ label: "Hammerhead (Aegis Dynamics, crew 7 to 9)" });
     await form.getByLabel("Owner").selectOption({ label: "The fleet" });
     await form.getByLabel("Name").fill("UEES Nexus");
     await form.getByRole("button", { name: "Register the ship" }).click();
@@ -4251,11 +4291,16 @@ try {
     assert.equal(nexus.owner_id, null);
     assert.equal(nexus.registered_by, (await memberOf(jo)).id);
     await page.reload();
-    assert.match(await hullCard("UEES Nexus").innerText(), /The fleet/);
-    // The crew templates are on the page, with the Idris as Volume 1 has it.
-    const templates = (await page.locator(".templates:visible").innerText()).replace(/\s+/g, " ");
-    assert.match(templates, /Idris-M .*Standard .*9 × Gunner.*\(25 seats\)/);
-    assert.match(templates, /Hammerhead .*6 × Gunner.*\(10 seats\)/);
+    assert.match(await page.locator("section[aria-labelledby='fleets']:visible").innerText(), /UEES Nexus/);
+    // Command sees the members' hulls by owner, with their notes and the tools to correct them.
+    const owned = page.locator("section[aria-labelledby='owned']:visible");
+    assert.match(await owned.innerText(), /2 hulls, by owner\./);
+    assert.match(await owned.locator(".hull-group h3").first().innerText(), /Pat Ortega/i);
+    assert.match(await hullCard("Kestrel").innerText(), /Kept at Area18\./);
+    assert.equal(await hullCard("Kestrel").getByRole("button", { name: "Mark not ready" }).count(), 1);
+    await page.goto(`${site}/ships`);
+    await leadIs(/3 hulls on the register/);
+    assert.match(await rowWords("Hammerhead"), /^Hammerhead Aegis Dynamics\. Fire support, Escort Corvette 1 1 1 ready 10 The fleet$/);
   });
   await check("the plan names what an event needs, owners offer what they bring, and the Ships tab shows offered against wanted", async () => {
     // Escort 003: command drafts it, wants two Gladius and a Hammerhead, and announces it.
@@ -4319,9 +4364,10 @@ try {
     assert.match((await page.locator("section[aria-labelledby='offered']:visible").innerText()).replace(/\s+/g, " "), /UEES Nexus Hammerhead, The fleet · 10 seats .*Kestrel Gladius, .*Pat Ortega · 1 seat/);
     assert.match(await page.locator('nav[aria-label="Parts of this event"]:visible a', { has: page.locator(".subbar-label", { hasText: /^Ships$/ }) }).innerText(), /2 of 3/);
 
-    // Pat marks the Kestrel not ready: it is withdrawn, since the roll is still open.
+    // Pat marks the Kestrel not ready, from their record: it is withdrawn, since the roll is still open.
     await signInAs(pat);
-    await page.goto(`${site}/ships`);
+    await page.goto(`${site}/profile?tab=ships`);
+    await recordTab("Ships");
     await hullCard("Kestrel").getByRole("button", { name: "Mark not ready" }).click();
     await hullCard("Kestrel").locator(".form-result", { hasText: "withdrawn from events whose roll is still open" }).waitFor();
     assert.deepEqual(await supabase.sql("select ship_id from public.event_ship_offers where event_id = $1 and member_id = $2", [escort.id, patId]), []);
@@ -4334,10 +4380,97 @@ try {
     await short.waitFor();
     assert.equal(await short.getByRole("link").getAttribute("href"), `/operations/${escort.id}?tab=ships`);
   });
+  await check("a hull lost is marked in claim: not ready and so counted, until the owner marks it ready again; the board narrows by kind, role and readiness", async () => {
+    await signInAs(pat);
+    await page.goto(`${site}/profile?tab=ships`);
+    await recordTab("Ships");
+    await hullCard("Tender").getByRole("button", { name: "Mark in claim" }).click();
+    await hullCard("Tender").locator(".chip", { hasText: /^In claim$/ }).waitFor();
+    const tender = await shipRow("Tender");
+    assert.deepEqual([tender.ready, tender.in_claim], [false, true]);
+    // The marks offered are the two it is not.
+    assert.deepEqual(await hullCard("Tender").locator("form.marks button").allTextContents(), ["Mark ready", "Mark not ready"]);
+    assert.deepEqual(await hullCard("Kestrel").locator("form.marks button").allTextContents(), ["Mark ready", "Mark in claim"]);
+    await page.goto(`${site}/ships`);
+    await leadIs(/3 hulls on the register, 1 of 3 ready\. 2 are yours\./);
+    assert.match(await rowWords("Pisces C8X"), /Runabout 1 0 1 in claim No stations set Starman Recruit Pat Ortega$/);
+    assert.match(await rowWords("Gladius"), /Fighter 1 0 1 not ready 0 Starman Recruit Pat Ortega$/);
+    // Only what is ready: the Hammerhead alone.
+    await page.locator(".chips:visible").getByRole("link", { name: "Only ready", exact: true }).click();
+    await page.waitForURL(/ready=1/);
+    await page.locator(".data-board:visible").waitFor();
+    assert.equal(await boardRow("Hammerhead").count(), 1);
+    assert.equal(await boardRow("Gladius").count(), 0);
+    assert.equal(await boardRow("Pisces C8X").count(), 0);
+    // Narrowed further by a role nothing ready fills, the board says so.
+    await page.locator(".chips:visible").getByRole("link", { name: "Training", exact: true }).click();
+    await page.waitForURL(/role=training/);
+    assert.match(await page.locator("section[aria-labelledby='board']:visible").innerText(), /Nothing on the board fits that\./);
+    await page.getByRole("link", { name: "Show everything." }).click();
+    await page.waitForURL(`${site}/ships`);
+    // By role: the two trainers. By kind: the corvette.
+    await page.goto(`${site}/ships?role=training`);
+    await page.locator(".data-board:visible").waitFor();
+    assert.equal(await boardRow("Gladius").count(), 1);
+    assert.equal(await boardRow("Pisces C8X").count(), 1);
+    assert.equal(await boardRow("Hammerhead").count(), 0);
+    await page.goto(`${site}/ships?kind=corvette`);
+    await page.locator(".data-board:visible").waitFor();
+    assert.equal(await boardRow("Hammerhead").count(), 1);
+    assert.equal(await boardRow("Gladius").count(), 0);
+    // The claim ends when the owner marks the hull ready.
+    await page.goto(`${site}/profile?tab=ships`);
+    await recordTab("Ships");
+    await hullCard("Tender").getByRole("button", { name: "Mark ready" }).click();
+    await hullCard("Tender").locator(".chip", { hasText: /^Ready$/ }).waitFor();
+    assert.deepEqual([(await shipRow("Tender")).ready, (await shipRow("Tender")).in_claim], [true, false]);
+  });
+  await check("command gives a model its roles, one of them primary; an admin keeps the roles themselves under Structure", async () => {
+    await signInAs(jo);
+    await page.goto(`${site}/admin/ships`);
+    await headingIs("The ships");
+    const gladius = page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: /^Gladius/ }) });
+    const editor = gladius.locator(".template-editor", { has: page.locator("summary strong", { hasText: /^Roles$/ }) });
+    assert.match(await editor.locator("summary").innerText(), /Escort \(primary\), Training/);
+    await editor.locator("summary").click();
+    const roles = editor.locator("form.roles-form");
+    await roles.getByLabel("Reconnaissance: fills it").check();
+    await roles.getByLabel("Reconnaissance: the primary role").check();
+    await roles.getByLabel("Training: fills it").uncheck();
+    await roles.getByRole("button", { name: "Save the roles" }).click();
+    await told(roles, "Saved.");
+    assert.deepEqual(
+      await supabase.sql(
+        "select r.slug, mr.is_primary from public.ship_model_roles mr join public.ship_roles r on r.id = mr.role_id join public.ship_models m on m.id = mr.model_id where m.slug = 'gladius' order by r.sort_order",
+      ),
+      [{ slug: "escort", is_primary: false }, { slug: "reconnaissance", is_primary: true }],
+    );
+    // No role at all is refused before it reaches the database.
+    await page.reload();
+    const again = page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: /^Gladius/ }) }).locator(".template-editor", { has: page.locator("summary strong", { hasText: /^Roles$/ }) });
+    await again.locator("summary").click();
+    const none = again.locator("form.roles-form");
+    await none.getByLabel("Escort: fills it").uncheck();
+    await none.getByLabel("Reconnaissance: fills it").uncheck();
+    await none.getByRole("button", { name: "Save the roles" }).click();
+    await told(none, "A model fills at least one role.");
+    // The board shows the roles, the primary first, and narrows by the new one.
+    await page.goto(`${site}/ships?role=reconnaissance`);
+    await leadIs(/hulls on the register/);
+    await page.locator(".data-board:visible").waitFor();
+    assert.equal(await boardRow("Gladius").count(), 1, `the board narrowed to reconnaissance held: ${(await page.locator(".data-board:visible").innerText()).replace(/\s+/g, " ")}`);
+    assert.equal(await boardRow("Hammerhead").count(), 0);
+    assert.match(await rowWords("Gladius"), /Reconnaissance, Escort/);
+    // The roles themselves are an admin's sheet.
+    await signInAs(founder);
+    await page.goto(`${site}/admin/structure/ship-roles`);
+    await headingIs("Ship roles");
+    assert.equal(await page.locator("details.record:not(.record-new)").count(), 11);
+  });
   await check("command keeps the crew templates, and an admin the models", async () => {
     await signInAs(jo);
     await page.goto(`${site}/admin/ships`);
-    await headingIs("Crew templates");
+    await headingIs("The ships");
     const redeemer = page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: /^Redeemer/ }) });
     await redeemer.locator("summary", { hasText: "Add a variant for Redeemer" }).click();
     const variant = redeemer.locator(".add-lesson form");
@@ -4369,6 +4502,9 @@ try {
     await gone.getByRole("button", { name: "Remove the template" }).click();
     await gone.waitFor({ state: "detached" });
     assert.equal(await page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: /^Redeemer/ }) }).locator(".template-editor", { hasText: "Standard" }).getByRole("button", { name: "Remove the template" }).count(), 0);
+    // The variant is on the model's page too.
+    await page.goto(`${site}/ships/models/redeemer`);
+    assert.match((await page.locator("section[aria-labelledby='crew']:visible").innerText()).replace(/\s+/g, " "), /Army support 2 × Medic \(2 seats\)/);
     // A member is not offered the editor; the models are the admin's under Structure.
     await signInAs(sam);
     await page.goto(`${site}/admin/ships`);
@@ -4388,6 +4524,8 @@ try {
     said(/Pat Ortega registered a Gladius named Kestrel/);
     said(/Pat Ortega wrote a note on Kestrel \(Gladius\)/);
     said(/Pat Ortega marked their Gladius named Kestrel not ready/);
+    said(/Pat Ortega marked their Pisces C8X named Tender in claim/);
+    said(/Pat Ortega marked their Pisces C8X named Tender ready/);
     said(/Jo Reyes registered a Hammerhead named UEES Nexus as the fleet's/);
     await page.goto(`${site}/admin/logs?show=operations`);
     await page.locator(".log-line:visible").first().waitFor();
@@ -4398,6 +4536,8 @@ try {
     await page.goto(`${site}/admin/logs?show=structure`);
     await page.locator(".log-line:visible").first().waitFor();
     lines = (await page.locator(".log-line:visible").allInnerTexts()).map((line) => line.replace(/\s+/g, " "));
+    said(/Jo Reyes gave the Gladius the role Reconnaissance, its primary/);
+    said(/Jo Reyes took the role Training off the Gladius/);
     said(/Jo Reyes added the Army support crew template to the Redeemer/);
     said(/Jo Reyes set 2 Medic stations on the Army support template of the Redeemer/);
     said(/Jo Reyes removed the Boarding crew template from the Redeemer/);

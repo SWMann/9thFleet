@@ -71,6 +71,7 @@ export const attemptNames = {
   "ship.remove": "take a ship off the register",
   "ship.offer": "offer a ship for an event",
   "ship.templates": "change a crew template",
+  "ship.roles": "change a model's roles",
   "calendar.renew": "make a new calendar address",
   "duty.renew": "renew a secondary duty",
   "structure.save": "change the fleet's structure",

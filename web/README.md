@@ -60,7 +60,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/privacy` | What the site records about visitors, members, people who send a piracy report and players the fleet names, who can read it and how to have it removed. Change it whenever the logging, the sign-in, the report line or the hostile list changes |
 | `/routine-orders` | Routine orders: numbered, dated notices from command to the serving fleet, each drafted by the site from the fleet's record and issued by command. Members mark each issue as read. See Routine orders below |
 | `/training` | The syllabus: each qualification as a course of lessons, with the reader's own progress. An instructor signs lessons off and awards qualifications from here; command edits the syllabus at `/admin/training`. See Training records below |
-| `/ships` | The ship register: each member's hulls, by model, with a name, a ready mark and a private note; what could sail tonight by kind; the crew templates. Command keeps the templates at `/admin/ships`. See The ship register below |
+| `/ships` | The fleet board: the register summed by model, with what is ready, in claim and not, the seats aboard what is ready, and who owns what; narrowed by kind, by role and to what is ready. Each row leads to `/ships/models/<slug>`, the model's page: what it is and does, how it is crewed, and the fleet's hulls of it. `/ships/models` lists every model by kind. Members manage their own hulls on their record's Ships tab; command manages any at `/admin/ships`. See The ship register below |
 | `/piracy` | The public report line: anyone may tell the fleet about piracy, without signing in. It says plainly that it is not an emergency line. Command reads the reports at `/admin/piracy`. See The piracy report line below |
 | `/calendar/<key>.ics` | A member's calendar feed, for a calendar app. The key in the address is the member's own, made by the database; no session. See Four small things below |
 | `/profile/record.pdf` | The signed-in member's own service record as a PDF |
@@ -258,24 +258,46 @@ doctrine and edited by command at `/admin/training`.
 
 ## The ship register and readiness
 
-`/ships`, for the serving fleet. Ships are member-owned for now, so the register is each member's
-own hulls, which the fleet can see; command may register a hull for anyone or as the fleet's, and
+For the serving fleet. Ships are member-owned for now, so the register is each member's own
+hulls, which the fleet can see; command may register a hull for anyone or as the fleet's, and
 correct any entry.
 
+- **The fleet board** (`/ships`) is the register summed by model, read-only: hulls, how many are
+  ready, in claim and not, the seats aboard what is ready (by the standard template), and the
+  owners. Chips narrow it by kind, by role and to what is ready (`?kind=`, `?role=`, `?ready=1`);
+  `lib/ships-board.ts` sums and narrows, with tests. Above it, the tiles count by kind and a line
+  counts seats aboard what is ready against how many are serving. A model nobody owns is not on
+  the board.
 - **Models.** Every hull is one of the ship models an admin keeps under Structure (`ship_models`:
   name, maker, kind, crew, whether it can be flown yet). The seed list is the hulls that could be
   flown when it was written, with crew sizes from the game's own specifications; command adds what
-  it lacks. Nobody registers a model marked not flyable.
+  it lacks. Nobody registers a model marked not flyable. `/ships/models` lists them by kind,
+  narrowed by role; `/ships/models/<slug>` is one model's page: what it is and does, its crew
+  templates, and the fleet's hulls of it.
+- **Roles.** A kind says what a model is; its roles say what it does for the fleet, and a model
+  may have several, one of them primary (`ship_roles`, an admin's sheet under Structure, seeded
+  with eleven; `ship_model_roles`, command's, from the model's section of `/admin/ships`). The
+  seed classifies every model once for command to correct. The database keeps exactly one primary
+  per model: the first role given is it, a new primary steps the old down, and taking the primary
+  away hands it to the first of the rest.
 - **Crew templates** (`/admin/ships`, command). Each model has a standard template and may have
   variants: the stations aboard, each a role of the order of battle with a count, as Volume 1 lays
   the Idris out. The seed gives the Idris its 25, the corvettes and gunships their escort crews,
   and single-seat fighters a pilot. `lib/ships.ts` reads them.
-- **Standing readiness.** An owner marks each ship ready or not; the database dates the mark. The
-  register's top shows, by kind, how many hulls are ready. A ship marked not ready is withdrawn
-  from every event it was offered for whose roll is still open; where the roll has closed, the
-  offer stands and the event's Ships tab shows the ship as down, so that whoever runs it knows.
-  A hull whose owner has left the serving fleet is left off the register and its counts until
-  they are back.
+- **Your ships.** A member's own hulls are on their record under a Ships tab
+  (`app/profile/YourShips.tsx`): the register form, and each hull with its marks, Change and
+  Remove. Command has the fleet's own hulls, a form to register for anyone, and every serving
+  member's hulls by owner with the same tools at `/admin/ships` (a hull whose owner is not
+  serving is kept but not shown, as on the board). The hull card is
+  `components/ships/HullCard.tsx`.
+- **Standing readiness.** An owner marks each ship ready, not ready or in claim; the database
+  dates the mark. In claim means lost with a claim pending: it counts as not ready everywhere and
+  ends only when the owner, or command, marks the hull again, ready or not ready; the three marks
+  are one choice. A change to the hull's details (the Change form) leaves its claim standing.
+  A ship marked not ready or in claim is withdrawn from every
+  event it was offered for whose roll is still open; where the roll has closed, the offer stands
+  and the event's Ships tab shows the ship as down, so that whoever runs it knows. A hull whose
+  owner has left the serving fleet is left off the register and its counts until they are back.
 - **Per event.** The plan's Ships part names what the event needs by model and count
   (`event_ships.model_id`, `count`; the `ship` text is filled from the model and follows a
   rename). A line typed as words before the list existed keeps them until a model is chosen. On
@@ -507,7 +529,7 @@ to be tracked.
 | The site's icons, and the symbol for each kind of unit | `components/Icon.tsx` and `components/UnitSymbol.tsx`. An icon goes with words and never stands in for them |
 | Routine orders | `app/routine-orders/`, the draft's wording in `lib/orders-form.ts`, and what is read for it in `lib/routine-orders.ts` |
 | Training | `app/training/` and `app/admin/training/`, what is read in `lib/training.ts`, and the lesson form in `lib/training-form.ts` |
-| Ships | `app/ships/` and `app/admin/ships/`, what is read in `lib/ships.ts`, the form in `lib/ships-form.ts`, and the Ships tab in `app/operations/[id]/page.tsx` |
+| Ships | `app/ships/` (the board and the model pages), `app/profile/YourShips.tsx`, `app/admin/ships/`, `components/ships/HullCard.tsx`, what is read in `lib/ships.ts`, the board's sums in `lib/ships-board.ts`, the kinds in `lib/ship-kinds.ts`, the form in `lib/ships-form.ts`, and the Ships tab in `app/operations/[id]/page.tsx` |
 | Calendar feed | `app/calendar/[key]/route.ts`, the file in `lib/calendar.ts`, the key in `lib/feed.ts` and `app/profile/FeedBox.tsx` |
 | Record PDF | `app/profile/record.pdf/route.ts` and `lib/record-pdf.tsx` |
 | Lessons log | `app/operations/lessons/` and `lib/lessons.ts` |

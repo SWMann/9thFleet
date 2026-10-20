@@ -14,7 +14,7 @@ const pages: { key: AdminPage; href: string; label: string; icon: IconName; need
   { key: "operations", href: "/admin/operations", label: "Operations", icon: "calendar", needs: "command" },
   { key: "piracy", href: "/admin/piracy", label: "Piracy reports", icon: "flag", needs: "command" },
   { key: "training", href: "/admin/training", label: "Syllabus", icon: "book", needs: "command" },
-  { key: "ships", href: "/admin/ships", label: "Crew templates", icon: "ship", needs: "command" },
+  { key: "ships", href: "/admin/ships", label: "Ships", icon: "ship", needs: "command" },
   { key: "returns", href: "/admin/returns", label: "Returns", icon: "grid", needs: "command" },
   { key: "structure", href: "/admin/structure", label: "Structure", icon: "layers", needs: "admin" },
   { key: "logs", href: "/admin/logs", label: "Logs", icon: "list", needs: "admin" },
