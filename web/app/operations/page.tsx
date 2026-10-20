@@ -82,6 +82,9 @@ async function Operations() {
           <Link className="button button-quiet" href="/operations/lessons">
             Lessons log
           </Link>
+          <Link className="button button-quiet" href="/operations/types">
+            Types and situations
+          </Link>
         </p>
       </Head>
 

@@ -98,7 +98,7 @@ const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
     "grades", "ranks", "fleet_settings", "event_types", "lessons", "ship_models", "crew_templates", "crew_template_stations",
-    "crew_template_groups", "ship_roles", "ship_model_roles",
+    "crew_template_groups", "ship_roles", "ship_model_roles", "situations", "tasks", "task_roles",
   ],
   records: ["members"],
 };
@@ -149,6 +149,9 @@ type Names = {
   shipRole: (id: unknown) => string;
   role: (id: unknown) => string;
   area: (id: unknown) => string;
+  situation: (id: unknown) => string;
+  task: (id: unknown) => string;
+  typeById: (id: unknown) => string;
   event: (id: unknown) => string;
   /** What a type of event is called, from its key. */
   eventType: (key: unknown) => string;
@@ -271,7 +274,7 @@ export async function readLog(filters: Filters): Promise<LogPage> {
 
 /** Everything a line needs to name the people and things it mentions. */
 async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>) {
-  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates, shipRoles, groups, stations] = await Promise.all([
+  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates, shipRoles, groups, stations, situations, tasks] = await Promise.all([
     supabase.from("members").select("id, character_name, service"),
     supabase.from("member_accounts").select("member_id, discord_name"),
     supabase.from("positions").select("id, title, unit_id"),
@@ -282,7 +285,7 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     supabase.from("ranks").select("service, grade_code, name"),
     supabase.from("fleet_roles").select("id, name"),
     supabase.from("areas").select("id, name"),
-    supabase.from("event_types").select("key, name"),
+    supabase.from("event_types").select("id, key, name"),
     supabase.from("event_posts").select("id, title"),
     supabase.from("event_objectives").select("id, title"),
     supabase.from("lessons").select("id, name, qualification_id"),
@@ -292,8 +295,10 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     supabase.from("ship_roles").select("id, name"),
     supabase.from("crew_template_groups").select("id, name"),
     supabase.from("crew_template_stations").select("id, name, role_id"),
+    supabase.from("situations").select("id, name"),
+    supabase.from("tasks").select("id, wording"),
   ]);
-  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates, shipRoles, groups, stations]) {
+  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates, shipRoles, groups, stations, situations, tasks]) {
     if (result.error) throw new Error(`The names for the log could not be read: ${result.error.message}`);
   }
 
@@ -327,6 +332,9 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
   const stationName = new Map((stations.data ?? []).map((row) => [row.id as string, (row.name as string) || (roleName.get(row.role_id as string) ?? "a role")]));
   const areaName = new Map((areas.data ?? []).map((row) => [row.id as string, row.name as string]));
   const typeName = new Map((eventTypes.data ?? []).map((row) => [row.key as string, row.name as string]));
+  const typeNameById = new Map((eventTypes.data ?? []).map((row) => [row.id as string, row.name as string]));
+  const situationName = new Map((situations.data ?? []).map((row) => [row.id as string, row.name as string]));
+  const taskWording = new Map((tasks.data ?? []).map((row) => [row.id as string, row.wording as string]));
   const extraPostTitle = new Map((eventPosts.data ?? []).map((row) => [row.id as string, row.title as string]));
   const objectiveTitle = new Map((objectives.data ?? []).map((row) => [row.id as string, row.title as string]));
   const order = new Map((grades.data ?? []).map((row) => [row.code as string, row.sort_order as number]));
@@ -351,6 +359,9 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     objective: (id) => (typeof id === "string" ? (objectiveTitle.get(id) ?? "an objective that is gone") : "an objective"),
     role: (id) => (typeof id === "string" ? (roleName.get(id) ?? "a role that is gone") : "no role"),
     area: (id) => (typeof id === "string" ? (areaName.get(id) ?? "an area that is gone") : "no area"),
+    situation: (id) => (typeof id === "string" ? (situationName.get(id) ?? "a situation that is gone") : "no situation"),
+    task: (id) => (typeof id === "string" ? (taskWording.get(id) ?? "a task that is gone") : "a task"),
+    typeById: (id) => (typeof id === "string" ? (typeNameById.get(id) ?? "a type that is gone") : "no type"),
     higher: (from, to) => {
       const was = order.get(String(from));
       const now = order.get(String(to));
@@ -408,8 +419,14 @@ function shown(key: string, value: unknown, names: Names, table: string): string
     if (key === "stand_in_id") return names.station(value);
     if (key === "objective_id") return names.objective(value);
     if (key === "event_post_id") return names.extraPost(value);
-    if (key === "role_id" || key === "next_role_id") return names.role(value);
+    if (key === "role_id" || key === "next_role_id" || key === "fallback_role_id" || key === "speciality_of_role_id") return names.role(value);
+    if (key === "does_role_id" || key === "leads_role_id" || key === "supervises_command_role_id" || key === "supervises_technical_role_id") return names.role(value);
+    if (key === "calls_role_id" || key === "owns_role_id") return names.role(value);
     if (key === "area_id") return names.area(value);
+    if (key === "situation_id") return names.situation(value);
+    if (key === "event_type_id") return names.typeById(value);
+    if (key === "task_id") return names.task(value);
+    if (key === "token") return value === "whole_force" ? "the whole force" : value === "ships_company" ? "the ship's company" : value;
     if (key === "event_id" || key === "copied_from") return names.event(value);
     if (key === "kind" && table === "events") return names.eventType(value);
     if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return `${moment.format(new Date(value))} UTC`;
@@ -705,6 +722,24 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       return line("structure", `${actor} ${row.action === "insert" ? "added" : row.action === "delete" ? "removed" : "changed"} the ${service} rank for ${any.grade_code}`, changes(row, names));
     }
 
+    case "situations": {
+      if (row.action === "insert") return line("structure", `${actor} added the situation ${now.name}`);
+      if (row.action === "delete") return line("structure", `${actor} removed the situation ${was.name}`);
+      return line("structure", `${actor} changed the situation ${was.name}`, changes(row, names));
+    }
+    case "tasks": {
+      const home = (of: Record<string, unknown>) => (of.situation_id ? `the drill for ${names.situation(of.situation_id)}` : of.event_type_id ? `${names.typeById(of.event_type_id)} operations` : "every operation");
+      if (row.action === "insert") return line("structure", `${actor} added the task "${now.wording}" to ${home(now)}`);
+      if (row.action === "delete") return line("structure", `${actor} removed the task "${was.wording}" from ${home(was)}`);
+      return line("structure", `${actor} changed the task "${was.wording}" of ${home(was)}`, changes(row, names));
+    }
+    case "task_roles": {
+      const who = (of: Record<string, unknown>) => (of.role_id ? `the ${names.role(of.role_id)}` : shown("token", of.token, names, row.table_name));
+      const part = String(any.part) === "consulted" ? "consulted" : "informed";
+      if (row.action === "insert") return line("structure", `${actor} added ${who(now)} to those ${part} for the task "${names.task(now.task_id)}"`);
+      if (row.action === "delete") return line("structure", `${actor} took ${who(was)} off those ${part} for the task "${names.task(was.task_id)}"`);
+      return line("structure", `${actor} changed who is ${part} for the task "${names.task(any.task_id)}"`, changes(row, names));
+    }
     case "event_types": {
       const name = String(any.name ?? "an event type");
       if (row.action === "insert") return line("structure", `${actor} added the event type ${name}`);

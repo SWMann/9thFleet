@@ -11,6 +11,7 @@ import { Icon } from "@/components/Icon";
 import { TabLink, TabPanel, Tabs, type TabSpec } from "@/components/Tabs";
 import { YourTime } from "@/components/YourTime";
 import { shortfall } from "@/lib/manning";
+import { NightSheet } from "@/components/doctrine/NightSheet";
 import { getOperation, type FleetEvent, type Operation, type Person, type RollPost, type UnitTask } from "@/lib/operations";
 import { levelIcons, taskLevels } from "@/lib/tasks";
 import { formatWhen, hLabel, outcomeNames, returnedNames, serviceNames, stateNames, weapons, weaponsName } from "@/lib/operations-form";
@@ -154,6 +155,7 @@ async function Event({ params }: { params: Props["params"] }) {
     ...(event.state !== "draft" ? [{ id: "roll", label: "Roll", icon: "people" } as const] : []),
     ...(result.readiness ? [{ id: "ships", label: "Ships", icon: "ship", badge: shipsBadge(result.readiness) } as const] : []),
     { id: "report", label: "Report", icon: "pen" },
+    { id: "night", label: "Who does what", icon: "list" },
     ...(result.opfor ? [{ id: "opfor", label: "Opposing force", icon: "shield" } as const] : []),
     ...(running ? [{ id: "run", label: "Run it", icon: "anchor" } as const] : []),
   ];
@@ -580,6 +582,10 @@ async function Event({ params }: { params: Props["params"] }) {
             </div>
           </TabPanel>
         ) : null}
+
+        <TabPanel id="night">
+          <NightSheet event={event} roll={result.roll} />
+        </TabPanel>
 
         <TabPanel id="report">
           <div className="wrap band tab-band">

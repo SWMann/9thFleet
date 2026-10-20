@@ -35,7 +35,7 @@ async function Structure() {
         current="structure"
         tier={access.tier}
         title={title}
-        lead="What the fleet is made of: its areas, roles, units, posts, qualifications, ranks and types of event. Change any of it here, and the site follows."
+        lead="What the fleet is made of: its areas, roles, units, posts, qualifications, ranks, types of event, and the situations and tasks of the responsibility matrix. Change any of it here, and the site follows."
       />
       <section className="wrap band band-last" aria-labelledby="editors">
         <h2 id="editors">

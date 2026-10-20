@@ -194,13 +194,13 @@ try {
     await page.goto(`${site}/roles`);
     await headingIs("Roles in the fleet");
     await page.locator(".tile").first().waitFor();
-    assert.equal(await page.locator(".tile").count(), 15);
+    assert.equal(await page.locator(".tile").count(), 17);
     const gunnery = await page.locator(".tile", { has: page.getByRole("link", { name: "Gunnery" }) }).innerText();
     assert.match(gunnery, /Open now/i);
-    assert.match(gunnery, /17 posts/i);
+    assert.match(gunnery, /18 posts/i);
     const lift = await page.locator(".tile", { has: page.getByRole("link", { name: "Lift" }) }).innerText();
     assert.match(lift, /Opens at stage 4/i);
-    assert.match(await page.locator(".filter-count").innerText(), /15 areas · 5 open now/);
+    assert.match(await page.locator(".filter-count").innerText(), /17 areas · 5 open now/);
 
     await page.getByRole("button", { name: "Flight", exact: true }).click();
     assert.equal(await page.locator(".tile:visible").count(), 2);
@@ -212,8 +212,11 @@ try {
     await page.getByRole("link", { name: "Gunnery" }).click();
     await headingIs("Gunnery");
     await page.locator(".role-card").first().waitFor();
-    // Two roles: the chief, and one Gunner role for every gunner on every ship.
-    assert.deepEqual(await page.locator(".role-card h3").allInnerTexts(), ["Gunnery Chief", "Gunner"]);
+    // One Gunner role for every gunner on every ship, the roles above it, and the matrix's roles that have no posts yet.
+    // A speciality is named on its base role's card, not as a card of its own.
+    assert.deepEqual(await page.locator(".role-card h3").allInnerTexts(), ["Gunnery Officer", "Lead Gunner", "Gunner", "Chief Gunner", "Fire Controller"]);
+    assert.deepEqual(await page.locator(".role-card-specialities a").allInnerTexts(), ["Turret Gunner", "Remote Gunner", "Point-Defence Gunner", "Torpedo Operator", "Loader"]);
+    assert.match(await page.locator(".role-card", { hasText: "Chief Gunner" }).innerText(), /No posts yet\s*Exists from stage 4/i);
     const gunner = await page.locator(".role-card", { has: page.getByRole("link", { name: "Gunner", exact: true }) }).innerText();
     assert.match(gunner, /Open now/i);
     assert.match(gunner, /Entry post/i);
@@ -221,7 +224,7 @@ try {
     assert.match(gunner, /E2 to E4/);
     assert.match(gunner, /16 posts/);
     assert.match(gunner, /3 ships/);
-    const chief = await page.locator(".role-card", { has: page.getByRole("link", { name: "Gunnery Chief" }) }).innerText();
+    const chief = await page.locator(".role-card", { has: page.getByRole("link", { name: "Lead Gunner" }) }).innerText();
     assert.match(chief, /Opens at stage 2/i);
     assert.match(chief, /UEES Nexus/);
     await shot("roles-area");
@@ -235,7 +238,10 @@ try {
     assert.match(facts, /E2 to E4/);
     assert.match(facts, /Training Ship, UEES Nexus and Escort One\s*16 posts/);
     assert.match(facts, /Open now/);
-    assert.match(facts, /Leads to\s+Gunnery Chief/i);
+    assert.match(facts, /Leads to\s+Lead Gunner/i);
+    assert.match(facts, /Exists from\s+Launch/i);
+    assert.match(facts, /Stands\s+As an individual\s*A rating's post/i);
+    assert.match(facts, /Specialities\s+Turret Gunner, Remote Gunner, Point-Defence Gunner, Torpedo Operator and Loader/i);
 
     const places = page.locator(".places:visible .role-card");
     assert.deepEqual(await places.locator("h3").allInnerTexts(), ["Training Ship", "UEES Nexus", "Escort One"]);
@@ -260,19 +266,32 @@ try {
     await page.goto(`${site}/roles/engineering/engineer`);
     await headingIs("Engineer");
     const steps = page.locator(".progression:visible li");
-    assert.deepEqual(await steps.allInnerTexts(), ["Engineer", "Senior Engineer", "Chief Engineer"]);
+    assert.deepEqual(await steps.allInnerTexts(), ["Engineer", "Lead Engineer", "Chief Engineer"]);
     assert.equal(await page.locator(".progression:visible [aria-current]").innerText(), "Engineer");
-    // Engineer and Senior Engineer are roles of their own.
-    await page.locator(".progression:visible").getByRole("link", { name: "Senior Engineer" }).click();
-    await headingIs("Senior Engineer");
+    // Engineer and Lead Engineer are roles of their own.
+    await page.locator(".progression:visible").getByRole("link", { name: "Lead Engineer" }).click();
+    await headingIs("Lead Engineer");
     assert.match(await page.locator(".facts:visible").innerText(), /Leads to\s+Chief Engineer\s*Comes from Engineer/i);
-    // A pilot of the first flight is a Fighter Pilot, who can become a Flight Lead.
-    await page.goto(`${site}/roles/fighters/fighter-pilot`);
+    // A role that comes later says so, and who holds its tasks until then.
+    assert.match(await page.locator(".facts:visible").innerText(), /Exists from\s+Stage 2\s*Until then its tasks are held by the Engineer/i);
+    // A pilot of the first flight is a Fighter Pilot, a speciality of Pilot, who can become a Flight Leader.
+    await page.goto(`${site}/roles/pilots/fighter-pilot`);
     await headingIs("Fighter Pilot");
-    assert.match(await page.locator(".facts:visible").innerText(), /A Flight\s*3 posts[\s\S]*Leads to\s+Flight Lead/i);
+    assert.match(await page.locator(".facts:visible").innerText(), /A Flight\s*3 posts[\s\S]*A speciality of\s+Pilot[\s\S]*Leads to\s+Flight Leader/i);
+  });
+  await check("a role's or an area's old address forwards to its new one", async () => {
+    await page.goto(`${site}/roles/helm/helmsman`);
+    await headingIs("Helm");
+    assert.match(page.url(), /\/roles\/support\/helm$/);
+    await page.goto(`${site}/roles/command`);
+    await headingIs("Naval Command");
+    assert.match(page.url(), /\/roles\/naval-command$/);
+    await page.goto(`${site}/roles/gunnery/gunnery-chief`);
+    await headingIs("Lead Gunner");
+    assert.match(page.url(), /\/roles\/gunnery\/lead-gunner$/);
   });
   await check("a duty is shown as a duty, with no rank", async () => {
-    await page.goto(`${site}/roles/staff-duties/recruiter`);
+    await page.goto(`${site}/roles/staff/recruiter`);
     await headingIs("Recruiter");
     await leadIs("Interviews the people who apply to join.");
     const facts = await page.locator(".facts:visible").innerText();
@@ -299,7 +318,7 @@ try {
   });
   await check("the roles pages never name who holds a post", async () => {
     // Ada Vance holds Fleet Commander. A visitor is shown the role and not the person.
-    await page.goto(`${site}/roles/command/fleet-commander`);
+    await page.goto(`${site}/roles/naval-command/fleet-commander`);
     await headingIs("Fleet Commander");
     await page.locator(".facts:visible").waitFor();
     assert.doesNotMatch(await page.locator("body").innerText(), /Ada|Vance|ada_on_discord/i);
@@ -308,8 +327,8 @@ try {
   await check("the database gives a visitor the structure and nothing about people", async () => {
     assert.ok((await asVisitor("units")).length > 0, "a visitor cannot read the units");
     assert.ok((await asVisitor("positions")).length > 0, "a visitor cannot read the posts");
-    assert.equal((await asVisitor("areas")).length, 15, "a visitor cannot read the areas");
-    assert.equal((await asVisitor("fleet_roles")).length, 30, "a visitor cannot read the roles");
+    assert.equal((await asVisitor("areas")).length, 17, "a visitor cannot read the areas");
+    assert.equal((await asVisitor("fleet_roles")).length, 78, "a visitor cannot read the roles");
     for (const table of [
       "members",
       "member_accounts",
@@ -804,9 +823,9 @@ try {
     assert.match(await page.locator("main").innerText(), /Filed by Lt\. Commander Ada Vance/);
     assert.match(await page.locator("main").innerText(), /Brief the fallback sooner\./);
     await shot("operation-done");
-    // On no tab is Kit shown that Jo was marked absent, or offered anything to change.
+    // On no tab is Kit shown that Jo was marked absent, or offered anything to change. (A task of the matrix speaks of "absent" in the lower case.)
     await everyTab(async () => {
-      assert.doesNotMatch(await page.locator("main").innerText(), /Absent|without notice/i);
+      assert.doesNotMatch(await page.locator("main").innerText(), /Absent|without notice/);
       assert.equal(await page.getByRole("button").filter({ hasText: /Attending|Stand in|Place/ }).count(), 0);
     });
   });
@@ -1088,7 +1107,7 @@ try {
     const seen = [latest, await logText()];
     assert.doesNotMatch(seen[1], /Ada Vance filed the after-action report/, "a line is on two pages");
     // Keep going back to the end of the log.
-    for (let pages = 0; pages < 8 && (await page.getByRole("link", { name: "Older lines" }).count()) > 0; pages += 1) {
+    for (let pages = 0; pages < 30 && (await page.getByRole("link", { name: "Older lines" }).count()) > 0; pages += 1) {
       await goOlder();
       seen.push(await logText());
     }
@@ -1168,18 +1187,20 @@ try {
     await page.goto(`${site}/admin/structure`);
     await headingIs("Structure");
     const cards = await page.locator(".role-cards:visible").innerText();
-    assert.match(cards, /15\s+Areas/);
-    assert.match(cards, /30\s+Roles/);
+    assert.match(cards, /17\s+Areas/);
+    assert.match(cards, /78\s+Roles/);
     assert.match(cards, /14\s+Units/);
     assert.match(cards, /52\s+Posts/);
     assert.match(cards, /6\s+Qualifications/);
-    assert.match(cards, /5\s+Event types/);
+    assert.match(cards, /17\s+Event types/);
+    assert.match(cards, /16\s+Situations/);
+    assert.match(cards, /169\s+Tasks/);
     assert.match(cards, /18 grades\s+Ranks and grades/i);
     await shot("structure");
   });
   await check("an admin rewrites a role, and its page follows", async () => {
     await openEditor("Roles");
-    assert.equal(await page.locator("details.record:visible:not(.record-new)").count(), 30);
+    assert.equal(await page.locator("details.record:visible:not(.record-new)").count(), 78);
     const gunner = await openRecord("Gunner");
     await gunner.getByLabel("Summary").fill("Fights a ship's guns.");
     await gunner.getByLabel("What the role does").fill("Keep the turret ready to fire.\nCall targets to the Gunnery Chief.\n");
@@ -1229,8 +1250,37 @@ try {
     // A role that still has posts cannot be removed.
     await gunner.locator("summary", { hasText: "Remove this role" }).click();
     await gunner.getByRole("button", { name: "Yes, remove it" }).click();
-    await told(gunner, "This role still has posts. Move them to another role first.");
+    await told(gunner, /This role still has posts, or tasks of the matrix name it/);
     assert.ok(await roleRow("gunner"));
+  });
+  await check("the matrix's facts of a role are kept in the editor: its stage, its fallback and its speciality", async () => {
+    await openEditor("Roles");
+    const chief = await openRecord("Chief Gunner");
+    assert.equal(await chief.getByLabel("Exists from stage").inputValue(), "4");
+    assert.equal(await chief.getByLabel("Fallback").locator("option:checked").innerText(), "Gunnery Officer");
+    assert.equal(await chief.getByLabel("Stands at").inputValue(), "Ship");
+    assert.equal(await chief.getByLabel("Post type").inputValue(), "rating");
+    // A role cannot fall back to itself, and a chain cannot come back to where it started.
+    assert.equal(await chief.getByLabel("Fallback").locator("option", { hasText: /^Chief Gunner$/ }).count(), 0);
+    await chief.getByLabel("Fallback").selectOption({ label: "Gunner" });
+    await chief.getByRole("button", { name: "Save", exact: true }).click();
+    await told(chief, "Saved.");
+    const gunner = await openRecord("Gunner");
+    await gunner.getByLabel("Fallback").selectOption({ label: "Chief Gunner" });
+    await gunner.getByRole("button", { name: "Save", exact: true }).click();
+    await told(gunner, "A fallback chain cannot come back to the role it started from.");
+    assert.equal((await roleRow("gunner")).fallback_role_id, null);
+    // Put the chief back as it was.
+    await chief.getByLabel("Fallback").selectOption({ label: "Gunnery Officer" });
+    await chief.getByRole("button", { name: "Save", exact: true }).click();
+    await told(chief, "Saved.");
+    // A speciality of a speciality is refused by the database.
+    const loader = await openRecord("Loader");
+    assert.equal(await loader.getByLabel("A speciality of").locator("option:checked").innerText(), "Gunner");
+    await loader.getByLabel("A speciality of").selectOption({ label: "Turret Gunner" });
+    await loader.getByRole("button", { name: "Save", exact: true }).click();
+    await told(loader, "A speciality is of a base role, not of another speciality.");
+    assert.equal((await roleRow("loader")).speciality_of_role_id, (await roleRow("gunner")).id);
   });
   await check("what a role needs is set in the editor, for every ship at once", async () => {
     await openEditor("Roles");
@@ -1318,7 +1368,7 @@ try {
     // The roles pages follow, for anyone.
     await page.goto(`${site}/roles`);
     await page.locator(".tile").first().waitFor();
-    assert.equal(await page.locator(".tile").count(), 16);
+    assert.equal(await page.locator(".tile").count(), 18);
     await page.goto(`${site}/roles/sensors/sensors-operator`);
     await headingIs("Sensors Operator");
     await leadIs("Finds what the ship cannot see.");
@@ -1378,6 +1428,7 @@ try {
     assert.match(text, /Ada Vance made the Net controller qualification a need of every Gunner\./);
     assert.match(text, /Ada Vance stopped every Gunner needing the Net controller qualification\./);
     assert.match(text, /Ada Vance changed the role Gunner\.\s+duties changed\. summary changed\./);
+    assert.match(text, /Ada Vance changed the role Chief Gunner\.\s+fallback role: Gunnery Officer to Gunner\./);
     await shot("admin-logs-structure");
   });
 
@@ -1402,8 +1453,10 @@ try {
   await check("the types of event are records an admin edits, and a type names its own order sections", async () => {
     await signInAs(founder);
     await openEditor("Event types");
-    assert.equal(await page.locator("details.record:visible:not(.record-new)").count(), 5);
+    assert.equal(await page.locator("details.record:visible:not(.record-new)").count(), 17);
     const training = await openRecord("Training evolution");
+    assert.equal(await training.getByLabel("Family").inputValue(), "Enabling");
+    assert.equal(await training.getByLabel("Opens at stage").inputValue(), "1");
     assert.match(await training.locator("summary").first().innerText(), /Drafted by command and instructors/);
     assert.equal(await training.getByLabel("Code").count(), 0, "a type's code is set once, when it is added");
     await training.getByLabel("Usual length, in minutes").fill("90");
@@ -1572,28 +1625,44 @@ try {
     assert.equal((await ordersOf("Patrol 002")).warning_order, (await ordersOf("Patrol 001")).warning_order);
     await shot("operation-copy");
   });
-  await check("a type that has events cannot be removed, and one that has none can", async () => {
+  await check("a type that has events or tasks cannot be removed, and one that has neither can", async () => {
     await openEditor("Event types");
     const held = await openRecord("Patrol");
     await held.locator("summary", { hasText: "Remove this event type" }).click();
     await held.getByRole("button", { name: "Yes, remove it" }).click();
     await told(held, /Events of this type exist/);
+    // Strike has no events yet, but the matrix gives it tasks of its own.
+    const tasked = await openRecord("Strike");
+    await tasked.locator("summary", { hasText: "Remove this event type" }).click();
+    await tasked.getByRole("button", { name: "Yes, remove it" }).click();
+    await told(tasked, /Events of this type exist, or tasks of it/);
+    assert.ok(await typeRow("strike"));
 
-    const spare = await openRecord("Strike");
+    const adding = await addRecord(async (form) => {
+      await form.getByLabel("Name").fill("Spare night");
+      await form.getByLabel("Code").fill("spare-night");
+      await form.getByLabel("Place in the list").fill("99");
+    });
+    await told(adding, "Added.");
+    const spare = await openRecord("Spare night");
     await spare.locator("summary", { hasText: "Remove this event type" }).click();
     await spare.getByRole("button", { name: "Yes, remove it" }).click();
-    await page.locator("details.record:visible summary strong", { hasText: /^Strike$/ }).waitFor({ state: "detached" });
-    assert.equal(await typeRow("strike"), undefined);
+    await page.locator("details.record:visible summary strong", { hasText: /^Spare night$/ }).waitFor({ state: "detached" });
+    assert.equal(await typeRow("spare-night"), undefined);
 
     await page.goto(`${site}/operations/new`);
     await eventFormReady();
-    assert.deepEqual(await typeOptions(), ["Training evolution", "Patrol", "Response", "Tasked PvE", "Boarding drill"]);
+    assert.deepEqual(await typeOptions(), [
+      "Training evolution", "Patrol", "Quick reaction", "Strike", "Tasked PvE", "Boarding drill", "Sweep", "Escort", "Search and rescue", "Interdiction",
+      "Seizure", "Show of force", "Defence", "Reconnaissance", "Logistics run", "Arranged engagement", "Ground assault", "Landing",
+    ]);
     // The figures follow the types the fleet has.
     await page.goto(`${site}/admin/operations`);
     await leadIs(/event/);
     assert.equal(await bar("By type", "Boarding drill"), "0");
     assert.equal(await bar("By type", "Training evolution"), "1");
-    assert.equal(await chart("By type").locator("th", { hasText: /^Strike$/ }).count(), 0);
+    assert.equal(await bar("By type", "Strike"), "0");
+    assert.equal(await chart("By type").locator("th", { hasText: /^Spare night$/ }).count(), 0);
   });
   await check("event types, copies and repeats are in the logs", async () => {
     await page.goto(`${site}/admin/logs?show=structure`);
@@ -1601,7 +1670,8 @@ try {
     const structure = await logText();
     assert.match(structure, /Ada Vance added the event type Boarding drill\./);
     assert.match(structure, /Ada Vance changed the event type Training evolution\./);
-    assert.match(structure, /Ada Vance removed the event type Strike\./);
+    assert.match(structure, /Ada Vance added the event type Spare night\./);
+    assert.match(structure, /Ada Vance removed the event type Spare night\./);
 
     await page.goto(`${site}/admin/logs?show=operations`);
     await page.locator(".log:visible").first().waitFor();
@@ -1671,7 +1741,7 @@ try {
 
     const adding = page.locator("form:visible", { has: page.getByRole("button", { name: "Add the post" }) });
     await adding.getByLabel("Post title").fill("Range Safety Officer");
-    await adding.getByLabel("Role").selectOption({ label: "Gunnery Chief" });
+    await adding.getByLabel("Role").selectOption({ label: "Lead Gunner" });
     await adding.getByLabel("It must be filled for the event to go ahead").check();
     await adding.getByRole("button", { name: "Add the post" }).click();
     await told(adding, "Added.");
@@ -1721,7 +1791,7 @@ try {
     await tab("Roll");
     assert.match(await page.locator(".tally:visible").innerText(), /Posts\s+9/i);
     assert.equal(await post("Fleet Commander").count(), 0);
-    assert.match(await extraPost("Range Safety Officer").innerText(), /Empty[\s\S]*Must be filled[\s\S]*Role: Gunnery Chief/i);
+    assert.match(await extraPost("Range Safety Officer").innerText(), /Empty[\s\S]*Must be filled[\s\S]*Role: Lead Gunner/i);
     await shot("operation-manning");
   });
   await check("a member with no post in the event takes one that is open to volunteers", async () => {
@@ -1876,13 +1946,241 @@ try {
     const text = await logText();
     assert.match(text, /Ada Vance named Training Ship as taking part in Gunnery 001\./);
     assert.match(text, /Ada Vance said Helmsman, Training Ship must be filled for Gunnery 001\./);
-    assert.match(text, /Ada Vance added the post Range Safety Officer to Gunnery 001\.\s+Role: Gunnery Chief\. It must be filled\./);
+    assert.match(text, /Ada Vance added the post Range Safety Officer to Gunnery 001\.\s+Role: Lead Gunner\. It must be filled\./);
     assert.match(text, /Kit Marlow took the post Trainee 1 for Gunnery 001\./);
     assert.match(text, /Lee Tanaka replied attending to Gunnery 001\.\s+Every place was taken, so they are on the reserve list\./);
     assert.match(text, /Lee Tanaka was given a place at Gunnery 001, from the reserve list\./);
     assert.match(text, /Ada Vance moved Lee Tanaka to the reserve list for Gunnery 001\./);
     assert.match(text, /Ada Vance placed Ada Vance as Range Safety Officer for Gunnery 001\.|Ada Vance took the post Range Safety Officer for Gunnery 001\./);
     assert.match(text, /Ada Vance removed the post Trainee 2 from Gunnery 002\./);
+  });
+
+  console.log("The responsibility matrix");
+  const matrixRow = (wording) => page.locator("table.data-tasks:visible tr", { has: page.locator("th", { hasText: wording }) });
+  const taskCells = async (row) => (await row.locator("td").allInnerTexts()).map((text) => text.replace(/\s+/g, " ").trim());
+
+  await check("the serving fleet reads the operation types, each with its tasks resolved to the fleet's stage, and the situations", async () => {
+    await signInAs(founder);
+    await page.goto(`${site}/operations`);
+    await page.getByRole("link", { name: "Types and situations" }).click();
+    await headingIs("Types and situations");
+    await leadIs(/18 kinds of night, 8 of them open at Launch, and 16 situations that can land on any of them\. Every operation shares a spine of 64 tasks/);
+    assert.deepEqual(await page.locator(".type-family h3").allTextContents(), ["Enabling", "Presence and response", "Offensive", "Other", "Protective"]);
+    const strike = page.locator(".type-card", { has: page.getByRole("link", { name: "Strike", exact: true }) });
+    assert.match(await strike.innerText(), /Opens at Stage 3[\s\S]*Planned[\s\S]*Deliberate attack on a known hostile asset[\s\S]*At least\s+Two ships with air[\s\S]*Tasks\s+\d+ live, \d+ later/);
+    assert.match(await page.locator(".type-card", { has: page.getByRole("link", { name: "Landing", exact: true }) }).innerText(), /no tasks of its own yet/);
+    assert.equal(await page.locator(".situation-line").count(), 16);
+    assert.match(await page.locator(".situation-line", { hasText: "Casualty" }).innerText(), /Called by\s+Medic; owned by[\s\S]*3 in the drill/);
+    await shot("operation-types");
+
+    await page.getByRole("link", { name: "Patrol", exact: true }).click();
+    await headingIs("Patrol");
+    await leadIs(/Fly a route through known piracy spots and respond to what is found\. Presence and response\. Open since Launch\./);
+    assert.deepEqual(await page.locator(".task-phase:visible h3").allInnerTexts(), ["Planning", "Muster and brief", "Underway", "Recovery", "After"]);
+    // A task of the type's own, done by a role that exists at launch.
+    const route = matrixRow("Fly the route leg by leg; check each spot before moving on");
+    assert.deepEqual((await taskCells(route)).slice(0, 2), ["Helm", "Commanding Officer"]);
+    // A task of the spine that waits for a later stage, whose post does not exist yet: the role that holds it is named, with the post it stands for.
+    const formation = matrixRow("Keep the force in formation and on timings; order changes of course");
+    assert.match(await formation.getAttribute("class"), /task-later/);
+    assert.match(await formation.innerText(), /from Stage 3/);
+    assert.match((await taskCells(formation))[0], /^Fleet Commander for the Task Force Commander$/);
+    // The whole force can be informed.
+    assert.match((await taskCells(matrixRow("Approve the operation and publish it")))[4], /Task Force Commander[\s\S]*The whole force/);
+    await shot("operation-type");
+
+    await page.goto(`${site}/operations/situations/casualty`);
+    await headingIs("Casualty");
+    assert.match(await page.locator(".facts:visible").innerText(), /Called on the net by\s+Medic\s*Owned by\s+Medic for the Lead Medic/i);
+    assert.equal(await page.locator("table.data-tasks:visible tbody tr").count(), 3);
+    assert.deepEqual((await taskCells(matrixRow("Treat where they fall; move to the medical bay"))).slice(0, 3), ["Medic", "Medic for the Lead Medic", "Medic for the Lead Medic Medic for the Chief Medic for the standard"]);
+    await shot("operation-situation");
+  });
+  await check("the types and situations are the serving fleet's alone", async () => {
+    await signInAs(sam);
+    for (const path of ["/operations/types", "/operations/types/patrol", "/operations/situations/casualty"]) {
+      await page.goto(`${site}${path}`);
+      await leadIs(/for the serving fleet/);
+      assert.equal(await page.locator("table.data-tasks").count(), 0, path);
+    }
+    await context.clearCookies();
+    await page.goto(`${site}/operations/types`);
+    await page.waitForURL(/\/sign-in/);
+    // A type that is not there is not found.
+    await signInAs(founder);
+    await page.goto(`${site}/operations/types/no-such-type`);
+    await headingIs("Nothing heard.");
+  });
+  await check("a role's page says what it does on a night, and holds for roles that do not exist yet; a visitor sees none of it", async () => {
+    await page.goto(`${site}/roles/support/helm`);
+    await headingIs("Helm");
+    const night = page.locator("section:visible", { has: page.locator("#night") });
+    await night.waitFor();
+    assert.match(await night.locator(".intro").innerText(), /what this role does, what it leads, and, at Launch, what it holds for roles that do not exist yet/);
+    const does = night.locator(".night-parts > div", { has: page.getByRole("heading", { name: "Does", exact: true }) });
+    assert.match(await does.innerText(), /Navigate the ship on the ordered route and timings\s+Every operation · Underway[\s\S]*Fly the route leg by leg; check each spot before moving on\s+Patrol · Underway/);
+    // The Gunner holds the Lead Gunner's tasks until the lead exists.
+    await page.goto(`${site}/roles/gunnery/gunner`);
+    await headingIs("Gunner");
+    const held = page.locator(".night-parts > div", { has: page.getByRole("heading", { name: /Holds for the Lead Gunner until Stage 2/ }) });
+    assert.match(await held.innerText(), /Section briefs: each lead confirms their people's jobs and net/);
+    // A speciality does what its base role does.
+    await page.goto(`${site}/roles/gunnery/turret-gunner`);
+    await headingIs("Turret Gunner");
+    assert.match(await page.locator("section:visible", { has: page.locator("#night") }).innerText(), /Does\s+Engage in the allotted sector; report hits, misses and ammunition state\s+Hostile contact/);
+    await shot("roles-night");
+
+    await context.clearCookies();
+    await page.goto(`${site}/roles/support/helm`);
+    await headingIs("Helm");
+    await page.locator(".facts:visible").waitFor();
+    assert.equal(await page.locator("#night").count(), 0);
+    assert.doesNotMatch(await page.locator("body").innerText(), /Navigate the ship on the ordered route/);
+  });
+  await check("an event says who does what tonight, each task resolved to the people on the roll", async () => {
+    await signInAs(founder);
+    await openGunnery();
+    await tab("Roll");
+    if ((await post("Helmsman").getByLabel("Stand-in for Helmsman").count()) > 0) {
+      await post("Helmsman").getByLabel("Stand-in for Helmsman").selectOption({ label: "Starman Recruit Jo Reyes" });
+      await post("Helmsman").getByRole("button", { name: "Place" }).click();
+    }
+    await post("Helmsman").getByText("Stand-in: Starman Recruit Jo Reyes").waitFor();
+    await tab("Who does what");
+    const sheet = page.locator("section:visible", { has: page.locator("#night") });
+    await sheet.waitFor();
+    assert.match(await sheet.locator(".intro").innerText(), /The tasks of training evolution: \d+ live at Launch, \d+ of them with someone on the roll to do them/);
+    // Jo stands in as the helm, so the helm's tasks are Jo's tonight.
+    const navigate = matrixRow("Navigate the ship on the ordered route and timings");
+    assert.match((await taskCells(navigate))[0], /^Jo Reyes Helm$/);
+    // Ada Vance holds the Range Safety Officer post, a Lead Gunner's, which does not exist until stage 2: the Gunner holds its tasks, and Kit Marlow is the gunner on the roll, in the Trainee 1 post.
+    const briefs = matrixRow("Section briefs: each lead confirms their people's jobs and net");
+    assert.match((await taskCells(briefs))[0], /^Kit Marlow Gunner for the Lead Gunner$/);
+    // The event's commander is the Task Force Commander, a post that does not exist at launch, so the Fleet Commander's tasks are not theirs yet.
+    assert.doesNotMatch((await taskCells(matrixRow("Give the operation brief: situation, mission, execution, service support, command and signals")))[0], /Ada Vance/);
+    // Every situation's drill, resolved the same way.
+    const drills = page.locator("section:visible", { has: page.locator("#drills") });
+    assert.equal(await drills.locator(".drill").count(), 16);
+    const casualty = drills.locator(".drill", { has: page.locator("summary", { hasText: "Casualty" }) });
+    await casualty.locator("summary").click();
+    assert.match(await casualty.innerText(), /Treat where they fall; move to the medical bay/);
+    await shot("operation-night");
+  });
+  await check("a model's page says what each station does on a night", async () => {
+    await page.goto(`${site}/ships/models/idris-m`);
+    await headingIs("Idris-M");
+    const stations = page.locator("section:visible", { has: page.locator("#station-tasks") });
+    await stations.waitFor();
+    const helm = stations.locator(".drill", { has: page.locator("summary strong", { hasText: /^Helm$/ }) });
+    assert.match(await helm.locator("summary").innerText(), /Helm\s+\d+ tasks/);
+    await helm.locator("summary").click();
+    assert.match(await helm.innerText(), /Navigate the ship on the ordered route and timings/);
+    await shot("ship-model-night");
+  });
+  await check("an admin keeps the situations and the tasks, with who is consulted and informed, and the pages follow", async () => {
+    await openEditor("Situations");
+    assert.equal(await page.locator("details.record:visible:not(.record-new)").count(), 16);
+    const fire = await addRecord(async (form) => {
+      await form.getByLabel("Name").fill("Fire aboard");
+      await form.getByLabel("Address").fill("fire-aboard");
+      await form.getByLabel("What you see").fill("Flames in a compartment");
+      await form.getByLabel("Called by").selectOption({ label: "Engineer" });
+      await form.getByLabel("Owned by").selectOption({ label: "Commanding Officer" });
+      await form.getByLabel("Place in the list").fill("17");
+    });
+    await told(fire, "Added.");
+    const situation = await one("select * from public.situations where slug = 'fire-aboard'");
+    assert.equal(situation.what_you_see, "Flames in a compartment");
+
+    await openEditor("Tasks");
+    assert.equal(await page.locator("details.record:visible:not(.record-new)").count(), 169);
+    // A task is of a type or of a situation, a drill's task is of a situation, and a type's own task takes its type's stage.
+    const adding = await addRecord(async (form) => {
+      await form.getByLabel("The task").fill("Fight the fire with the ship's extinguishers");
+      await form.getByLabel("Of the type").selectOption({ label: "Patrol" });
+      await form.getByLabel("Phase").selectOption({ label: "Underway" });
+      await form.getByLabel("Echelon").selectOption({ label: "Ship" });
+      await form.getByLabel("Done by").selectOption({ label: "Engineer" });
+      await form.getByLabel("Led by").selectOption({ label: "Lead Engineer" });
+      await form.getByLabel("Needed from stage").fill("2");
+    });
+    await told(adding, /A type's own task takes its type's stage/);
+    assert.equal(await adding.getByLabel("The task").inputValue(), "Fight the fire with the ship's extinguishers", "the form lost what was typed");
+    await adding.getByLabel("Of the type").selectOption({ label: "None" });
+    await adding.getByLabel("Phase").selectOption({ label: "The drill, for a situation" });
+    await adding.getByRole("button", { name: "Add the task" }).click();
+    await told(adding, /A situation's task is in the drill, and a drill's task is of a situation/);
+    await adding.getByLabel("Of the situation").selectOption({ label: "Fire aboard" });
+    await adding.getByLabel("Consulted").selectOption([{ label: "Chief Engineer" }]);
+    await adding.getByLabel("Informed").selectOption([{ label: "The ship's company" }, { label: "Commanding Officer" }]);
+    await adding.getByLabel("Needed from stage").fill("1");
+    await adding.getByRole("button", { name: "Add the task" }).click();
+    await told(adding, "Added.");
+    const task = await one("select * from public.tasks where wording = $1", ["Fight the fire with the ship's extinguishers"]);
+    assert.equal(task.situation_id, situation.id);
+    assert.equal(task.phase, "drill");
+    const parties = async () =>
+      supabase.sql(
+        `select l.part, coalesce(r.slug, l.token) as who, l.sort_order from public.task_roles l left join public.fleet_roles r on r.id = l.role_id
+         where l.task_id = $1 order by l.part, l.sort_order`,
+        [task.id],
+      );
+    // The choices come in the list's order: the two standing choices, then the roles by name.
+    assert.deepEqual(await parties(), [
+      { part: "consulted", who: "chief-engineer", sort_order: 1 },
+      { part: "informed", who: "ships_company", sort_order: 1 },
+      { part: "informed", who: "commanding-officer", sort_order: 2 },
+    ]);
+    await shot("structure-tasks");
+
+    // A change to who is informed keeps the rows kept and adds the new after them; a save that changes nothing says so.
+    const record = await openRecord("Fight the fire with the ship's extinguishers");
+    assert.match(await record.locator("summary").first().innerText(), /The drill, for a situation, Ship: Engineer/);
+    await record.getByLabel("Informed").selectOption([{ label: "The ship's company" }, { label: "Executive Officer" }]);
+    await record.getByRole("button", { name: "Save", exact: true }).click();
+    await told(record, "Saved.");
+    assert.deepEqual(await parties(), [
+      { part: "consulted", who: "chief-engineer", sort_order: 1 },
+      { part: "informed", who: "ships_company", sort_order: 1 },
+      { part: "informed", who: "executive-officer", sort_order: 3 },
+    ]);
+    await record.getByRole("button", { name: "Save", exact: true }).click();
+    await told(record, "Nothing was changed.");
+
+    // The situation's page has the drill.
+    await page.goto(`${site}/operations/situations/fire-aboard`);
+    await headingIs("Fire aboard");
+    await leadIs("Flames in a compartment");
+    assert.deepEqual(await taskCells(matrixRow("Fight the fire with the ship's extinguishers")), ["Engineer", "Engineer for the Lead Engineer", "Nobody", "Engineer for the Chief Engineer", "The ship's company Executive Officer"]);
+
+    // A situation with tasks stays until they go.
+    await openEditor("Situations");
+    const held = await openRecord("Fire aboard");
+    await held.locator("summary", { hasText: "Remove this situation" }).click();
+    await held.getByRole("button", { name: "Yes, remove it" }).click();
+    await told(held, /This situation still has tasks/);
+    await openEditor("Tasks");
+    const going = await openRecord("Fight the fire with the ship's extinguishers");
+    await going.locator("summary", { hasText: "Remove this task" }).click();
+    await going.getByRole("button", { name: "Yes, remove it" }).click();
+    await page.locator("details.record:visible summary strong", { hasText: /^Fight the fire/ }).waitFor({ state: "detached" });
+    assert.deepEqual(await supabase.sql("select 1 from public.task_roles where task_id = $1", [task.id]), []);
+    await openEditor("Situations");
+    const gone = await openRecord("Fire aboard");
+    await gone.locator("summary", { hasText: "Remove this situation" }).click();
+    await gone.getByRole("button", { name: "Yes, remove it" }).click();
+    await page.locator("details.record:visible summary strong", { hasText: /^Fire aboard$/ }).waitFor({ state: "detached" });
+
+    await page.goto(`${site}/admin/logs?show=structure`);
+    await page.locator(".log:visible").first().waitFor();
+    const text = await logText();
+    assert.match(text, /Ada Vance added the situation Fire aboard\./);
+    assert.match(text, /Ada Vance added the task "Fight the fire with the ship's extinguishers" to the drill for Fire aboard\./);
+    assert.match(text, /Ada Vance added the ship's company to those informed for the task "Fight the fire with the ship's extinguishers"\./);
+    assert.match(text, /Ada Vance took the Commanding Officer off those informed for the task "Fight the fire with the ship's extinguishers"\./);
+    assert.match(text, /Ada Vance added the Executive Officer to those informed for the task "Fight the fire with the ship's extinguishers"\./);
+    assert.match(text, /Ada Vance removed the task "Fight the fire with the ship's extinguishers" from the drill for Fire aboard\./);
+    assert.match(text, /Ada Vance removed the situation Fire aboard\./);
   });
 
   console.log("Fuller orders");
@@ -2514,7 +2812,9 @@ try {
     );
     assert.equal(stored.title, "Helmsman");
     await openEditor("Posts");
+    // The posts keep their titles through the roles' renames: the post is still Gunnery Chief, of the role Lead Gunner.
     const chief = await openRecord("Gunnery Chief");
+    assert.match(await chief.locator("summary").first().innerText(), /Lead Gunner/);
     assert.equal(await chief.getByLabel(/^A leader, who reads/).isChecked(), false, "a department's chief leads by commanding it");
     const boat = await openRecord("Chief of the Boat");
     assert.equal(await boat.getByLabel(/^A leader, who reads/).isChecked(), true);
@@ -3707,7 +4007,7 @@ try {
   await check("command drafts a Response event from a report, which starts from where it happened", async () => {
     await signInAs(jo);
     await openPiracy();
-    await piracyCard("Lost_Miner").getByRole("link", { name: "Draft a Response event" }).click();
+    await piracyCard("Lost_Miner").getByRole("link", { name: "Draft a Quick reaction event" }).click();
     await headingIs("Draft an event");
     await leadIs(/Started from the piracy report sent by Lost_Miner\./);
     const form = page.locator("form.event-form:visible");
@@ -3734,8 +4034,8 @@ try {
     assert.doesNotMatch(await page.locator("body").innerText(), /Lost_Miner/);
 
     await openPiracy();
-    assert.match(await piracyText("Lost_Miner"), /Response Piracy at Stanton, the ring at Yela/i);
-    assert.equal(await piracyCard("Lost_Miner").getByRole("link", { name: "Draft a Response event" }).count(), 0);
+    assert.match(await piracyText("Lost_Miner"), /Quick reaction Piracy at Stanton, the ring at Yela/i);
+    assert.equal(await piracyCard("Lost_Miner").getByRole("link", { name: "Draft a Quick reaction event" }).count(), 0);
   });
   await check("command marks a report handled with what came of it, and can reopen it", async () => {
     await actOn("Lost_Miner", "Mark as handled", "Yes, it is handled", "Sent the Nexus. Listed the organisation.");
@@ -3749,7 +4049,7 @@ try {
     assert.match(text, /Handled \d+ \w+ \d{4}, by .*Jo Reyes/i);
     assert.match(text, /Command said Sent the Nexus\. Listed the organisation\./i);
     // Closed, it offers nothing but reopening and deleting.
-    assert.equal(await piracyCard("Lost_Miner").getByRole("link", { name: /Start a hostile-list entry|Draft a Response event/ }).count(), 0);
+    assert.equal(await piracyCard("Lost_Miner").getByRole("link", { name: /Start a hostile-list entry|Draft a Quick reaction event/ }).count(), 0);
 
     await piracyCard("Lost_Miner").getByRole("button", { name: "Reopen" }).click();
     await leadIs(/1 report waits for command/);
@@ -4619,8 +4919,8 @@ try {
     const idris = page.locator("section[aria-labelledby='crew']:visible .crew-template").first();
     assert.match((await idris.locator(".crew-facts").innerText()).replace(/\s+/g, " "), /25 seats 8 to sail You could fill \d+ of 16 roles aboard Volume 1, Organisation: Flagship crew/);
     assert.deepEqual(await idris.locator(".crew-group h4").evaluateAll((nodes) => nodes.map((node) => node.firstChild.textContent.trim())), ["Command", "Bridge", "Gunnery", "Engineering", "Flight deck", "Security", "Medical"]);
-    const helm = idris.locator("tr", { has: page.locator("th", { hasText: /^Helmsman/ }) });
-    assert.match((await helm.innerText()).replace(/\s+/g, " "), /Helmsman 1 needed to sail Not written yet Navigator/);
+    const helm = idris.locator("tr", { has: page.locator("th", { hasText: /^Helm$/ }) });
+    assert.match((await helm.innerText()).replace(/\s+/g, " "), /Helm 1 needed to sail Not written yet Navigator/);
     assert.ok(await helm.locator(".chip").count() >= 1, "the reader is told whether they could fill the helm");
     await shot("model-crew");
     // A member is not offered the editor; the models are the admin's under Structure.

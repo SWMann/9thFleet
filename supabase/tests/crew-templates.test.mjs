@@ -49,11 +49,11 @@ test("the Idris is grouped and marked as Volume 1 sets it out, and the fleet rea
   assert.ok(stations.every((station) => station.group !== null), "every Idris station is in a group");
   // The watch bill: eight to sail.
   assert.equal(stations.reduce((sum, station) => sum + station.minimum, 0), 8);
-  assert.deepEqual([byRole.get("gunner").minimum, byRole.get("engineer").minimum, byRole.get("helmsman").minimum, byRole.get("executive-officer").minimum], [4, 1, 1, 0]);
+  assert.deepEqual([byRole.get("gunner").minimum, byRole.get("engineer").minimum, byRole.get("helm").minimum, byRole.get("executive-officer").minimum], [4, 1, 1, 0]);
   // The Navigator is the backup helm.
-  assert.equal(byRole.get("helmsman").stand_in, "");
+  assert.equal(byRole.get("helm").stand_in, "");
   assert.equal(
-    (await fleet.one("select n.role_id = $2 as navigator from public.crew_template_stations s join public.crew_template_stations n on n.id = s.stand_in_id where s.template_id = $1 and s.role_id = $3", [idris.id, role.navigator, role.helmsman])).navigator,
+    (await fleet.one("select n.role_id = $2 as navigator from public.crew_template_stations s join public.crew_template_stations n on n.id = s.stand_in_id where s.template_id = $1 and s.role_id = $3", [idris.id, role.navigator, role.helm])).navigator,
     true,
   );
   assert.equal((await fleet.one("select source from public.crew_templates where id = $1", [idris.id])).source, "Volume 1, Organisation: Flagship crew");

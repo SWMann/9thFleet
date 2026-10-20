@@ -2,13 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { RichLine } from "@/components/rich/Rich";
 import { plainText } from "@/lib/rich/markdown";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { Suspense } from "react";
 import { Icon } from "@/components/Icon";
 import { ManualBar } from "@/components/manual/ManualBar";
 import { Reading } from "@/components/manual/Reading";
 import { PageHead } from "@/components/PageHead";
 import { RoleChips } from "@/components/roles/RoleChips";
+import { OnANight } from "@/components/doctrine/OnANight";
+import { stageName } from "@/lib/matrix";
 import { count, getRoles, gradeSpan, placeName, rankSpan, shipsOf, type AreaWithRoles, type Place, type Role, type RoleLink } from "@/lib/roles";
 
 type Props = PageProps<"/roles/[area]/[role]">;
@@ -17,10 +19,15 @@ async function find(params: Props["params"]) {
   const { area: areaSlug, role: roleSlug } = await params;
   const result = await getRoles();
   if (result.state === "no-database") return { state: "no-database" as const };
+  const everyRole = result.areas.flatMap((entry) => entry.roles);
   const area = result.areas.find((entry) => entry.slug === areaSlug);
   const role = area?.roles.find((entry) => entry.slug === roleSlug);
-  if (!area || !role) return { state: "not-found" as const };
-  const everyRole = result.areas.flatMap((entry) => entry.roles);
+  if (!area || !role) {
+    // A role renamed, or moved to another area, keeps its old address, which forwards to the new.
+    const found = everyRole.find((entry) => entry.slug === roleSlug || entry.formerSlugs.includes(roleSlug));
+    if (found) return { state: "moved" as const, to: `/roles/${found.area}/${found.slug}` };
+    return { state: "not-found" as const };
+  }
   return { state: "ready" as const, area, role, stage: result.stage, everyRole };
 }
 
@@ -60,6 +67,7 @@ async function RoleCard({ params }: { params: Props["params"] }) {
   if (found.state === "no-database") {
     return <PageHead picture="roles" slim title={<strong>Role</strong>} lead="This site is not connected to the fleet's database yet." />;
   }
+  if (found.state === "moved") permanentRedirect(found.to);
   if (found.state === "not-found") notFound();
   const { area, role, stage, everyRole } = found;
   const ships = shipsOf(role);
@@ -153,6 +161,46 @@ async function RoleCard({ params }: { params: Props["params"] }) {
               {extras.length > 0 ? <span className="aside">Some posts need more</span> : null}
             </dd>
           </div>
+          <div>
+            <dt>Exists from</dt>
+            <dd>
+              {stageName(role.existsFrom)}
+              {role.fallback ? (
+                <span className="aside">
+                  Until then its tasks are held by the <Link href={`/roles/${role.fallback.area}/${role.fallback.slug}`}>{role.fallback.name}</Link>
+                </span>
+              ) : null}
+            </dd>
+          </div>
+          {role.echelon || role.postType ? (
+            <div>
+              <dt>Stands</dt>
+              <dd>
+                {role.echelon ? (role.echelon === "Individual" ? "As an individual" : `At the ${role.echelon.toLowerCase()}`) : ""}
+                {role.postType ? <span className="aside">{role.postType === "officer" ? "An officer's post" : role.postType === "rating" ? "A rating's post" : "An officer's or a rating's"}</span> : null}
+              </dd>
+            </div>
+          ) : null}
+          {role.specialityOf || role.specialities.length > 0 ? (
+            <div>
+              <dt>{role.specialityOf ? "A speciality of" : "Specialities"}</dt>
+              <dd>
+                {role.specialityOf ? (
+                  <>
+                    <Link href={`/roles/${role.specialityOf.area}/${role.specialityOf.slug}`}>{role.specialityOf.name}</Link>
+                    <span className="aside">The same job with particular kit; it does everything the base role does</span>
+                  </>
+                ) : (
+                  role.specialities.map((entry, index) => (
+                    <span key={entry.slug}>
+                      {index > 0 ? (index === role.specialities.length - 1 ? " and " : ", ") : ""}
+                      <Link href={`/roles/${entry.area}/${entry.slug}`}>{entry.name}</Link>
+                    </span>
+                  ))
+                )}
+              </dd>
+            </div>
+          ) : null}
           {role.next || role.from.length > 0 ? (
             <div>
               <dt>Leads to</dt>
@@ -195,6 +243,8 @@ async function RoleCard({ params }: { params: Props["params"] }) {
           </ul>
         </section>
       ) : null}
+
+      <OnANight roleId={role.id} />
 
       {role.next || role.from.length > 0 ? (
         <section className="wrap band" aria-labelledby="leads">

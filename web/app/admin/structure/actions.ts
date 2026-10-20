@@ -57,6 +57,11 @@ const failed = async (session: Session, action: Attempt, error: DatabaseError, s
 /** What to tell the admin when the database says no. */
 function explain(sheet: Sheet, error: DatabaseError): string {
   if (error.code === "23505") return sheet.taken ?? `Another ${sheet.one} already has that name or address.`;
+  if (error.code === "23514" && sheet.key === "tasks") {
+    if (/tasks_one_home/.test(error.message)) return "A task is of a type or of a situation, never both.";
+    if (/tasks_drill_is_a_situation/.test(error.message)) return "A situation's task is in the drill, and a drill's task is of a situation.";
+    if (/tasks_module_takes_its_stage/.test(error.message)) return "A type's own task takes its type's stage. Leave \"Needed from stage\" empty.";
+  }
   // Something still points at the record. PostgreSQL 18 gives a refusal to remove its own code.
   if (error.code === "23503" || error.code === "23001") return sheet.inUse;
   if (error.code === "42501" && /row-level security|permission denied/.test(error.message)) return ADMINS_ONLY;
@@ -110,7 +115,7 @@ function read(field: FieldSpec, formData: FormData): { value: Value } | { proble
       return { value };
     }
     case "choice": {
-      if (text === "") return field.required ? missing : { value: null };
+      if (text === "") return field.required ? missing : { value: field.empty ?? null };
       if (!field.options.some((option) => option.value === text)) return { problem: `Choose "${field.label}" from the list.` };
       return { value: text };
     }
@@ -119,9 +124,51 @@ function read(field: FieldSpec, formData: FormData): { value: Value } | { proble
       if (!UUID.test(text)) return { problem: `Choose "${field.label}" from the list.` };
       return { value: text };
     }
+    case "records": {
+      const chosen = [...new Set(formData.getAll(field.key).filter((entry): entry is string => typeof entry === "string" && entry !== ""))];
+      if (chosen.length > field.most) return { problem: `Keep "${field.label}" to ${field.most}.` };
+      const tokens = new Set((field.tokens ?? []).map((token) => token.value));
+      if (chosen.some((entry) => !UUID.test(entry) && !tokens.has(entry))) return { problem: `Choose "${field.label}" from the list.` };
+      return { value: chosen };
+    }
     case "yes-no":
       return { value: raw === "on" };
   }
+}
+
+/** A linked row as the form names it: a record's id, or a standing choice. */
+const linkKey = (row: Record<string, unknown>) => (row.role_id ? String(row.role_id) : `token:${String(row.token)}`);
+
+/**
+ * Bring a record's linked rows to what the form chose, part by part: rows
+ * no longer chosen go, rows newly chosen come after the ones kept, and the
+ * rest stay as they were, so the log shows only what changed.
+ */
+async function saveLinks(session: Session, sheet: Sheet, id: string, chosen: Record<string, string[]>): Promise<EditResult | null> {
+  if (!sheet.links) return null;
+  const { table, column } = sheet.links;
+  const current = await session.supabase.from(table).select("*").eq(column, id);
+  if (current.error) return failed(session, "structure.save", current.error, `The ${sheet.one}'s people could not be read. Try again.`);
+  const rows = (current.data ?? []) as Record<string, unknown>[];
+  for (const [part, wanted] of Object.entries(chosen)) {
+    const held = rows.filter((row) => row.part === part);
+    for (const row of held) {
+      if (wanted.includes(linkKey(row))) continue;
+      const { data, error } = await session.supabase.from(table).delete().eq("id", String(row.id)).select("id");
+      if (error) return failed(session, "structure.save", error, explain(sheet, error));
+      if (!data || data.length === 0) return said(session, "structure.save", ADMINS_ONLY);
+    }
+    let place = held.reduce((most, row) => Math.max(most, Number(row.sort_order ?? 0)), 0);
+    const have = new Set(held.map(linkKey));
+    for (const entry of wanted) {
+      if (have.has(entry)) continue;
+      place += 1;
+      const row: Record<string, string | number | null> = { [column]: id, part, sort_order: place, role_id: entry.startsWith("token:") ? null : entry, token: entry.startsWith("token:") ? entry.slice(6) : null };
+      const { error } = await session.supabase.from(table).insert(row);
+      if (error) return failed(session, "structure.save", error, explain(sheet, error));
+    }
+  }
+  return null;
 }
 
 /** Two values as one text each, so a number, a list and nothing compare as the form sees them. */
@@ -139,7 +186,8 @@ export async function saveRecord(_previous: EditResult, formData: FormData): Pro
   if (result.ok) return { ...result, stamp };
   const values: Record<string, string> = {};
   for (const [key, value] of formData.entries()) {
-    if (typeof value === "string" && !key.startsWith("$")) values[key] = value;
+    // A field chosen several times over comes back as its choices, one to a line.
+    if (typeof value === "string" && !key.startsWith("$")) values[key] = key in values ? `${values[key]}\n${value}` : value;
   }
   return { ...result, values, stamp };
 }
@@ -150,11 +198,13 @@ async function save(session: Session, formData: FormData): Promise<EditResult> {
   if (!sheet || (id !== "" && !UUID.test(id))) return said(session, "structure.save", NOT_THIS_PAGE);
 
   const record: Record<string, Value> = {};
+  const linked: Record<string, string[]> = {};
   for (const field of sheet.fields) {
     if (field.onlyWhenNew && id !== "") continue;
     const found = read(field, formData);
     if ("problem" in found) return { ok: false, message: found.problem };
-    record[field.key] = found.value;
+    if (field.kind === "records") linked[field.key] = found.value as string[];
+    else record[field.key] = found.value;
   }
 
   if (sheet.key === "posts") {
@@ -180,10 +230,23 @@ async function save(session: Session, formData: FormData): Promise<EditResult> {
   if ((sheet.key === "units" && record.parent_id === id) || (sheet.key === "roles" && record.next_role_id === id)) {
     return { ok: false, message: sheet.key === "units" ? "A unit cannot be under itself." : "A role cannot lead to itself." };
   }
+  if (sheet.key === "roles" && id !== "" && (record.fallback_role_id === id || record.speciality_of_role_id === id)) {
+    return { ok: false, message: record.fallback_role_id === id ? "A role cannot be its own fallback." : "A role cannot be a speciality of itself." };
+  }
+  if (sheet.key === "tasks") {
+    if (record.event_type_id && record.situation_id) return { ok: false, message: "A task is of a type or of a situation, never both." };
+    if ((record.phase === "drill") !== Boolean(record.situation_id)) return { ok: false, message: "A situation's task is in the drill, and a drill's task is of a situation." };
+    if (record.event_type_id && record.needed_from !== null) return { ok: false, message: "A type's own task takes its type's stage. Leave \"Needed from stage\" empty." };
+  }
 
   if (id === "") {
-    const { error } = await session.supabase.from(sheet.table).insert(record);
+    const { data, error } = await session.supabase.from(sheet.table).insert(record).select("id");
     if (error) return failed(session, "structure.save", error, explain(sheet, error));
+    const added = data?.[0]?.id ? String(data[0].id) : "";
+    if (added && Object.keys(linked).length > 0) {
+      const trouble = await saveLinks(session, sheet, added, linked);
+      if (trouble) return { ...trouble, message: `The ${sheet.one} was added, but not everyone it names: ${trouble.message}` };
+    }
     refresh();
     return { ok: true, message: "Added." };
   }
@@ -195,11 +258,24 @@ async function save(session: Session, formData: FormData): Promise<EditResult> {
   for (const [key, value] of Object.entries(record)) {
     if (!same((current.data as Record<string, unknown>)[key], value)) changes[key] = value;
   }
-  if (Object.keys(changes).length === 0) return { ok: true, message: "Nothing was changed." };
-
-  const { data, error } = await session.supabase.from(sheet.table).update(changes).eq("id", id).select("id");
-  if (error) return failed(session, "structure.save", error, explain(sheet, error));
-  if (!data || data.length === 0) return said(session, "structure.save", ADMINS_ONLY);
+  if (Object.keys(changes).length > 0) {
+    const { data, error } = await session.supabase.from(sheet.table).update(changes).eq("id", id).select("id");
+    if (error) return failed(session, "structure.save", error, explain(sheet, error));
+    if (!data || data.length === 0) return said(session, "structure.save", ADMINS_ONLY);
+  }
+  let linksChanged = false;
+  if (Object.keys(linked).length > 0) {
+    const before = await session.supabase.from(sheet.links!.table).select("part, role_id, token").eq(sheet.links!.column, id);
+    if (before.error) return failed(session, "structure.save", before.error, `The ${sheet.one}'s people could not be read. Try again.`);
+    const was = new Set(((before.data ?? []) as Record<string, unknown>[]).map((row) => `${row.part}:${linkKey(row)}`));
+    const now = new Set(Object.entries(linked).flatMap(([part, entries]) => entries.map((entry) => `${part}:${entry}`)));
+    linksChanged = was.size !== now.size || [...now].some((entry) => !was.has(entry));
+    if (linksChanged) {
+      const trouble = await saveLinks(session, sheet, id, linked);
+      if (trouble) return trouble;
+    }
+  }
+  if (Object.keys(changes).length === 0 && !linksChanged) return { ok: true, message: "Nothing was changed." };
   refresh();
   return { ok: true, message: "Saved." };
 }

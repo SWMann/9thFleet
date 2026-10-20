@@ -81,11 +81,15 @@ export type EventFields = {
   teachesQualification: string;
 };
 
-/** A type's own line: who usually runs one, and an example. */
+/** A type's own line: who usually runs one, an example, and the stage it opens at where that is still to come. */
 function aboutType(type: EventType | undefined): string {
   if (!type) return "";
   const tidy = (text: string) => text.trim().replace(/\.$/, "");
-  return [type.runBy ? `Usually run by: ${tidy(type.runBy)}.` : "", type.example ? `Such as: ${tidy(type.example)}.` : ""]
+  return [
+    type.runBy ? `Usually run by: ${tidy(type.runBy)}.` : "",
+    type.example ? `Such as: ${tidy(type.example)}.` : "",
+    type.opensAt > 1 ? `The matrix opens it at stage ${type.opensAt}; before then it is run small.` : "",
+  ]
     .filter(Boolean)
     .join(" ");
 }

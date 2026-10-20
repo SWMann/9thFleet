@@ -8309,3 +8309,267 @@ a.mention:hover {
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* The responsibility matrix: types, situations, tasks, who does what */
+
+.type-family + .type-family {
+  margin-top: 24px;
+}
+
+.type-family h3 {
+  margin: 0 0 10px;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.type-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  align-items: start;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.type-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  border: 1px solid var(--seam);
+  border-top: 3px solid var(--green);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.type-later {
+  border-top-color: var(--seam-2);
+}
+
+.type-card h4 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  font-size: 1.0625rem;
+}
+
+.type-card h4 a {
+  color: var(--white);
+}
+
+.type-aim {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.9375rem;
+}
+
+.type-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.type-facts div {
+  display: contents;
+}
+
+.type-facts dt {
+  color: var(--text-3);
+}
+
+.type-facts dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.situation-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.situation-line {
+  display: grid;
+  gap: 4px;
+  padding: 12px 16px;
+  border: 1px solid var(--seam);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.situation-name {
+  color: var(--white);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.situation-see {
+  color: var(--text-2);
+}
+
+.situation-who {
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+.task-phase + .task-phase {
+  margin-top: 24px;
+}
+
+.task-phase h3 {
+  margin: 0 0 8px;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.data-tasks tbody th {
+  min-width: 18em;
+  max-width: 30em;
+  font-weight: 500;
+}
+
+.data-tasks td {
+  min-width: 10em;
+}
+
+.task-later th,
+.task-later td {
+  color: var(--text-3);
+}
+
+.who {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.who small,
+.data-tasks small {
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.who-people {
+  color: var(--white);
+}
+
+.parties {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.night-parts {
+  display: grid;
+  gap: 20px;
+}
+
+@media (min-width: 760px) {
+  .night-parts {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.night-parts h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.night-tasks {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.night-tasks li {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--seam-2);
+}
+
+.night-task {
+  color: var(--text);
+}
+
+.night-tasks small {
+  color: var(--text-3);
+  font-size: 0.8125rem;
+}
+
+.night-tasks small a {
+  color: var(--text-2);
+}
+
+.drills {
+  display: grid;
+  gap: 8px;
+}
+
+.drill {
+  padding: 0 14px;
+  border: 1px solid var(--seam);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.drill summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 10px 0;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.drill summary strong {
+  color: var(--white);
+}
+
+.drill .task-phase {
+  padding-bottom: 12px;
+}
+
+.drill .night-parts {
+  padding-bottom: 14px;
+}
+
+.station-role-link {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* The specialities of a base role, on its card in the area. */
+.role-card-specialities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 8px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--seam);
+  font-size: 0.875rem;
+}
+
+.role-card-specialities > span {
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}

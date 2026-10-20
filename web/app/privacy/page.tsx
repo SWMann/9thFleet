@@ -176,8 +176,9 @@ export default function PrivacyPage() {
             <dd>
               Each other&apos;s names, ranks, posts and qualifications, the events, who said they are attending, who is mentioned in an
               event&apos;s report, the hostile list as it stands today, the training syllabus, the ship register (each hull, its name, its
-              owner and whether it is marked ready, not ready or in claim, and what is offered for each event), and routine orders, which name who was appointed,
-              promoted and qualified, who joined and left, and which names were declared hostile or placed on watch.
+              owner and whether it is marked ready, not ready or in claim, and what is offered for each event), the responsibility matrix (what each role does on
+              a night, and on an event&apos;s page who on its roll does what), and routine orders, which name who was appointed, promoted and qualified, who joined
+              and left, and which names were declared hostile or placed on watch.
             </dd>
           </div>
           <div>

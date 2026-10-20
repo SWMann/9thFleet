@@ -133,6 +133,8 @@ export type FleetEvent = {
 export type RollPost = {
   id: string;
   title: string;
+  /** The role the post is of, for who does what on the night. */
+  roleId: string | null;
   entry: boolean;
   /** The event cannot go ahead with this post empty. */
   mustFill: boolean;
@@ -157,6 +159,7 @@ export type ExtraPost = {
   title: string;
   /** The role it is, with its page on the site if it has one. */
   role: { name: string; href: string | null } | null;
+  roleId: string | null;
   mustFill: boolean;
   openToVolunteers: boolean;
   holder: Person | null;
@@ -214,6 +217,7 @@ export async function readEventTypes(supabase: Client): Promise<EventType[]> {
       name: row.name as string,
       runBy: (row.run_by as string) ?? "",
       example: (row.example as string) ?? "",
+      opensAt: Number(row.opens_at ?? 1),
       instructorsMayDraft: row.instructors_may_draft === true,
       needsApproval: row.needs_approval === true,
       defaultDuration: Number(row.default_duration_minutes ?? 120),
@@ -420,6 +424,7 @@ function buildRoll(
       return {
         id: post.id,
         title: post.title,
+        roleId: post.roleId,
         entry: post.entry,
         mustFill: keyPosts.has(post.id),
         holder,
@@ -445,6 +450,7 @@ function buildRoll(
       id: post.id,
       title: post.title,
       role: post.role_id ? (roles.get(post.role_id) ?? null) : null,
+      roleId: post.role_id ?? null,
       mustFill: post.must_fill,
       openToVolunteers: post.open_to_volunteers,
       holder,

@@ -54,7 +54,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/staff/applications` | For staff: the applications, their answers, interview notes and the decision. An admin opens and closes recruitment here |
 | `/admin` | For the people who run the fleet: its figures. See Admin pages below |
 | `/ranks` | Every grade and its rank name in each service, read from the database. Open to everyone |
-| `/roles` | The areas of work, the roles in each, and a page for each role: what it is, what it does, what it needs, where it leads and the ships it is found on. Read from the database, where an admin keeps them. Open to everyone. It never shows who holds a post |
+| `/roles` | The areas of work, the roles in each, and a page for each role: what it is, what it does, what it needs, where it leads and the ships it is found on; the stage it exists from and which role holds its tasks until then; its specialities, listed on its base role's card. Read from the database, where an admin keeps them. Open to everyone. It never shows who holds a post. A role's or an area's old address forwards to its new one after a rename. For the serving fleet a role's page adds what it does on a night, from the responsibility matrix. See The responsibility matrix below |
 | `/manual` | The fleet manual: the doctrine volumes that have been reviewed, section by section. Open to everyone |
 | `/credits` | Who took each picture on the site, and its licence |
 | `/privacy` | What the site records about visitors, members, people who send a piracy report and players the fleet names, who can read it and how to have it removed. Change it whenever the logging, the sign-in, the report line or the hostile list changes |
@@ -65,6 +65,7 @@ site makes today and refuses anything else, so a new kind of query shows up as a
 | `/calendar/<key>.ics` | A member's calendar feed, for a calendar app. The key in the address is the member's own, made by the database; no session. See Four small things below |
 | `/profile/record.pdf` | The signed-in member's own service record as a PDF |
 | `/operations/lessons` | The lessons log: what every after-action report says to keep and to change, latest first, for the serving fleet |
+| `/operations/types` | The responsibility matrix for the serving fleet: every kind of night by family, with its aim, what it needs and the stage it opens at; and every situation that can land on any of them. `/operations/types/<key>` is one type's tasks by phase, and `/operations/situations/<slug>` one situation's drill, each post resolved to the role that holds it at the fleet's stage. See The responsibility matrix below |
 | `/admin/returns` | The monthly strength and readiness returns the database records on the first of each month. Command |
 | `/visit` | Not a page. A public page posts its address here once it has been read, to be counted |
 | `/menu` | The menu as a page, for a browser that is not running scripts |
@@ -115,7 +116,7 @@ The figures of the fleet, for the people who run it. A role decides which pages 
 | `/admin/recruiting` | Staff, command and admins | How far applications get, how long decisions take, and which are still open |
 | `/admin/operations` | Command and admins | Every event, turnout, late reports, and attendance member by member |
 | `/admin/piracy` | Command and admins | The piracy reports sent through the public form: those that wait, and those handled or dismissed |
-| `/admin/structure` | Admins | The editors: areas, roles, units, posts, qualifications, event types, and ranks and grades. See Editors below |
+| `/admin/structure` | Admins | The editors: areas, roles, units, posts, qualifications, event types, situations, tasks, and ranks and grades. See Editors below |
 | `/admin/logs` | Admins | Everything that has happened: changes to records, sign-ins and sign-outs, anything refused or failed, and how often each public page is read |
 
 An admin holds every role, so sees all of them. A role only counts while its holder is serving.
@@ -414,11 +415,13 @@ area, a unit or a post is written in the code.
 | Editor | What it keeps |
 | --- | --- |
 | Areas | The areas of work on the roles pages: name, address, group, picture, description and what to read |
-| Roles | What each kind of work is: its summary, what it does, what it needs, what to read and the role it leads to |
+| Roles | What each kind of work is: its summary, what it does, what it needs, what to read and the role it leads to; the matrix's facts: the stage it exists from, its fallback, the level it stands at, whether it is an officer's or a rating's, and the base role it is a speciality of |
 | Units | The formations, ships and departments, each under the one above |
 | Posts | The places in each unit: title, role, grades, whether a new member can be given it, and what it needs on top of its role |
 | Qualifications | What members earn in training |
-| Event types | The kinds of night the fleet runs: who may draft each, its usual length and weapons state, and its own names for the five sections of its orders |
+| Event types | The kinds of night the fleet runs: who may draft each, its usual length and weapons state, and its own names for the five sections of its orders; the matrix's facts: family, aim, the stage it opens at, what it needs, its smallest and usual force, planned or reactive, and the contact expected |
+| Situations | What can land on any night: what you see, who calls it on the net and who owns it. Each has a drill, kept under Tasks |
+| Tasks | The responsibility matrix: what is done, in which phase and at which level, by whom, led by whom, supervised by whom for command and for the standard, who is consulted and who is informed, and the stage it is needed from. A task is of every operation, of one type, or of one situation's drill |
 | Ranks and grades | What each service calls a grade, and what a member at that grade usually does |
 
 - **A role is a record of its own.** Gunner is one role, on every ship. A post is one place for that
@@ -430,11 +433,52 @@ area, a unit or a post is written in the code.
 - **Only the fields that changed are sent,** so the log shows what changed and a save that changes
   nothing writes no line.
 - **The database has the last word.** Only an admin's changes get through. A post takes its kind
-  from its role. A role keeps its kind while it has posts, and its steps cannot run in a circle. A
-  post that someone has held cannot be removed, and neither can a type of event that has events. The
-  18 grades, their codes and their order are fixed.
+  from its role. A role keeps its kind while it has posts, and its steps cannot run in a circle; nor
+  can its fallbacks, and a speciality is of a base role, not of another speciality. A post that
+  someone has held cannot be removed, nor a type of event that has events or tasks, nor a situation
+  that has tasks, nor a role that a task or a crew template's station names. The 18 grades, their
+  codes and their order are fixed.
+- **An address goes on forwarding.** When an admin changes a role's or an area's address, the
+  database keeps the old one on the record (`former_slugs`, the last ten) and the roles pages send a
+  reader of the old address to the new.
+- **A field of several records** (`records` in `lib/structure.ts`), such as a task's consulted and
+  informed, is kept in the sheet's linked table, one row each under the field's key. Saving brings
+  the rows to what was chosen: rows no longer chosen go, rows newly chosen come after those kept.
 - **A picture is chosen from the ones the site has.** A new picture still has to be added to
   `lib/pictures.ts` with its credit.
+
+## The responsibility matrix
+
+The task-first workbook of October 2026 is on the site: which post does each thing on a night, from
+the first planning line to the dispatch afterwards, built from the full-size fleet downwards and
+read at the stage the fleet is at. `lib/matrix.ts` holds the words and the rules and reads nothing;
+`lib/doctrine.ts` reads it from the database.
+
+- **Every post of the matrix is a role** of the order of battle, in the areas the matrix groups
+  them by. A role says the stage it exists from (1 launch, 2 about sixteen, 3 about sixty, 4 the
+  fleet; the site's stages from the fourth up are the matrix's fourth) and which role holds its
+  tasks until then. The chain of fallbacks ends at a role that exists at launch, so every task has
+  someone at every stage. A speciality, such as Turret Gunner of Gunner, does what its base role
+  does and counts for it.
+- **A task has a home.** A task of every operation names no type and no situation; a type's own
+  task names its type and takes the type's stage; a situation's task is its drill. Each names who
+  does it, who leads it, who supervises it for command and for the standard, and who is consulted
+  and informed: roles, or the whole force, or the ship's company. Reading one, every role is
+  resolved to the role that holds its tasks at the fleet's stage, named with the post it stands for
+  ("Fleet Commander, for the Task Force Commander"); a task not yet needed is shown greyed, with its
+  stage.
+- **Where it is read.** `/operations/types` and the pages under it, for the serving fleet. A role's
+  page adds what it does and leads and what it holds for roles that do not exist yet; a model's page
+  the same for each station of its crew templates; an event's page a "Who does what" tab, which
+  resolves the tasks of the event's type to the people on its roll: in their post, standing in, or
+  in a post made for the night, with the event's commander as the Task Force Commander once that
+  post exists. Every situation's drill is there too, resolved the same way.
+- **Who reads what.** The roles and their chain are everyone's, as the roles pages are. The types'
+  facts, the situations and the tasks are read by the serving fleet and staff; a visitor's or an
+  applicant's role page has no "On a night". Admins keep them under Structure.
+- **What is not there yet.** Eight of the sixteen types have no tasks of their own yet, so their
+  pages show the spine every operation shares and say so. Volume 1 of the manual is to be brought
+  into line with the matrix.
 
 ## Formatted text
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { RichLine } from "@/components/rich/Rich";
 import { plainText } from "@/lib/rich/markdown";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { Suspense } from "react";
 import { Icon } from "@/components/Icon";
 import { ManualBar } from "@/components/manual/ManualBar";
@@ -18,7 +18,11 @@ async function find(params: Props["params"]) {
   const result = await getRoles();
   if (result.state === "no-database") return { state: "no-database" as const };
   const area = result.areas.find((entry) => entry.slug === slug);
-  if (!area) return { state: "not-found" as const };
+  if (!area) {
+    // An area renamed keeps its old address, which forwards to the new.
+    const moved = result.areas.find((entry) => entry.formerSlugs.includes(slug));
+    return moved ? { state: "moved" as const, to: `/roles/${moved.slug}` } : { state: "not-found" as const };
+  }
   return { state: "ready" as const, area, stage: result.stage };
 }
 
@@ -44,6 +48,7 @@ async function Area({ params }: { params: Props["params"] }) {
   if (found.state === "no-database") {
     return <PageHead picture="roles" title={<strong>Roles</strong>} lead="This site is not connected to the fleet's database yet." />;
   }
+  if (found.state === "moved") permanentRedirect(found.to);
   if (found.state === "not-found") notFound();
   const { area, stage } = found;
 
@@ -73,22 +78,36 @@ async function Area({ params }: { params: Props["params"] }) {
           </div>
         ) : (
           <ul className="role-cards">
-            {area.roles.map((role) => (
-              <li className={role.open ? "role-card" : "role-card role-card-later"} key={role.slug}>
-                <p className="role-card-chips">
-                  {role.posts > 0 ? <RoleChips role={role} /> : <span className="chip">No posts yet</span>}
-                </p>
-                <h3>
-                  <Link href={`/roles/${area.slug}/${role.slug}`}>{role.name}</Link>
-                </h3>
-                {role.summary ? (
-                  <p className="role-card-summary">
-                    <RichLine text={role.summary} />
+            {area.roles
+              // A speciality is listed with its base role, not as a card of its own.
+              .filter((role) => !role.specialityOf)
+              .map((role) => (
+                <li className={role.open ? "role-card" : "role-card role-card-later"} key={role.slug}>
+                  <p className="role-card-chips">
+                    {role.posts > 0 ? <RoleChips role={role} /> : <span className="chip">No posts yet</span>}
+                    {role.posts === 0 ? <span className="chip">{role.existsFrom <= 1 ? "Exists from launch" : `Exists from stage ${role.existsFrom}`}</span> : null}
                   </p>
-                ) : null}
-                <Facts role={role} />
-              </li>
-            ))}
+                  <h3>
+                    <Link href={`/roles/${area.slug}/${role.slug}`}>{role.name}</Link>
+                  </h3>
+                  {role.summary ? (
+                    <p className="role-card-summary">
+                      <RichLine text={role.summary} />
+                    </p>
+                  ) : null}
+                  <Facts role={role} />
+                  {role.specialities.length > 0 ? (
+                    <p className="role-card-specialities">
+                      <span>Specialities</span>
+                      {role.specialities.map((speciality) => (
+                        <Link href={`/roles/${speciality.area}/${speciality.slug}`} key={speciality.slug}>
+                          {speciality.name}
+                        </Link>
+                      ))}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
           </ul>
         )}
       </section>

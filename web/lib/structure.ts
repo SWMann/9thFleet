@@ -21,7 +21,7 @@ import { createClient } from "@/lib/supabase/server";
 export type Option = { value: string; label: string };
 
 /** Where a field's choices come from when they are other records. */
-type Source = "areas" | "roles" | "units" | "posts";
+type Source = "areas" | "roles" | "units" | "posts" | "event-types" | "situations";
 
 type Common = {
   key: string;
@@ -31,6 +31,8 @@ type Common = {
   onlyWhenNew?: boolean;
   /** What a new record starts with. */
   initial?: string;
+  /** For a choice that is not required: what an empty choice is kept as, where the column takes no null. */
+  empty?: "";
 };
 export type FieldSpec =
   | (Common & { kind: "text"; max: number })
@@ -43,16 +45,21 @@ export type FieldSpec =
   | (Common & { kind: "number"; min: number; max: number })
   | (Common & { kind: "choice"; options: Option[] })
   | (Common & { kind: "record"; source: Source })
+  /** Several other records, or the standing choices given as `tokens`, kept in the sheet's linked table under this field's key. */
+  | (Common & { kind: "records"; source: Source; tokens?: Option[]; most: number })
   | (Common & { kind: "yes-no" });
 
 /** A field as the form is given it, with its choices filled in. */
-export type Field = Exclude<FieldSpec, { kind: "record" }> | (Common & { kind: "record"; source: Source; options: Option[] });
+export type Field =
+  | Exclude<FieldSpec, { kind: "record" } | { kind: "records" }>
+  | (Common & { kind: "record"; source: Source; options: Option[] })
+  | (Common & { kind: "records"; source: Source; tokens?: Option[]; most: number; options: Option[] });
 
-export type SheetKey = "areas" | "roles" | "units" | "posts" | "qualifications" | "event-types" | "ships" | "ship-roles";
+export type SheetKey = "areas" | "roles" | "units" | "posts" | "qualifications" | "event-types" | "situations" | "tasks" | "ships" | "ship-roles";
 
 export type Sheet = {
   key: SheetKey;
-  table: "areas" | "fleet_roles" | "units" | "positions" | "qualifications" | "event_types" | "ship_models" | "ship_roles";
+  table: "areas" | "fleet_roles" | "units" | "positions" | "qualifications" | "event_types" | "situations" | "tasks" | "ship_models" | "ship_roles";
   /** What one record is called, and several. */
   one: string;
   many: string;
@@ -60,6 +67,8 @@ export type Sheet = {
   fields: FieldSpec[];
   /** The table that holds what a record of this sheet needs, and the column that points back at it. */
   needs?: { table: "fleet_role_qualifications" | "position_qualifications"; column: "role_id" | "position_id"; about: string };
+  /** The table that holds a record's `records` fields, one row each under the field's key as its part, and the column that points back at the record. */
+  links?: { table: "task_roles"; column: "task_id" };
   /** What to say when a record cannot be removed because something hangs from it. */
   inUse: string;
   /** What to say when another record already has its name. Left out, it speaks of a name or an address. */
@@ -67,6 +76,21 @@ export type Sheet = {
 };
 
 const stage = (key: string, label: string, hint?: string): FieldSpec => ({ key, label, kind: "number", min: 1, max: 9, required: true, hint });
+/** One of the responsibility matrix's four stages: launch, about 16, about 60, the fleet. */
+const matrixStage = (key: string, label: string, hint: string, required: boolean): FieldSpec => ({ key, label, kind: "number", min: 1, max: 4, required, initial: required ? "1" : undefined, hint: `${hint} 1 is launch, 2 about sixteen, 3 about sixty, 4 the fleet.` });
+const echelons: Option[] = ["Fleet", "Task force", "Air group", "Ship", "Section"].map((name) => ({ value: name, label: name }));
+const phases: Option[] = [
+  { value: "planning", label: "Planning" },
+  { value: "muster", label: "Muster and brief" },
+  { value: "underway", label: "Underway" },
+  { value: "recovery", label: "Recovery" },
+  { value: "after", label: "After" },
+  { value: "drill", label: "The drill, for a situation" },
+];
+const everyone: Option[] = [
+  { value: "token:whole_force", label: "The whole force" },
+  { value: "token:ships_company", label: "The ship's company" },
+];
 const order: FieldSpec = { key: "sort_order", label: "Place in the list", kind: "number", min: 0, max: 9999, required: true, initial: "0", hint: "Lower comes first." };
 
 /** The two fields that let a type of event give one section of its orders its own name and guidance. */
@@ -131,7 +155,7 @@ export const sheets: Sheet[] = [
     inUse: "This area still has roles. Move them to another area first.",
     fields: [
       { key: "name", label: "Name", kind: "text", max: 60, required: true },
-      { key: "slug", label: "Address", kind: "slug", required: true, hint: "The end of its address on the site: /roles/gunnery. Changing it breaks links to the old one." },
+      { key: "slug", label: "Address", kind: "slug", required: true, hint: "The end of its address on the site: /roles/gunnery. Change it and the old address goes on forwarding to the new." },
       { key: "domain", label: "Group", kind: "choice", required: true, options: domains.map((domain) => ({ value: domain.key, label: domain.label })), hint: "The button it is filtered by." },
       {
         key: "picture",
@@ -154,7 +178,7 @@ export const sheets: Sheet[] = [
     one: "role",
     many: "Roles",
     about: "What each kind of work is: what it does, what it needs and where it leads. Every post has a role.",
-    inUse: "This role still has posts. Move them to another role first.",
+    inUse: "This role still has posts, or tasks of the matrix name it, or a station of a crew template is of it. Move those to another role first.",
     needs: {
       table: "fleet_role_qualifications",
       column: "role_id",
@@ -162,7 +186,7 @@ export const sheets: Sheet[] = [
     },
     fields: [
       { key: "name", label: "Name", kind: "text", max: 60, required: true },
-      { key: "slug", label: "Address", kind: "slug", required: true, hint: "The end of its address on the site: /roles/gunnery/gunner. Changing it breaks links to the old one." },
+      { key: "slug", label: "Address", kind: "slug", required: true, hint: "The end of its address on the site: /roles/gunnery/gunner. Change it and the old address goes on forwarding to the new." },
       { key: "area_id", label: "Area", kind: "record", source: "areas", required: true },
       {
         key: "kind",
@@ -179,6 +203,40 @@ export const sheets: Sheet[] = [
       { key: "duties", label: "What the role does", kind: "long", max: 4000, rows: 6, hint: "One duty to a line. Leave it empty until it is written." },
       reading("Sections of the manual for this role, on top of its area's. One to a line, as volume/section."),
       { key: "next_role_id", label: "Leads to", kind: "record", source: "roles", hint: "The role a holder moves on to. Leave it empty if there is none." },
+      matrixStage("exists_from", "Exists from stage", "The first stage a post of this role is filled at. Until then its tasks are held by its fallback.", true),
+      {
+        key: "fallback_role_id",
+        label: "Fallback",
+        kind: "record",
+        source: "roles",
+        hint: "The role that holds this one's tasks until it exists. Every role that comes after launch needs one, and a chain of fallbacks ends at a role that exists at launch.",
+      },
+      {
+        key: "echelon",
+        label: "Stands at",
+        kind: "choice",
+        empty: "",
+        options: [...echelons, { value: "Individual", label: "Individual" }],
+        hint: "The level the post works at: the fleet, a task force, an air group, a ship, a section, or as an individual.",
+      },
+      {
+        key: "post_type",
+        label: "Post type",
+        kind: "choice",
+        empty: "",
+        options: [
+          { value: "officer", label: "Officer" },
+          { value: "rating", label: "Rating" },
+          { value: "either", label: "Either" },
+        ],
+      },
+      {
+        key: "speciality_of_role_id",
+        label: "A speciality of",
+        kind: "record",
+        source: "roles",
+        hint: "For a role that is one way of doing a base role: Turret Gunner is a speciality of Gunner. It does what the base role does, and a station of it counts for the base.",
+      },
       order,
     ],
   },
@@ -264,13 +322,22 @@ export const sheets: Sheet[] = [
     one: "event type",
     many: "Event types",
     about: "The kinds of night the fleet runs: who may draft each, how long it usually is, and what its orders are called.",
-    inUse: "Events of this type exist, so it cannot be removed. It can be renamed.",
+    inUse: "Events of this type exist, or tasks of it under Tasks, so it cannot be removed. It can be renamed.",
     taken: "Another event type already has that name or code.",
     fields: [
       { key: "name", label: "Name", kind: "text", max: 60, required: true },
       { key: "key", label: "Code", kind: "slug", max: 40, required: true, onlyWhenNew: true, hint: "A short name for it that never changes: boarding-drill." },
       { key: "run_by", label: "Usually run by", kind: "text", max: 80, hint: "Shown to whoever drafts one: Training team." },
       { key: "example", label: "Such as", kind: "text", max: 200, hint: "An example, shown to whoever drafts one." },
+      { key: "family", label: "Family", kind: "text", max: 40, hint: "The types index groups by it: Presence and response, Protective, Offensive, Enabling." },
+      { key: "aim", label: "Aim", kind: "text", max: 200, hint: "One line on what the type is for. It heads the type's page." },
+      matrixStage("opens_at", "Opens at stage", "The first stage the fleet runs this type. Its own tasks exist from then.", true),
+      { key: "needs", label: "Needs", kind: "text", max: 200, hint: "What has to be in place before one can be run: a second ship, an instructor, a hostile list entry." },
+      { key: "minimum_force", label: "Smallest force", kind: "text", max: 120, hint: "One flight, one ship, two ships with air." },
+      { key: "typical_force", label: "Usual force", kind: "text", max: 120 },
+      { key: "planned_or_reactive", label: "Planned or reactive", kind: "text", max: 40, hint: "Planned, Reactive, or Reactive or planned." },
+      { key: "contact_expected", label: "Contact expected", kind: "text", max: 40, hint: "None (scripted), Unlikely, Possible, Likely, Expected, Certain, Avoided." },
+      { key: "notes", label: "Notes", kind: "text", max: 200, hint: "Variants, and anything else whoever drafts one should know." },
       { key: "instructors_may_draft", label: "Instructors may draft it, as well as command", kind: "yes-no" },
       { key: "needs_approval", label: "A draft by anyone but command needs command's approval before it is announced", kind: "yes-no" },
       {
@@ -292,6 +359,50 @@ export const sheets: Sheet[] = [
       },
       ...paragraphs.flatMap((paragraph, index) => section(paragraph.key, index + 1, paragraph.name, paragraph.holds)),
       order,
+    ],
+  },
+  {
+    key: "situations",
+    table: "situations",
+    one: "situation",
+    many: "Situations",
+    about: "What can land on any night: a contact, a casualty, a boarding. Each has a drill of tasks, kept under Tasks, and the serving fleet reads them under Operations.",
+    inUse: "This situation still has tasks. Remove them first, under Tasks.",
+    taken: "Another situation already has that name or address.",
+    fields: [
+      { key: "name", label: "Name", kind: "text", max: 80, required: true },
+      { key: "slug", label: "Address", kind: "slug", required: true, onlyWhenNew: true, hint: "A short name for it that never changes: unknown-contact. The end of its address under Operations." },
+      { key: "what_you_see", label: "What you see", kind: "text", max: 200, hint: "What is seen or heard that says this is happening." },
+      { key: "calls_role_id", label: "Called by", kind: "record", source: "roles", hint: "The role whose word starts the drill." },
+      { key: "owns_role_id", label: "Owned by", kind: "record", source: "roles", hint: "The role that owns the drill once it is called." },
+      { key: "notes", label: "Notes", kind: "long", max: 300, rows: 2 },
+      order,
+    ],
+  },
+  {
+    key: "tasks",
+    table: "tasks",
+    one: "task",
+    many: "Tasks",
+    about:
+      "The responsibility matrix: what is done on a night, by phase, and who does it, leads it, supervises it, is consulted and is informed. A task of every operation names no type and no situation; a type's own task names its type; a situation's drill names its situation. The serving fleet reads them under Operations, and each role's page lists its own.",
+    inUse: "Something still points at this task.",
+    links: { table: "task_roles", column: "task_id" },
+    fields: [
+      { key: "wording", label: "The task", kind: "text", max: 200, required: true, hint: "What is done, as an order: Open the voice nets and check every member is on the right net." },
+      { key: "event_type_id", label: "Of the type", kind: "record", source: "event-types", hint: "Leave it empty for a task of every operation, or of a situation's drill." },
+      { key: "situation_id", label: "Of the situation", kind: "record", source: "situations", hint: "For a drill's task. A task is of a type or of a situation, never both." },
+      { key: "phase", label: "Phase", kind: "choice", options: phases, required: true, hint: "A situation's task is in the drill; every other task is in one of the five phases." },
+      { key: "echelon", label: "Echelon", kind: "choice", options: echelons, required: true, hint: "The level the task is done at." },
+      { key: "does_role_id", label: "Done by", kind: "record", source: "roles", required: true, hint: "Where the role does not exist yet, its fallback does it." },
+      { key: "leads_role_id", label: "Led by", kind: "record", source: "roles", required: true },
+      { key: "supervises_command_role_id", label: "Supervised by", kind: "record", source: "roles", hint: "The command line: who answers for it." },
+      { key: "supervises_technical_role_id", label: "Supervised for the standard by", kind: "record", source: "roles", hint: "The technical line: who sets how it is done well." },
+      { key: "consulted", label: "Consulted", kind: "records", source: "roles", tokens: everyone, most: 12, hint: "Hold Ctrl, or Cmd on a Mac, to choose several." },
+      { key: "informed", label: "Informed", kind: "records", source: "roles", tokens: everyone, most: 12 },
+      matrixStage("needed_from", "Needed from stage", "For a task of every operation or of a drill: the first stage it is done at. A type's own task takes its type's stage, so leave it empty.", false),
+      { key: "notes", label: "Notes", kind: "text", max: 200 },
+      { ...order, hint: "Lower comes first within its phase." },
     ],
   },
   {
@@ -371,7 +482,7 @@ export async function loadSheet(sheet: Sheet): Promise<Loaded> {
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
 
-  const [rows, areas, roles, units, posts, qualifications, needs] = await Promise.all([
+  const [rows, areas, roles, units, posts, qualifications, needs, eventTypes, situations, links] = await Promise.all([
     supabase.from(sheet.table).select("*"),
     supabase.from("areas").select("id, name, sort_order"),
     supabase.from("fleet_roles").select("id, name, kind, area_id, sort_order"),
@@ -379,8 +490,11 @@ export async function loadSheet(sheet: Sheet): Promise<Loaded> {
     supabase.from("positions").select("id, title, unit_id, kind"),
     supabase.from("qualifications").select("id, name"),
     sheet.needs ? supabase.from(sheet.needs.table).select("*") : Promise.resolve({ data: [] as Row[], error: null }),
+    supabase.from("event_types").select("id, name, sort_order"),
+    supabase.from("situations").select("id, name, sort_order"),
+    sheet.links ? supabase.from(sheet.links.table).select("*") : Promise.resolve({ data: [] as Row[], error: null }),
   ]);
-  for (const result of [rows, areas, roles, units, posts, qualifications, needs]) {
+  for (const result of [rows, areas, roles, units, posts, qualifications, needs, eventTypes, situations, links]) {
     if (result.error) throw new Error(`The ${sheet.many.toLowerCase()} could not be read: ${result.error.message}`);
   }
 
@@ -404,23 +518,41 @@ export async function loadSheet(sheet: Sheet): Promise<Loaded> {
     .map((row) => ({ value: row.id as string, label: unitPath(row.id) }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
+  const byPlace = (a: Row, b: Row) => Number(a.sort_order) - Number(b.sort_order) || String(a.name).localeCompare(String(b.name));
+  const typeRows = ((eventTypes.data ?? []) as Row[]).sort(byPlace);
+  const typeName = new Map(typeRows.map((row) => [row.id as string, row.name as string]));
+  const situationRows = ((situations.data ?? []) as Row[]).sort(byPlace);
+  const situationName = new Map(situationRows.map((row) => [row.id as string, row.name as string]));
   const options: Record<Source, Option[]> = {
     areas: areaRows.map((row) => ({ value: row.id as string, label: row.name as string })),
     roles: roleRows.map((row) => ({ value: row.id as string, label: `${row.name}${row.kind === "duty" ? " (duty)" : ""}` })),
     units: unitOptions,
+    "event-types": typeRows.map((row) => ({ value: row.id as string, label: row.name as string })),
+    situations: situationRows.map((row) => ({ value: row.id as string, label: row.name as string })),
     // A post with its unit, since several units have a post of the same title. A duty commands nothing.
     posts: ((posts.data ?? []) as Row[])
       .filter((row) => row.kind === "primary")
       .map((row) => ({ value: row.id as string, label: `${unitPath(row.unit_id)}: ${row.title}` }))
       .sort((a, b) => a.label.localeCompare(b.label)),
   };
-  const fields: Field[] = sheet.fields.map((field) => (field.kind === "record" ? { ...field, options: options[field.source] } : field));
+  const fields: Field[] = sheet.fields.map((field) =>
+    field.kind === "record" ? { ...field, options: options[field.source] } : field.kind === "records" ? { ...field, options: [...(field.tokens ?? []), ...options[field.source]] } : field,
+  );
 
   const needRows = (needs.data ?? []) as Row[];
+  const linkRows = ((links.data ?? []) as Row[]).sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
   const records = ((rows.data ?? []) as Row[]).map((row): EditRecord => {
     const id = row.id as string;
     const values: Record<string, string> = {};
-    for (const field of sheet.fields) values[field.key] = asText(row[field.key]);
+    for (const field of sheet.fields) {
+      values[field.key] =
+        field.kind === "records" && sheet.links
+          ? linkRows
+              .filter((link) => link[sheet.links!.column] === id && link.part === field.key)
+              .map((link) => (link.role_id ? (link.role_id as string) : `token:${link.token as string}`))
+              .join("\n")
+          : asText(row[field.key]);
+    }
     const described = (() => {
       switch (sheet.key) {
         case "areas":
@@ -442,8 +574,16 @@ export async function loadSheet(sheet: Sheet): Promise<Loaded> {
         case "event-types":
           return {
             title: row.name as string,
-            note: row.instructors_may_draft === true ? "Drafted by command and instructors" : "Drafted by command",
-            group: "",
+            note: `${row.instructors_may_draft === true ? "Drafted by command and instructors" : "Drafted by command"}, opens at stage ${row.opens_at ?? 1}`,
+            group: (row.family as string) || "",
+          };
+        case "situations":
+          return { title: row.name as string, note: (row.what_you_see as string) || `/operations/situations/${row.slug}`, group: "" };
+        case "tasks":
+          return {
+            title: row.wording as string,
+            note: `${phases.find((phase) => phase.value === row.phase)?.label ?? row.phase}, ${row.echelon}: ${roleName.get(row.does_role_id as string) ?? "nobody"}`,
+            group: row.situation_id ? `The drill: ${situationName.get(row.situation_id as string) ?? "a situation"}` : row.event_type_id ? `Of the type: ${typeName.get(row.event_type_id as string) ?? "a type"}` : "Every operation",
           };
         case "ships":
           return {
@@ -471,6 +611,12 @@ export async function loadSheet(sheet: Sheet): Promise<Loaded> {
 
   const place = (row: EditRecord) => Number(row.values.sort_order ?? 0);
   records.sort((a, b) => a.group.localeCompare(b.group) || place(a) - place(b) || a.title.localeCompare(b.title));
+  if (sheet.key === "tasks") {
+    // Tasks read as the matrix does: every operation's first, then each type's, then each situation's drill, and within a group by phase then place.
+    const home = (row: EditRecord) => (row.group === "Every operation" ? 0 : row.group.startsWith("Of the type") ? 1 : 2);
+    const phase = (row: EditRecord) => phases.findIndex((entry) => entry.value === row.values.phase);
+    records.sort((a, b) => home(a) - home(b) || a.group.localeCompare(b.group) || phase(a) - phase(b) || place(a) - place(b) || a.title.localeCompare(b.title));
+  }
   if (sheet.key === "units") {
     // Units read best as the tree they are: each under the one above it.
     for (const record of records) record.title = unitPath(record.id) || record.title;
@@ -497,7 +643,7 @@ export async function countStructure(): Promise<{ state: "no-database" } | { sta
     if (error) throw new Error(`The ${table} could not be counted: ${error.message}`);
     return (data ?? []).length;
   };
-  const [areas, roles, units, posts, qualifications, grades, eventTypes, ships, shipRoles] = await Promise.all([
+  const [areas, roles, units, posts, qualifications, grades, eventTypes, situations, tasks, ships, shipRoles] = await Promise.all([
     read("areas", "id"),
     read("fleet_roles", "id"),
     read("units", "id"),
@@ -505,10 +651,12 @@ export async function countStructure(): Promise<{ state: "no-database" } | { sta
     read("qualifications", "id"),
     read("grades", "code"),
     read("event_types", "id"),
+    read("situations", "id"),
+    read("tasks", "id"),
     read("ship_models", "id"),
     read("ship_roles", "id"),
   ]);
-  return { state: "ready", counts: { areas, roles, units, posts, qualifications, grades, "event-types": eventTypes, ships, "ship-roles": shipRoles } };
+  return { state: "ready", counts: { areas, roles, units, posts, qualifications, grades, "event-types": eventTypes, situations, tasks, ships, "ship-roles": shipRoles } };
 }
 
 export type RankTable =

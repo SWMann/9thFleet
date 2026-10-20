@@ -34,6 +34,7 @@ or let someone promote themselves.
 | `migrations/…_ship_board.sql` | The fleet board: ship roles (an admin's sheet) and each model's roles with one primary (command's); a hull in claim, a third mark beside ready and not ready; a first classification of the models |
 | `migrations/…_crew_templates_depth.sql` | Crew templates in depth: departments per template, stations with a name, a minimum to sail, a brief and a stand-in, and a source line; the Idris as Volume 1 sets it out |
 | `migrations/…_quick_wins.sql` | Calendar feed keys and the feed view, the monthly returns and the job that writes them, and the terms of secondary duties |
+| `migrations/…_responsibility_matrix.sql` | The responsibility matrix: every post of it as a role with a stage and a fallback chain, the areas as the matrix groups them, the event types' facts and twelve more types, sixteen situations and 169 tasks with who does, leads, supervises, is consulted and is informed; old addresses kept and forwarded |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
 The link to the voice app is not here yet.
@@ -59,11 +60,11 @@ Staff look after people, command makes appointments, and the admin owns the stru
 | --- | --- | --- |
 | Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: areas, roles, units, positions and the qualifications each requires. Never who holds one | Send a piracy report, and read nothing back |
 | Applicant | The same, and their own record and their own application | Set a character name and an RSI handle, apply while recruitment is open, withdraw |
-| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position now and which qualification, every announced event with its orders, roll and report, their own service record, the hostile list as it stands today, issued routine orders, the training syllabus and their own lessons passed, the ship register, the models and crew templates, and what is offered for each event | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. Mark an issue of routine orders as read. Register their own ships, name them, mark them ready, not ready or in claim, and write a note on each. Offer a ready ship for an event they are attending, until the roll closes. A full member can apply for the cadet course |
+| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position now and which qualification, every announced event with its orders, roll and report, their own service record, the hostile list as it stands today, issued routine orders, the training syllabus and their own lessons passed, the ship register, the models and crew templates, what is offered for each event, and the responsibility matrix: the types' facts, the situations and the tasks | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. Mark an issue of routine orders as read. Register their own ships, name them, mark them ready, not ready or in claim, and write a note on each. Offer a ready ship for an event they are attending, until the roll closes. A full member can apply for the cadet course |
 | Instructor | The same, and every member's lessons passed | Sign off a lesson for someone else, in their own name, and withdraw their own sign-off until the award. Award a qualification to someone else once every lesson of its course is passed. Draft an event of a type that is open to instructors, which at the start is training |
 | Staff | Everyone, every application and the interview notes, and any member's service record | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
 | Command | The same as staff, every entry of the hostile list: waiting, declined, lifted and lapsed, the piracy reports, the draft of routine orders and who has read each issue, and every owner's note on a ship | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event. Keep the hostile list. Handle and delete piracy reports. Draft, issue and correct routine orders. Edit the syllabus: the lessons of each course and what a course requires first. Register a ship for anyone or as the fleet's, correct any entry, offer the fleet's ships, and keep the crew templates and each model's roles |
-| Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, the areas and roles, the qualifications, the ship models, the ship roles and the rank names. Grant roles on the site, open recruitment, open a service, move the fleet to a new stage |
+| Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, the areas and roles, the qualifications, the ship models, the ship roles, the rank names, and the responsibility matrix: the types, the situations and the tasks. Grant roles on the site, open recruitment, open a service, move the fleet to a new stage |
 
 Roles add up: an admin holds every role. Things the database decides for itself:
 
@@ -284,6 +285,18 @@ Roles add up: an admin holds every role. Things the database decides for itself:
 - **A weekly event drafts the next one.** When it is closed, or cancelled after it was announced,
   the database drafts next week's with the same details and orders, in the name of whoever closed
   it. A number at the end of the title goes up by one. The draft is never announced by itself.
+- **A role says when it exists and who holds its tasks until then.** Every role has a stage it
+  exists from and may name a fallback; a chain of fallbacks cannot come back to where it started,
+  and is at most twelve long. A speciality is of a base role, never of another speciality. A role
+  cannot be its own fallback or its own base.
+- **An address that changes goes on forwarding.** When a role's or an area's slug changes, the
+  database keeps the old one on the record, newest last, ten at most.
+- **A task has one home.** It is of every operation, of one type, or of one situation; a task in the
+  drill phase is a situation's and a situation's task is in the drill; a type's own task carries no
+  stage of its own, since it takes its type's. Each line of who is consulted or informed is a role or
+  one of the two standing choices, the whole force or the ship's company, and never both, and is
+  listed once per task and part. A type with tasks cannot be removed, nor a situation with tasks,
+  nor a role a task names; a task goes with its consulted and informed.
 - **The grades are fixed.** Their codes, bands and order cannot be changed through the website. An
   admin can change what each service calls a grade and what a member at that grade usually does.
 - **Names are unique inside the fleet.** Someone outside it cannot find out which are taken.

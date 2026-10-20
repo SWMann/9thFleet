@@ -17,6 +17,8 @@ export type Post = {
   id: string;
   title: string;
   kind: "primary" | "duty";
+  /** The role it is a post of, for the responsibility matrix. */
+  roleId: string | null;
   /** For a post: the grades it can be held at, with their rank names in the unit's service. */
   band: { from: string; to: string; fromRank: string | null; toRank: string | null } | null;
   /** For a duty: the lowest grade that can take it on, if it has one. */
@@ -81,6 +83,7 @@ type PositionRow = {
   is_leader: boolean;
   opens_at_stage: number;
   sort_order: number;
+  role_id: string | null;
 };
 type RosterRow = {
   member_id: string;
@@ -111,7 +114,7 @@ export async function getOrderOfBattle(): Promise<OrderOfBattle> {
     supabase.from("units").select("id, parent_id, name, kind, service, opens_at_stage, sort_order, commander_position_id, brings, picture"),
     supabase
       .from("positions")
-      .select("id, unit_id, title, kind, min_grade, max_grade, is_entry, is_leader, opens_at_stage, sort_order"),
+      .select("id, unit_id, title, kind, min_grade, max_grade, is_entry, is_leader, opens_at_stage, sort_order, role_id"),
     supabase.from("position_qualifications").select("position_id, qualification_id, waived_when_acting"),
     supabase.from("qualifications").select("id, name"),
     supabase.from("ranks").select("service, grade_code, name"),
@@ -205,6 +208,7 @@ export async function getOrderOfBattle(): Promise<OrderOfBattle> {
         id: post.id,
         title: post.title,
         kind: post.kind,
+        roleId: post.role_id ?? null,
         band:
           post.kind === "primary" && post.min_grade && post.max_grade
             ? { from: post.min_grade, to: post.max_grade, fromRank: rank(post.min_grade), toRank: rank(post.max_grade) }

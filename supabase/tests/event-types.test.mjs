@@ -49,19 +49,25 @@ before(async () => {
 after(() => fleet.close());
 
 test("the roadmap's five types are there, and only training is open to instructors", async () => {
-  const types = await fleet.rows("select key, name, instructors_may_draft from public.event_types order by sort_order");
-  assert.deepEqual(types, [
-    { key: "training", name: "Training evolution", instructors_may_draft: true },
-    { key: "patrol", name: "Patrol", instructors_may_draft: false },
-    { key: "response", name: "Response", instructors_may_draft: false },
-    { key: "strike", name: "Strike", instructors_may_draft: false },
-    { key: "tasked_pve", name: "Tasked PvE", instructors_may_draft: false },
+  const types = await fleet.rows("select key, name, instructors_may_draft, opens_at from public.event_types order by sort_order");
+  assert.deepEqual(types.slice(0, 5), [
+    { key: "training", name: "Training evolution", instructors_may_draft: true, opens_at: 1 },
+    { key: "patrol", name: "Patrol", instructors_may_draft: false, opens_at: 1 },
+    { key: "response", name: "Quick reaction", instructors_may_draft: false, opens_at: 1 },
+    { key: "strike", name: "Strike", instructors_may_draft: false, opens_at: 3 },
+    { key: "tasked_pve", name: "Tasked PvE", instructors_may_draft: false, opens_at: 1 },
   ]);
+  // The matrix's twelve others, with the stage each opens at.
+  assert.deepEqual(
+    types.slice(5).map((type) => `${type.key}:${type.opens_at}`),
+    ["sweep:1", "escort:1", "search_and_rescue:1", "interdiction:3", "seizure:3", "show_of_force:2", "defence:2", "reconnaissance:2", "logistics_run:2", "arranged_engagement:3", "ground_assault:4", "landing:4"],
+  );
+  assert.equal(types.length, 17);
 });
 
 test("the serving fleet reads the event types, and nobody outside it does", async () => {
   const sees = async (actor) => (await actor.rows("select key from public.event_types")).length;
-  assert.equal(await sees(fleet.as(who.gunner)), 5);
+  assert.equal(await sees(fleet.as(who.gunner)), 17);
   assert.equal(await sees(fleet.as(who.applicant)), 0);
   await assert.rejects(fleet.visitor().query("select * from public.event_types"), /permission denied/);
 });

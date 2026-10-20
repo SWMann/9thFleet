@@ -54,8 +54,11 @@ export type Place = {
 export type RoleLink = { slug: string; name: string; area: string };
 
 export type Role = {
+  id: string;
   slug: string;
   name: string;
+  /** Addresses the role had before a rename, which forward to this one. */
+  formerSlugs: string[];
   /** Its area's address and name. */
   area: string;
   areaName: string;
@@ -79,11 +82,19 @@ export type Role = {
   /** What every post of this role needs. */
   requirements: Requirement[];
   places: Place[];
+  /** The matrix's facts: the stage it exists from, who holds its tasks until then, its echelon and type, and its base role if it is a speciality. */
+  existsFrom: number;
+  fallback: RoleLink | null;
+  echelon: string;
+  postType: "" | "officer" | "rating" | "either";
+  specialityOf: RoleLink | null;
+  specialities: RoleLink[];
 };
 
 export type AreaWithRoles = {
   slug: string;
   name: string;
+  formerSlugs: string[];
   domain: Domain;
   picture: PictureName;
   about: string;
@@ -110,6 +121,7 @@ type AreaRow = {
   planned_stage: number | null;
   planned_size: string;
   reading: string[];
+  former_slugs: string[] | null;
   sort_order: number;
 };
 type RoleRow = {
@@ -122,6 +134,12 @@ type RoleRow = {
   duties: string;
   reading: string[];
   next_role_id: string | null;
+  exists_from: number | null;
+  fallback_role_id: string | null;
+  echelon: string | null;
+  post_type: string | null;
+  speciality_of_role_id: string | null;
+  former_slugs: string[] | null;
   sort_order: number;
 };
 type UnitRow = {
@@ -159,8 +177,8 @@ export const getRoles = cache(async (): Promise<Roles> => {
 
   const [settings, areas, roles, roleNeeds, units, positions, postNeeds, qualifications, grades, ranks] = await Promise.all([
     supabase.from("fleet_settings").select("current_stage").maybeSingle(),
-    supabase.from("areas").select("id, slug, name, domain, picture, about, planned_stage, planned_size, reading, sort_order"),
-    supabase.from("fleet_roles").select("id, slug, name, area_id, kind, summary, duties, reading, next_role_id, sort_order"),
+    supabase.from("areas").select("id, slug, name, domain, picture, about, planned_stage, planned_size, reading, former_slugs, sort_order"),
+    supabase.from("fleet_roles").select("id, slug, name, area_id, kind, summary, duties, reading, next_role_id, exists_from, fallback_role_id, echelon, post_type, speciality_of_role_id, former_slugs, sort_order"),
     supabase.from("fleet_role_qualifications").select("role_id, qualification_id, waived_when_acting"),
     supabase.from("units").select("id, parent_id, name, kind, service, opens_at_stage, sort_order"),
     supabase
@@ -294,9 +312,14 @@ export const getRoles = cache(async (): Promise<Roles> => {
     const next = row.next_role_id ? roleById.get(row.next_role_id) : undefined;
     const opensAtStage = places.length > 0 ? Math.min(...places.map((place) => place.opensAtStage)) : 9;
 
+    const fallback = row.fallback_role_id ? roleById.get(row.fallback_role_id) : undefined;
+    const base = row.speciality_of_role_id ? roleById.get(row.speciality_of_role_id) : undefined;
+
     return {
+      id: row.id,
       slug: row.slug,
       name: row.name,
+      formerSlugs: row.former_slugs ?? [],
       area: area?.slug ?? "",
       areaName: area?.name ?? "",
       kind: row.kind,
@@ -315,6 +338,12 @@ export const getRoles = cache(async (): Promise<Roles> => {
       grades: floors.length > 0 && ceilings.length > 0 ? { from: lowest(floors), to: highest(ceilings) } : null,
       requirements: needs((roleNeeds.data ?? []).filter((need) => need.role_id === row.id)),
       places,
+      existsFrom: row.exists_from ?? 1,
+      fallback: fallback ? linkTo(fallback) : null,
+      echelon: row.echelon ?? "",
+      postType: (row.post_type ?? "") as Role["postType"],
+      specialityOf: base ? linkTo(base) : null,
+      specialities: roleRows.filter((other) => other.speciality_of_role_id === row.id).map(linkTo),
     };
   });
 
@@ -328,6 +357,7 @@ export const getRoles = cache(async (): Promise<Roles> => {
       return {
         slug: area.slug,
         name: area.name,
+        formerSlugs: area.former_slugs ?? [],
         domain: area.domain,
         picture: areaPicture(area.picture),
         about: area.about,

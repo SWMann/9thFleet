@@ -86,6 +86,8 @@ export type EventType = {
   /** Who usually runs one, and an example. Shown to whoever drafts it. */
   runBy: string;
   example: string;
+  /** The first of the responsibility matrix's stages the fleet runs this type at. Before it, the type is still drafted, and said to be early. */
+  opensAt: number;
   /** Command drafts every type. This one is open to instructors too. */
   instructorsMayDraft: boolean;
   /** A draft of this type by someone who is not command waits for command's approval. */

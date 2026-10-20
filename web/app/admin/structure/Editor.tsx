@@ -131,6 +131,16 @@ function RecordForm({ sheet, fields, record }: { sheet: SheetInfo; fields: Field
                 aria-describedby={described}
                 spellCheck={field.kind === "long"}
               />
+            ) : field.kind === "records" ? (
+              <select id={name} name={field.key} multiple size={Math.min(8, field.options.length)} defaultValue={held(field.key).split("\n").filter(Boolean)} aria-describedby={described}>
+                {field.options
+                  .filter((option) => !(record && option.value === record.id))
+                  .map((option) => (
+                    <option value={option.value} key={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+              </select>
             ) : field.kind === "choice" || field.kind === "record" ? (
               <select id={name} name={field.key} defaultValue={held(field.key)} required={field.required} aria-describedby={described}>
                 {field.required && record ? null : <option value="">{field.required ? "Choose one" : "None"}</option>}

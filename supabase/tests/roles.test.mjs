@@ -44,7 +44,7 @@ test("every position has a role, and the first roles are the Fleet Commander's",
             (select count(*)::int from public.positions) as positions,
             (select count(*)::int from public.positions where role_id is null) as without`,
   );
-  assert.deepEqual(counts, { areas: 15, roles: 30, positions: 52, without: 0 });
+  assert.deepEqual(counts, { areas: 17, roles: 78, positions: 52, without: 0 });
 
   const titles = (slug) =>
     fleet
@@ -62,9 +62,9 @@ test("every position has a role, and the first roles are the Fleet Commander's",
   ]);
   // A pilot of A Flight is a Fighter Pilot, by title too.
   assert.deepEqual(await titles("fighter-pilot"), [{ title: "Fighter Pilot", posts: 3 }]);
-  // Engineer and Senior Engineer stay apart.
+  // Engineer and Lead Engineer (the Senior Engineer post) stay apart.
   assert.deepEqual(await titles("engineer"), [{ title: "Engineer", posts: 4 }]);
-  assert.deepEqual(await titles("senior-engineer"), [{ title: "Senior Engineer", posts: 1 }]);
+  assert.deepEqual(await titles("lead-engineer"), [{ title: "Senior Engineer", posts: 1 }]);
 
   const kinds = await fleet.rows(
     "select r.kind as role, p.kind as position from public.positions p join public.fleet_roles r on r.id = p.role_id where r.kind <> p.kind",
@@ -79,11 +79,11 @@ test("a role says where it leads, so progression can be read", async () => {
     `select r.slug, n.slug as next from public.fleet_roles r join public.fleet_roles n on n.id = r.next_role_id order by r.slug`,
   );
   assert.deepEqual(steps, [
-    { slug: "deck-hand", next: "flight-deck-chief" },
-    { slug: "engineer", next: "senior-engineer" },
-    { slug: "fighter-pilot", next: "flight-lead" },
-    { slug: "gunner", next: "gunnery-chief" },
-    { slug: "senior-engineer", next: "chief-engineer" },
+    { slug: "deck-crew", next: "deck-chief" },
+    { slug: "engineer", next: "lead-engineer" },
+    { slug: "fighter-pilot", next: "flight-leader" },
+    { slug: "gunner", next: "lead-gunner" },
+    { slug: "lead-engineer", next: "chief-engineer" },
   ]);
 
   const admin = fleet.as(who.admin);
@@ -99,16 +99,16 @@ test("a role says where it leads, so progression can be read", async () => {
   const made = await admin.one(
     "insert into public.fleet_roles (slug, name, area_id, next_role_id) select 'apprentice', 'Apprentice', area_id, id from public.fleet_roles where slug = 'engineer' returning id",
   );
-  await admin.query("update public.fleet_roles set next_role_id = $1 where slug = 'deck-hand'", [made.id]);
+  await admin.query("update public.fleet_roles set next_role_id = $1 where slug = 'deck-crew'", [made.id]);
   await admin.query("delete from public.fleet_roles where id = $1", [made.id]);
-  assert.equal((await fleet.one("select next_role_id from public.fleet_roles where slug = 'deck-hand'")).next_role_id, null);
-  await admin.query("update public.fleet_roles set next_role_id = $1 where slug = 'deck-hand'", [await fleet.roleId("flight-deck-chief")]);
+  assert.equal((await fleet.one("select next_role_id from public.fleet_roles where slug = 'deck-crew'")).next_role_id, null);
+  await admin.query("update public.fleet_roles set next_role_id = $1 where slug = 'deck-crew'", [await fleet.roleId("deck-chief")]);
 });
 
 test("anyone reads the areas and roles, and only an admin changes them", async () => {
   const visitor = fleet.visitor();
-  assert.equal((await visitor.rows("select slug from public.areas")).length, 15);
-  assert.equal((await visitor.rows("select slug from public.fleet_roles")).length, 30);
+  assert.equal((await visitor.rows("select slug from public.areas")).length, 17);
+  assert.equal((await visitor.rows("select slug from public.fleet_roles")).length, 78);
   // No role needs anything of its own until an admin says so.
   assert.deepEqual(await visitor.rows("select role_id from public.fleet_role_qualifications"), []);
   await denied(visitor.query("update public.fleet_roles set summary = 'Anything'"));
@@ -175,7 +175,7 @@ test("a position's kind is its role's kind", async () => {
   );
   // Moving a position to another role of the same kind is allowed.
   await admin.query("update public.positions set role_id = $1 where title = 'Deck Hand'", [await fleet.roleId("engineer")]);
-  await admin.query("update public.positions set role_id = $1 where title = 'Deck Hand'", [await fleet.roleId("deck-hand")]);
+  await admin.query("update public.positions set role_id = $1 where title = 'Deck Hand'", [await fleet.roleId("deck-crew")]);
 });
 
 test("an appointment checks what the role needs, and what the position needs on top", async () => {

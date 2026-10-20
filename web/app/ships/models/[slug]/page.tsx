@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
+import { StationTasks } from "@/components/doctrine/StationTasks";
 import { CrewTemplateView } from "@/components/ships/CrewTemplateView";
 import { getModel } from "@/lib/ships";
 import { sinceWords } from "@/lib/ships-form";
@@ -93,6 +94,8 @@ async function Model({ params }: Props) {
           </>
         )}
       </section>
+
+      {crewed.length > 0 ? <StationTasks templates={crewed} /> : null}
 
       <section className="wrap band band-last" aria-labelledby="hulls">
         <h2 id="hulls">
