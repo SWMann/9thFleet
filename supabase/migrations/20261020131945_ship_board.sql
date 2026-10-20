@@ -167,9 +167,9 @@ $$;
 
 -- A hull marked in claim is withdrawn as one marked not ready is. The guard
 -- above clears ready when the claim is set, so the withdrawal sees a hull
--- going from ready to not; the trigger has to fire on the claim column too.
-drop trigger ships_withdraw_offers on public.ships;
-create trigger ships_withdraw_offers after update of ready, owner_id, in_claim on public.ships
+-- going from ready to not; the trigger has to fire on the claim column too,
+-- so it is restated with the claim in its list.
+create or replace trigger ships_withdraw_offers after update of ready, owner_id, in_claim on public.ships
   for each row execute function app.withdraw_offers();
 
 -- ---------------------------------------------------------------------------
