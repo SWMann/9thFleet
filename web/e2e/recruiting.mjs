@@ -4257,7 +4257,7 @@ try {
     assert.match(await card.innerText(), /Pat Ortega/);
     assert.doesNotMatch(await card.innerText(), /Kept at Area18/);
     assert.equal(await card.getByRole("button").count(), 0, "another member's ship has no tools");
-    assert.match((await page.locator("section[aria-labelledby='crew']:visible").innerText()).replace(/\s+/g, " "), /Standard 1 × Fighter Pilot \(1 seat\)/);
+    assert.match((await page.locator("section[aria-labelledby='crew']:visible").innerText()).replace(/\s+/g, " "), /Standard 1 seat Watch bill not set .*Fighter Pilot 1 Not written yet None By appointment/);
     // The models index lists every model by kind, narrowed by role; a model's page has its crew as Volume 1 sets it.
     await page.goto(`${site}/ships/models`);
     await headingIs("The models");
@@ -4270,7 +4270,7 @@ try {
     assert.doesNotMatch(index, /Gladius/);
     await page.goto(`${site}/ships/models/idris-m`);
     await headingIs("Idris-M");
-    assert.match((await page.locator("section[aria-labelledby='crew']:visible").innerText()).replace(/\s+/g, " "), /Standard .*9 × Gunner.*\(25 seats\)/);
+    assert.match((await page.locator("section[aria-labelledby='crew']:visible").innerText()).replace(/\s+/g, " "), /Standard 25 seats 8 to sail .*GUNNERY 10 seats, 4 to sail .*Gunner 9 4 needed to sail/i);
     assert.match(await page.locator("section[aria-labelledby='hulls']:visible").innerText(), /Nobody has registered one\./);
     await page.goto(`${site}/ships/models/no-such-model`);
     await leadIs(/That page does not exist\./);
@@ -4467,32 +4467,120 @@ try {
     await headingIs("Ship roles");
     assert.equal(await page.locator("details.record:not(.record-new)").count(), 11);
   });
-  await check("command keeps the crew templates, and an admin the models", async () => {
+  await check("command keeps the crew templates: departments, named stations, the watch bill, briefs and stand-ins, on one screen", async () => {
     await signInAs(jo);
     await page.goto(`${site}/admin/ships`);
     await headingIs("The ships");
     const redeemer = page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: /^Redeemer/ }) });
     await redeemer.locator("summary", { hasText: "Add a variant for Redeemer" }).click();
-    const variant = redeemer.locator(".add-lesson form");
+    const variant = redeemer.locator(".add-lesson form.template-form");
     await variant.getByLabel("Template", { exact: true }).fill("Army support");
+    await variant.getByLabel("Where it comes from").fill("Approved by the Fleet Commander, October 2026");
     await variant.getByRole("button", { name: "Add the template" }).click();
     await told(variant, "Template added.");
     await page.reload();
     const editor = page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: /^Redeemer/ }) }).locator(".template-editor", { hasText: "Army support" });
     await editor.locator("summary").click();
-    const stations = editor.locator("form.stations-form");
-    await stations.getByLabel("Station").selectOption({ label: "Medic" });
-    await stations.getByLabel("How many").fill("2");
-    await stations.getByRole("button", { name: "Set the station" }).click();
-    await told(stations, "Saved.");
-    const made = await one("select t.id, t.is_default from public.crew_templates t join public.ship_models m on m.id = t.model_id where m.slug = 'redeemer' and t.name = 'Army support'");
+    const crew = editor.locator("form.crew-editor");
+    // A department, and two stations: two medics, one of them needed to sail, and an engineer the medic stands in for.
+    await crew.getByRole("button", { name: "Add a department" }).click();
+    await crew.getByLabel("Department 1 name").fill("Medical");
+    await crew.getByRole("button", { name: "Add a station" }).click();
+    const medic = crew.locator(".crew-station").nth(0);
+    await medic.getByLabel("Role").selectOption({ label: "Medic" });
+    await medic.getByLabel("Seats").fill("2");
+    await medic.getByLabel("To sail").fill("1");
+    await medic.getByLabel("Department").selectOption({ label: "Medical" });
+    await medic.getByLabel("What it does aboard this model").fill("Treats the wounded aboard and in the field.");
+    await crew.getByRole("button", { name: "Add a station" }).click();
+    const engineer = crew.locator(".crew-station").nth(1);
+    await engineer.getByLabel("Role").selectOption({ label: "Engineer" });
+    await engineer.getByLabel("Seats").fill("1");
+    await engineer.getByLabel("Department").selectOption({ label: "None" });
+    await engineer.getByLabel("Stand-in").selectOption({ label: "Medic" });
+    assert.match(await crew.locator("legend", { hasText: "Stations" }).innerText(), /3 seats, 1 to sail/);
+    await crew.getByRole("button", { name: "Save the crew" }).click();
+    await told(crew, "Saved.");
+    const made = await one("select t.id, t.is_default, t.source from public.crew_templates t join public.ship_models m on m.id = t.model_id where m.slug = 'redeemer' and t.name = 'Army support'");
     assert.equal(made.is_default, false);
-    assert.deepEqual(await supabase.sql("select count from public.crew_template_stations where template_id = $1", [made.id]), [{ count: 2 }]);
+    assert.equal(made.source, "Approved by the Fleet Commander, October 2026");
+    const saved = await supabase.sql(
+      `select r.slug as role, s.count, s.minimum, g.name as "group", s.brief, (select n.role_id = s.role_id from public.crew_template_stations n where n.id = s.stand_in_id) as stands_in_self
+       from public.crew_template_stations s join public.fleet_roles r on r.id = s.role_id left join public.crew_template_groups g on g.id = s.group_id
+       where s.template_id = $1 order by s.sort_order`,
+      [made.id],
+    );
+    assert.deepEqual(saved, [
+      { role: "medic", count: 2, minimum: 1, group: "Medical", brief: "Treats the wounded aboard and in the field.", stands_in_self: null },
+      { role: "engineer", count: 1, minimum: 0, group: null, brief: "", stands_in_self: false },
+    ]);
+    // Saved again without leaving the page, with the engineer gone and the medics renamed: the station keeps its id, and only what changed is written.
+    // The last "Saved." stays on the page until the next save is under way, so each later save is waited for in the database.
+    const stationsNow = () => supabase.sql("select id, name, count from public.crew_template_stations where template_id = $1 order by sort_order", [made.id]);
+    const untilStations = async (expected) => {
+      for (let tries = 0; tries < 50; tries += 1) {
+        const rows = await stationsNow();
+        if (JSON.stringify(rows) === JSON.stringify(expected)) return;
+        await page.waitForTimeout(200);
+      }
+      assert.deepEqual(await stationsNow(), expected);
+    };
+    const medicId = (await one("select id from public.crew_template_stations where template_id = $1 and count = 2", [made.id])).id;
+    const before = (await one("select now() as at")).at;
+    await crew.getByRole("button", { name: "Remove Engineer" }).click();
+    await crew.locator(".crew-station").nth(0).getByLabel("Station name").fill("Field medic");
+    await crew.getByRole("button", { name: "Save the crew" }).click();
+    await untilStations([{ id: medicId, name: "Field medic", count: 2 }]);
+    await told(crew, "Saved.");
+    assert.deepEqual(
+      await supabase.sql("select action, count(*)::int as n from public.audit_log where table_name = 'crew_template_stations' and at > $1 group by action order by action", [before]),
+      [
+        { action: "delete", n: 1 },
+        { action: "update", n: 1 },
+      ],
+    );
+    // Two stations of one role trading names in one save.
+    await crew.getByRole("button", { name: "Add a station" }).click();
+    const ward = crew.locator(".crew-station").nth(1);
+    await ward.getByLabel("Role").selectOption({ label: "Medic" });
+    await ward.getByLabel("Station name").fill("Ward medic");
+    await crew.getByRole("button", { name: "Save the crew" }).click();
+    for (let tries = 0; tries < 50 && (await stationsNow()).length < 2; tries += 1) await page.waitForTimeout(200);
+    const wardId = (await one("select id from public.crew_template_stations where template_id = $1 and name = 'Ward medic'", [made.id])).id;
+    await untilStations([
+      { id: medicId, name: "Field medic", count: 2 },
+      { id: wardId, name: "Ward medic", count: 1 },
+    ]);
+    // The editor has the new station's id once the save is back, so the names can be traded without a reload.
+    for (let tries = 0; tries < 50 && !(await crew.locator('input[name="crew"]').evaluate((input, id) => input.value.includes(id), wardId)); tries += 1) await page.waitForTimeout(200);
+    assert.ok(await crew.locator('input[name="crew"]').evaluate((input, id) => input.value.includes(id), wardId), "the editor restarted from the database after the save");
+    await crew.locator(".crew-station").nth(0).getByLabel("Station name").fill("Ward medic");
+    await crew.locator(".crew-station").nth(1).getByLabel("Station name").fill("Field medic");
+    await crew.getByRole("button", { name: "Save the crew" }).click();
+    await untilStations([
+      { id: medicId, name: "Ward medic", count: 2 },
+      { id: wardId, name: "Field medic", count: 1 },
+    ]);
+    await crew.getByRole("button", { name: "Remove Field medic" }).click();
+    await crew.locator(".crew-station").nth(0).getByLabel("Station name").fill("Field medic");
+    await crew.getByRole("button", { name: "Save the crew" }).click();
+    await untilStations([{ id: medicId, name: "Field medic", count: 2 }]);
+    // More to sail than seats is stopped in the browser before it is sent.
+    await page.reload();
+    const once = page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: /^Redeemer/ }) }).locator(".template-editor", { hasText: "Army support" });
+    await once.locator("summary").click();
+    const crewOnce = once.locator("form.crew-editor");
+    const toSail = crewOnce.locator(".crew-station").nth(0).getByLabel("To sail");
+    await toSail.fill("5");
+    assert.equal(await toSail.evaluate((input) => input.validity.rangeOverflow), true);
+    await crewOnce.getByRole("button", { name: "Save the crew" }).click();
+    assert.equal(await crewOnce.locator(".form-result").count(), 0, "nothing was sent");
+    assert.deepEqual(await stationsNow(), [{ id: medicId, name: "Field medic", count: 2 }]);
     // A second variant, added and removed; the standard cannot be.
     await page.reload();
     const redeemerAgain = page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: /^Redeemer/ }) });
     await redeemerAgain.locator("summary", { hasText: "Add a variant for Redeemer" }).click();
-    const boarding = redeemerAgain.locator(".add-lesson form");
+    const boarding = redeemerAgain.locator(".add-lesson form.template-form");
     await boarding.getByLabel("Template", { exact: true }).fill("Boarding");
     await boarding.getByRole("button", { name: "Add the template" }).click();
     await told(boarding, "Template added.");
@@ -4502,9 +4590,39 @@ try {
     await gone.getByRole("button", { name: "Remove the template" }).click();
     await gone.waitFor({ state: "detached" });
     assert.equal(await page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: /^Redeemer/ }) }).locator(".template-editor", { hasText: "Standard" }).getByRole("button", { name: "Remove the template" }).count(), 0);
-    // The variant is on the model's page too.
+    // A template copied from another model: the Idris-M's crew into the Idris-P as a variant, departments and stand-ins with it.
+    const idrisP = page.locator(".syllabus-course:visible", { has: page.locator("h3", { hasText: /^Idris-P/ }) });
+    await idrisP.locator("summary", { hasText: "Copy a template into Idris-P" }).click();
+    const copy = idrisP.locator("form.copy-form");
+    await copy.getByLabel("Copy from").selectOption({ label: "Idris-M: Standard (25 seats)" });
+    await copy.getByLabel("Call the copy").fill("Boarding party");
+    await copy.getByRole("button", { name: "Copy the template" }).click();
+    await told(copy, "Copied as Boarding party.");
+    const copied = await one("select t.id, t.source from public.crew_templates t join public.ship_models m on m.id = t.model_id where m.slug = 'idris-p' and t.name = 'Boarding party'");
+    assert.equal(copied.source, "Copied from the Idris-M's Standard template");
+    assert.deepEqual(await supabase.sql("select count(*)::int as n from public.crew_template_groups where template_id = $1", [copied.id]), [{ n: 7 }]);
+    assert.deepEqual(await supabase.sql("select count(*)::int as n, sum(minimum)::int as to_sail from public.crew_template_stations where template_id = $1", [copied.id]), [{ n: 16, to_sail: 8 }]);
+    assert.deepEqual(
+      await supabase.sql(
+        "select n.role_id = (select id from public.fleet_roles where slug = 'navigator') as navigator from public.crew_template_stations s join public.crew_template_stations n on n.id = s.stand_in_id where s.template_id = $1",
+        [copied.id],
+      ),
+      [{ navigator: true }],
+    );
+    // The model's page shows the crew as a captain would brief it.
     await page.goto(`${site}/ships/models/redeemer`);
-    assert.match((await page.locator("section[aria-labelledby='crew']:visible").innerText()).replace(/\s+/g, " "), /Army support 2 × Medic \(2 seats\)/);
+    const crewSection = page.locator("section[aria-labelledby='crew']:visible");
+    const army = crewSection.locator(".crew-template", { has: page.locator("h3", { hasText: /^Army support/ }) });
+    assert.match((await army.locator(".crew-facts").innerText()).replace(/\s+/g, " "), /2 seats 1 to sail .*Approved by the Fleet Commander, October 2026/);
+    assert.match((await army.locator(".crew-group", { hasText: /medical/i }).innerText()).replace(/\s+/g, " "), /Medical 2 seats, 1 to sail .*Field medic Medic 2 1 needed to sail Treats the wounded aboard and in the field\. None/i);
+    await page.goto(`${site}/ships/models/idris-m`);
+    const idris = page.locator("section[aria-labelledby='crew']:visible .crew-template").first();
+    assert.match((await idris.locator(".crew-facts").innerText()).replace(/\s+/g, " "), /25 seats 8 to sail You could fill \d+ of 16 roles aboard Volume 1, Organisation: Flagship crew/);
+    assert.deepEqual(await idris.locator(".crew-group h4").evaluateAll((nodes) => nodes.map((node) => node.firstChild.textContent.trim())), ["Command", "Bridge", "Gunnery", "Engineering", "Flight deck", "Security", "Medical"]);
+    const helm = idris.locator("tr", { has: page.locator("th", { hasText: /^Helmsman/ }) });
+    assert.match((await helm.innerText()).replace(/\s+/g, " "), /Helmsman 1 needed to sail Not written yet Navigator/);
+    assert.ok(await helm.locator(".chip").count() >= 1, "the reader is told whether they could fill the helm");
+    await shot("model-crew");
     // A member is not offered the editor; the models are the admin's under Structure.
     await signInAs(sam);
     await page.goto(`${site}/admin/ships`);
@@ -4539,8 +4657,13 @@ try {
     said(/Jo Reyes gave the Gladius the role Reconnaissance, its primary/);
     said(/Jo Reyes took the role Training off the Gladius/);
     said(/Jo Reyes added the Army support crew template to the Redeemer/);
+    said(/Jo Reyes added the Medical department to the Army support template of the Redeemer/);
     said(/Jo Reyes set 2 Medic stations on the Army support template of the Redeemer/);
+    said(/Jo Reyes took the Engineer station off the Army support template of the Redeemer/);
+    said(/Jo Reyes changed the Medic station on the Army support template of the Redeemer/);
+    said(/Jo Reyes changed the Field medic \(Medic\) station on the Army support template of the Redeemer/);
     said(/Jo Reyes removed the Boarding crew template from the Redeemer/);
+    said(/Jo Reyes added the Boarding party crew template to the Idris-P/);
   });
 
   console.log("Four small things");

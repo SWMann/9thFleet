@@ -7825,26 +7825,6 @@ a.mention:hover {
   font-size: 1.0625rem;
 }
 
-.template-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin: 6px 0 0;
-  color: var(--text-2);
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
-
-.template-line strong {
-  color: var(--text);
-}
-
-.template-stations {
-  flex-basis: 100%;
-  color: var(--text-3);
-}
-
 .template-editor summary {
   display: flex;
   flex-wrap: wrap;
@@ -7860,28 +7840,12 @@ a.mention:hover {
 }
 
 .template-form,
-.stations-form {
-  margin: 8px 0 12px;
-  max-width: 42rem;
-}
-
-.stations-form {
+.copy-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 10px 16px;
   padding-top: 10px;
   border-top: 1px dashed var(--seam);
-}
-
-@media (min-width: 640px) {
-  .stations-form {
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
-    align-items: end;
-  }
-
-  .stations-form .hint {
-    grid-column: 1 / -1;
-  }
 }
 
 .offers ul,
@@ -8162,4 +8126,186 @@ a.mention:hover {
   height: 18px;
   margin: 0;
   accent-color: var(--green);
+}
+
+/* A crew template as a captain would brief it */
+
+.muted {
+  color: var(--text-3);
+}
+
+.crew-template + .crew-template {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--seam);
+}
+
+.crew-template h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+}
+
+.crew-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 0 0 16px;
+  color: var(--text-2);
+  font-size: 0.9375rem;
+}
+
+.crew-facts strong {
+  color: var(--white);
+}
+
+.crew-source {
+  flex-basis: 100%;
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+.crew-group + .crew-group {
+  margin-top: 20px;
+}
+
+.crew-group h4 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.crew-group-seats {
+  color: var(--text-3);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.data-crew tbody th {
+  min-width: 11em;
+}
+
+.data-crew .crew-brief {
+  min-width: 16em;
+  max-width: 28em;
+}
+
+.crew-essential th {
+  border-left: 3px solid var(--green);
+}
+
+.fit-needs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--text-2);
+  font-size: 0.875rem;
+}
+
+/* Command's crew editor */
+
+.crew-editor {
+  display: grid;
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.crew-editor fieldset {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--seam);
+  border-radius: 5px;
+}
+
+.crew-editor legend {
+  display: flex;
+  gap: 12px;
+  padding: 0 6px;
+  color: var(--white);
+  font-weight: 600;
+}
+
+.crew-editor-sum {
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.crew-editor ol {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.crew-group-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.crew-group-list input {
+  flex: 1 1 14em;
+  min-width: 0;
+}
+
+.crew-station {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--seam);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.crew-station-main {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(11em, 100%), 1fr));
+  gap: 8px 12px;
+}
+
+.crew-station label,
+.crew-group-list label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 0.8125rem;
+}
+
+.crew-station input,
+.crew-station select,
+.crew-group-list input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--seam-2);
+  border-radius: 4px;
+  background: #090d16;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9375rem;
+}
+
+.crew-number input {
+  max-width: 6em;
+}
+
+.crew-row-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }

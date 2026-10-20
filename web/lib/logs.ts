@@ -98,7 +98,7 @@ const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
     "grades", "ranks", "fleet_settings", "event_types", "lessons", "ship_models", "crew_templates", "crew_template_stations",
-    "ship_roles", "ship_model_roles",
+    "crew_template_groups", "ship_roles", "ship_model_roles",
   ],
   records: ["members"],
 };
@@ -144,6 +144,8 @@ type Names = {
   model: (id: unknown) => string;
   ship: (id: unknown) => string;
   template: (id: unknown) => string;
+  group: (id: unknown) => string;
+  station: (id: unknown) => string;
   shipRole: (id: unknown) => string;
   role: (id: unknown) => string;
   area: (id: unknown) => string;
@@ -269,7 +271,7 @@ export async function readLog(filters: Filters): Promise<LogPage> {
 
 /** Everything a line needs to name the people and things it mentions. */
 async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>) {
-  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates, shipRoles] = await Promise.all([
+  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates, shipRoles, groups, stations] = await Promise.all([
     supabase.from("members").select("id, character_name, service"),
     supabase.from("member_accounts").select("member_id, discord_name"),
     supabase.from("positions").select("id, title, unit_id"),
@@ -288,8 +290,10 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     supabase.from("ships").select("id, model_id, name, owner_id"),
     supabase.from("crew_templates").select("id, model_id, name"),
     supabase.from("ship_roles").select("id, name"),
+    supabase.from("crew_template_groups").select("id, name"),
+    supabase.from("crew_template_stations").select("id, name, role_id"),
   ]);
-  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates, shipRoles]) {
+  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates, shipRoles, groups, stations]) {
     if (result.error) throw new Error(`The names for the log could not be read: ${result.error.message}`);
   }
 
@@ -317,8 +321,10 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
   );
   const templateName = new Map((templates.data ?? []).map((row) => [row.id as string, `the ${row.name} template of the ${modelName.get(row.model_id as string) ?? "model that is gone"}`]));
   const shipRoleName = new Map((shipRoles.data ?? []).map((row) => [row.id as string, row.name as string]));
+  const groupName = new Map((groups.data ?? []).map((row) => [row.id as string, row.name as string]));
   const eventTitle = new Map((events.data ?? []).map((row) => [row.id as string, row.title as string]));
   const roleName = new Map((roles.data ?? []).map((row) => [row.id as string, row.name as string]));
+  const stationName = new Map((stations.data ?? []).map((row) => [row.id as string, (row.name as string) || (roleName.get(row.role_id as string) ?? "a role")]));
   const areaName = new Map((areas.data ?? []).map((row) => [row.id as string, row.name as string]));
   const typeName = new Map((eventTypes.data ?? []).map((row) => [row.key as string, row.name as string]));
   const extraPostTitle = new Map((eventPosts.data ?? []).map((row) => [row.id as string, row.title as string]));
@@ -336,6 +342,8 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     model: (id) => (typeof id === "string" ? (modelName.get(id) ?? "a model that is gone") : "a model"),
     ship: (id) => (typeof id === "string" ? (shipName.get(id) ?? "a ship that is off the register") : "a ship"),
     template: (id) => (typeof id === "string" ? (templateName.get(id) ?? "a template that is gone") : "a template"),
+    group: (id) => (typeof id === "string" ? (groupName.get(id) ?? "a department that is gone") : "a department"),
+    station: (id) => (typeof id === "string" ? (stationName.get(id) ?? "a station that is gone") : "a station"),
     shipRole: (id) => (typeof id === "string" ? (shipRoleName.get(id) ?? "a ship role that is gone") : "a ship role"),
     event: (id) => (typeof id === "string" ? (eventTitle.get(id) ?? "an event that is gone") : "an event"),
     eventType: (key) => (typeof key === "string" ? (typeName.get(key) ?? key) : "no type"),
@@ -396,6 +404,8 @@ function shown(key: string, value: unknown, names: Names, table: string): string
     if (key === "model_id") return names.model(value);
     if (key === "ship_id") return names.ship(value);
     if (key === "template_id") return names.template(value);
+    if (key === "group_id") return names.group(value);
+    if (key === "stand_in_id") return names.station(value);
     if (key === "objective_id") return names.objective(value);
     if (key === "event_post_id") return names.extraPost(value);
     if (key === "role_id" || key === "next_role_id") return names.role(value);
@@ -600,15 +610,25 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       if (row.action === "insert") return line("structure", `${actor} added the ${now.name} crew template to the ${model}`);
       if (row.action === "delete") return line("structure", `${actor} removed the ${was.name} crew template from the ${model}`);
       if (changed("is_default") && now.is_default === true) return line("structure", `${actor} made ${now.name} the standard crew template of the ${model}`);
+      if (changed("source") && !changed("name")) return line("structure", `${actor} wrote where the ${was.name} crew template of the ${model} comes from`, changes(row, names));
       return line("structure", `${actor} changed the ${was.name} crew template of the ${model}`, changes(row, names));
+    }
+
+    case "crew_template_groups": {
+      const template = names.template(any.template_id);
+      if (row.action === "insert") return line("structure", `${actor} added the ${now.name} department to ${template}`);
+      if (row.action === "delete") return line("structure", `${actor} removed the ${was.name} department from ${template}`);
+      return line("structure", `${actor} changed the ${was.name} department of ${template}`, changes(row, names));
     }
 
     case "crew_template_stations": {
       const template = names.template(any.template_id);
       const role = names.role(any.role_id);
-      if (row.action === "insert") return line("structure", `${actor} set ${now.count} ${role} ${Number(now.count) === 1 ? "station" : "stations"} on ${template}`);
-      if (row.action === "delete") return line("structure", `${actor} took the ${role} ${Number(was.count) === 1 ? "station" : "stations"} off ${template}`);
-      return line("structure", `${actor} set ${now.count} ${role} ${Number(now.count) === 1 ? "station" : "stations"} on ${template}`, changes(row, names));
+      const station = (name: unknown) => (typeof name === "string" && name ? `${name} (${role})` : role);
+      if (row.action === "insert") return line("structure", `${actor} set ${now.count} ${station(now.name)} ${Number(now.count) === 1 ? "station" : "stations"} on ${template}`);
+      if (row.action === "delete") return line("structure", `${actor} took the ${station(was.name)} ${Number(was.count) === 1 ? "station" : "stations"} off ${template}`);
+      if (changed("count") && !changed("name") && !changed("role_id")) return line("structure", `${actor} set ${now.count} ${station(now.name)} ${Number(now.count) === 1 ? "station" : "stations"} on ${template}`, changes(row, names));
+      return line("structure", `${actor} changed the ${station(was.name)} station on ${template}`, changes(row, names));
     }
 
     case "applications": {

@@ -7,7 +7,8 @@ import { HullCard, modelChoices } from "@/components/ships/HullCard";
 import { gate } from "@/lib/admin";
 import { getRegister, shipKindOf } from "@/lib/ships";
 import { createClient } from "@/lib/supabase/server";
-import { DeleteTemplateButton, RolesForm, ShipForm, StationsForm, TemplateForm } from "@/app/ships/ShipForms";
+import { CopyTemplateForm, DeleteTemplateButton, RolesForm, ShipForm, TemplateForm } from "@/app/ships/ShipForms";
+import { TemplateEditor } from "./TemplateEditor";
 
 export const metadata: Metadata = {
   title: "Ships",
@@ -48,6 +49,11 @@ async function Ships() {
     .filter((role) => role.kind === "primary")
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((role) => ({ id: role.id, name: role.name }));
+  const modelName = new Map(models.map((model) => [model.id, model.name]));
+  const copySources = templates
+    .filter((template) => template.stations.length > 0)
+    .map((template) => ({ id: template.id, label: `${modelName.get(template.modelId) ?? "A model"}: ${template.name} (${template.seats} ${template.seats === 1 ? "seat" : "seats"})` }))
+    .sort((a, b) => a.label.localeCompare(b.label));
   const choices = modelChoices(models);
   const standardOf = new Map(templates.filter((template) => template.isDefault).map((template) => [template.modelId, template]));
   const fleets = ships.filter((ship) => ship.ownerId === null);
@@ -140,17 +146,39 @@ async function Ships() {
                       <strong>{template.name}</strong>
                       {template.isDefault && template.name !== "Standard" ? <span className="chip">Standard</span> : null}
                       <span className="lesson-about">
-                        {template.stations.length > 0 ? `${template.stations.map((station) => `${station.count} × ${station.role}`).join(", ")} (${template.seats} seats)` : "No stations yet"}
+                        {template.stations.length > 0
+                          ? `${template.stations.map((station) => `${station.count} × ${station.name || station.role}`).join(", ")} (${template.seats} seats, ${template.minimumSeats} to sail)`
+                          : "No stations yet"}
                       </span>
                     </summary>
-                    <TemplateForm model={model.id} template={{ id: template.id, name: template.name, isDefault: template.isDefault }} />
-                    <StationsForm template={template.id} roles={roleChoices} stations={template.stations.map((station) => ({ roleId: station.roleId, count: station.count }))} />
+                    <TemplateForm model={model.id} template={{ id: template.id, name: template.name, isDefault: template.isDefault, source: template.source }} />
+                    <TemplateEditor
+                      template={{
+                        id: template.id,
+                        groups: template.groups.map((group) => ({ id: group.id, name: group.name })),
+                        stations: template.stations.map((station) => ({
+                          id: station.id,
+                          name: station.name,
+                          roleId: station.roleId,
+                          count: station.count,
+                          minimum: station.minimum,
+                          groupId: station.groupId,
+                          brief: station.brief,
+                          standInId: station.standInId,
+                        })),
+                      }}
+                      roles={roleChoices}
+                    />
                     {template.isDefault ? null : <DeleteTemplateButton template={template.id} />}
                   </details>
                 ))}
               <details className="add-lesson">
                 <summary>Add a variant for {model.name}</summary>
                 <TemplateForm model={model.id} template={null} />
+              </details>
+              <details className="add-lesson">
+                <summary>Copy a template into {model.name}</summary>
+                <CopyTemplateForm model={model.id} sources={copySources} />
               </details>
             </section>
           ))}
