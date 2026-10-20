@@ -319,8 +319,8 @@ tables and Supabase's own default privileges. It is only for the tests.
 
 The migrations are applied to the fleet's Supabase project, `9thFleet`, in London. The live
 database is compared with the tested copy after each one is applied: its functions, rules, columns,
-grants, triggers, constraints and views. It matched after the latest, `ship_board`, but for the
-training lines below.
+grants, triggers, constraints and views. It matched after the latest, `crew_templates_depth`, but for
+the training lines below.
 
 Each file name starts with the version number Supabase recorded when it was applied, so this folder
 and the database's own migration history agree.
