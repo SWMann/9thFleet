@@ -2,28 +2,30 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
-import { Icon } from "@/components/Icon";
+import { Scroll } from "@/components/admin/Charts";
 import { PageHead } from "@/components/PageHead";
-import { getRegister, shipKindOf, type CrewTemplate, type Ship } from "@/lib/ships";
-import { readyWords, sinceWords } from "@/lib/ships-form";
-import { shipKinds } from "@/lib/structure";
-import { MarkForm, RemoveForm, ShipForm } from "./ShipForms";
+import { getRegister } from "@/lib/ships";
+import { boardAddress, narrowed, narrowingFrom, stateWords } from "@/lib/ships-board";
+import { readyWords } from "@/lib/ships-form";
+import { shipKindOf, shipKinds } from "@/lib/structure";
 
 export const metadata: Metadata = {
-  title: "Ships",
+  title: "The fleet board",
   robots: { index: false, follow: false },
 };
 
 const title = (
   <>
-    The <strong>register</strong>
+    The fleet <strong>board</strong>
   </>
 );
 
-export default function ShipsPage() {
+type Props = { searchParams: Promise<{ kind?: string | string[]; role?: string | string[]; ready?: string | string[] }> };
+
+export default function ShipsPage({ searchParams }: Props) {
   return (
     <Suspense fallback={<Head lead="Reading the register." />}>
-      <Register />
+      <Board searchParams={searchParams} />
     </Suspense>
   );
 }
@@ -36,14 +38,19 @@ function Head({ lead, children }: { lead: string; children?: ReactNode }) {
   );
 }
 
-async function Register() {
-  const result = await getRegister();
+/**
+ * The register summed by model: what the fleet holds, what is ready, and who
+ * owns what. Each row leads to the model's page. Members manage their own
+ * hulls from their record; command manages any under Fleet admin.
+ */
+async function Board({ searchParams }: Props) {
+  const [result, params] = await Promise.all([getRegister(), searchParams]);
   if (result.state === "signed-out") redirect("/sign-in");
   if (result.state === "no-record") redirect("/profile");
   if (result.state === "no-database") return <Head lead="This site is not connected to the fleet's database yet." />;
   if (result.state === "outside") {
     return (
-      <Head lead="The register is for the serving fleet. You will see it once your application has been accepted.">
+      <Head lead="The fleet board is for the serving fleet. You will see it once your application has been accepted.">
         <p className="actions">
           <Link className="button button-quiet" href="/profile">
             Your record
@@ -52,24 +59,30 @@ async function Register() {
       </Head>
     );
   }
-  const { member, command, ships, models, templates, serving, strength, readAt: now } = result;
-  const mine = ships.filter((ship) => ship.ownerId === member.id);
+  const { member, ships, roles, strength, board, seatsReady, servingCount } = result;
+  const mine = ships.filter((ship) => ship.ownerId === member.id).length;
   const ready = ships.filter((ship) => ship.ready).length;
   const lead =
     ships.length === 0
-      ? "Nothing is registered yet. Register the ships you own, and mark each one ready when it could sail."
-      : `${ships.length} ${ships.length === 1 ? "hull" : "hulls"} on the register, ${readyWords(ready, ships.length)}. ${mine.length === 0 ? "None of them is yours yet." : `${mine.length} ${mine.length === 1 ? "is" : "are"} yours.`}`;
-  const choices = models.filter((model) => model.flyable).map((model) => ({ id: model.id, name: model.name, kind: model.kind, crew: model.crewMin === model.crewMax ? `crew ${model.crewMin}` : `crew ${model.crewMin} to ${model.crewMax}` }));
-  const standardOf = new Map(templates.filter((template) => template.isDefault).map((template) => [template.modelId, template]));
-  const byKind = shipKinds.map((kind) => ({ kind, ships: ships.filter((ship) => ship.model.kind === kind.key) })).filter((group) => group.ships.length > 0);
+      ? "Nothing is registered yet. Register the ships you own from your record, and mark each one ready when it could sail."
+      : `${ships.length} ${ships.length === 1 ? "hull" : "hulls"} on the register, ${readyWords(ready, ships.length)}. ${mine === 0 ? "None of them is yours yet." : `${mine} ${mine === 1 ? "is" : "are"} yours.`}`;
+
+  const asked = narrowingFrom(params);
+  const shown = narrowed(board, asked);
+  const kindsShown = shipKinds.filter((kind) => board.some((row) => row.model.kind === kind.key));
+  const rolesShown = roles.filter((role) => board.some((row) => row.model.roles.some((held) => held.slug === role.slug)));
+  const narrowedAtAll = asked.kind !== null || asked.role !== null || asked.ready;
 
   return (
     <>
       <Head lead={lead}>
         <p className="actions">
-          <a className="button button-quiet" href="#register">
+          <Link className="button button-quiet" href="/profile?tab=ships">
             Register a ship
-          </a>
+          </Link>
+          <Link className="button button-quiet" href="/ships/models">
+            The models
+          </Link>
         </p>
       </Head>
 
@@ -88,146 +101,102 @@ async function Register() {
               </li>
             ))}
           </ul>
+          <p className="seats-line">
+            {seatsReady === 0 ? "No seats aboard what is ready" : `${seatsReady} ${seatsReady === 1 ? "seat" : "seats"} aboard what is ready`}, by the models with stations set; {servingCount} serving.
+          </p>
           <p className="intro">
-            Each owner marks their own ships. A ship marked not ready is withdrawn from the events it was offered for; whoever runs an event sees what is offered
-            against what the plan needs.
+            Each owner marks their own ships, from their record. A ship marked not ready or in claim is withdrawn from the events it was offered for; whoever runs an
+            event sees what is offered against what the plan needs.
           </p>
         </section>
       ) : null}
 
-      <section className="wrap band" aria-labelledby="hulls">
-        <h2 id="hulls">
-          The <strong>hulls</strong>
+      <section className="wrap band band-last" aria-labelledby="board">
+        <h2 id="board">
+          The <strong>board</strong>
         </h2>
-        {ships.length === 0 ? (
+        {board.length === 0 ? (
           <p className="intro">The register is empty.</p>
         ) : (
-          byKind.map((group) => (
-            <div className="hull-group" key={group.kind.key}>
-              <h3>{group.kind.many}</h3>
-              <ul className="hulls">
-                {group.ships.map((ship) => (
-                  <HullCard key={ship.id} ship={ship} template={standardOf.get(ship.model.id) ?? null} now={now} choices={choices} owners={serving} command={command} />
-                ))}
-              </ul>
-            </div>
-          ))
+          <>
+            <p className="chips chips-left" aria-label="Narrow the board">
+              <Chip on={!narrowedAtAll} href="/ships">
+                Everything
+              </Chip>
+              <span className="chips-break" aria-hidden="true" />
+              {kindsShown.map((kind) => (
+                <Chip key={kind.key} on={asked.kind === kind.key} href={boardAddress("/ships", { ...asked, kind: asked.kind === kind.key ? null : kind.key })}>
+                  {kind.many}
+                </Chip>
+              ))}
+              <span className="chips-break" aria-hidden="true" />
+              {rolesShown.map((role) => (
+                <Chip key={role.slug} on={asked.role === role.slug} href={boardAddress("/ships", { ...asked, role: asked.role === role.slug ? null : role.slug })} title={role.description}>
+                  {role.name}
+                </Chip>
+              ))}
+              <span className="chips-break" aria-hidden="true" />
+              <Chip on={asked.ready} href={boardAddress("/ships", { ...asked, ready: !asked.ready })}>
+                Only ready
+              </Chip>
+            </p>
+            {shown.length === 0 ? (
+              <p className="intro">
+                Nothing on the board fits that. <Link href="/ships">Show everything.</Link>
+              </p>
+            ) : (
+              <Scroll label="The fleet board">
+                <table className="data data-board">
+                  <thead>
+                    <tr>
+                      <th scope="col">Model</th>
+                      <th scope="col">Kind</th>
+                      <th scope="col" className="number">
+                        Hulls
+                      </th>
+                      <th scope="col" className="number">
+                        Ready
+                      </th>
+                      <th scope="col">State</th>
+                      <th scope="col" className="number">
+                        Seats ready
+                      </th>
+                      <th scope="col">Owners</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shown.map((row) => (
+                      <tr key={row.model.id}>
+                        <th scope="row">
+                          <Link href={`/ships/models/${row.model.slug}`}>{row.model.name}</Link>
+                          <small>
+                            {row.model.maker ? `${row.model.maker}. ` : ""}
+                            {row.model.roles.map((role) => role.name).join(", ")}
+                          </small>
+                        </th>
+                        <td>{shipKindOf(row.model.kind).name}</td>
+                        <td className="number">{row.hulls}</td>
+                        <td className="number">{row.ready}</td>
+                        <td>{stateWords(row)}</td>
+                        <td className="number">{row.seats === 0 ? "No stations set" : row.seatsReady}</td>
+                        <td>{row.owners.join(", ")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Scroll>
+            )}
+          </>
         )}
-      </section>
-
-      <section className="wrap band" aria-labelledby="register">
-        <h2 id="register">
-          Register a <strong>ship</strong>
-        </h2>
-        <p className="intro">
-          {command
-            ? "Register one of your own, one of a member's, or a hull as the fleet's. Models missing from the list are added under Structure."
-            : "Each of the ships you own, by its model. Mark it ready when it could sail tonight, and not ready when it is down for repair or claim."}
-        </p>
-        <ShipForm ship={null} models={choices} owners={serving} command={command} />
-      </section>
-
-      <section className="wrap band band-last" aria-labelledby="templates">
-        <h2 id="templates">
-          Crew <strong>templates</strong>
-        </h2>
-        <p className="intro">
-          The stations aboard each model, as the fleet crews it. Every station is a role of the order of battle, so the readiness view can count who is qualified to
-          fill it.{command ? " Command keeps these under Fleet admin." : ""}
-        </p>
-        <ul className="templates">
-          {models
-            .filter((model) => templates.some((template) => template.modelId === model.id && template.stations.length > 0))
-            .map((model) => (
-              <li key={model.id} className="template-card">
-                <h3>
-                  {model.name} <span className="chip">{shipKindOf(model.kind).name}</span>
-                </h3>
-                {templates
-                  .filter((template) => template.modelId === model.id && template.stations.length > 0)
-                  .map((template) => (
-                    <TemplateLine key={template.id} template={template} />
-                  ))}
-              </li>
-            ))}
-        </ul>
       </section>
     </>
   );
 }
 
-function TemplateLine({ template }: { template: CrewTemplate }) {
+function Chip({ on, href, title, children }: { on: boolean; href: string; title?: string; children: ReactNode }) {
   return (
-    <p className="template-line">
-      <strong>{template.name}</strong>
-      {template.isDefault && template.name !== "Standard" ? <span className="chip">Standard</span> : null}
-      <span className="template-stations">
-        {template.stations.map((station) => `${station.count} × ${station.role}`).join(", ")} ({template.seats} {template.seats === 1 ? "seat" : "seats"})
-      </span>
-    </p>
-  );
-}
-
-function HullCard({
-  ship,
-  template,
-  now,
-  choices,
-  owners,
-  command,
-}: {
-  ship: Ship;
-  template: CrewTemplate | null;
-  now: number;
-  choices: { id: string; name: string; kind: string; crew: string }[];
-  owners: { id: string; name: string }[];
-  command: boolean;
-}) {
-  const label = ship.name ? `${ship.name}, ${ship.model.name}` : ship.model.name;
-  const editable = ship.mine || command;
-  // The form offers the ship's own model and owner even when the list would leave them out, so a save changes only what was changed.
-  const models = choices.some((choice) => choice.id === ship.model.id)
-    ? choices
-    : [{ id: ship.model.id, name: ship.model.name, kind: ship.model.kind, crew: ship.model.crewMin === ship.model.crewMax ? `crew ${ship.model.crewMin}` : `crew ${ship.model.crewMin} to ${ship.model.crewMax}` }, ...choices];
-  const ownerChoices = ship.ownerId === null || owners.some((owner) => owner.id === ship.ownerId) ? owners : [{ id: ship.ownerId, name: ship.owner }, ...owners];
-  return (
-    <li className={ship.ready ? "hull hull-ready" : "hull hull-down"}>
-      <div className="hull-head">
-        <h4>
-          {ship.name ? <span className="hull-name">{ship.name}</span> : null}
-          <span className="hull-model">{ship.model.name}</span>
-        </h4>
-        <span className={ship.ready ? "chip chip-on" : "chip chip-amber"}>{ship.ready ? "Ready" : "Not ready"}</span>
-      </div>
-      <p className="hull-facts">
-        <span className="with-icon">
-          <Icon name="person" size={14} />
-          {ship.owner}
-        </span>
-        <span className="with-icon">
-          <Icon name="clock" size={14} />
-          Marked {sinceWords(ship.readyAsOf, now)}
-        </span>
-        {template && template.seats > 0 ? (
-          <span className="with-icon">
-            <Icon name="people" size={14} />
-            {template.seats} {template.seats === 1 ? "seat" : "seats"}
-          </span>
-        ) : null}
-      </p>
-      {editable ? (
-        <>
-          {ship.note ? <p className="hull-note">{ship.note}</p> : null}
-          <div className="hull-tools">
-            <MarkForm id={ship.id} ready={ship.ready} />
-            <details className="hull-edit">
-              <summary>Change</summary>
-              <ShipForm ship={{ id: ship.id, modelId: ship.model.id, ownerId: ship.ownerId, name: ship.name, ready: ship.ready, note: ship.note }} models={models} owners={ownerChoices} command={command} />
-              <RemoveForm id={ship.id} label={label} />
-            </details>
-          </div>
-        </>
-      ) : null}
-    </li>
+    <Link className={on ? "chip chip-link chip-on" : "chip chip-link"} href={href} aria-current={on ? "true" : undefined} title={title || undefined}>
+      {children}
+    </Link>
   );
 }

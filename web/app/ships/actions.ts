@@ -93,22 +93,79 @@ async function writeNote(session: Session, shipId: string, note: string) {
   return session.supabase.from("ship_notes").insert({ ship_id: shipId, note }).select("ship_id");
 }
 
-/** Mark a ship ready or not, from its line on the register. */
+const MARKS = {
+  ready: { ready: true, in_claim: false },
+  down: { ready: false, in_claim: false },
+  claim: { ready: false, in_claim: true },
+} as const;
+const WITHDRAWN = "It is withdrawn from events whose roll is still open; where the roll has closed, whoever runs the event is shown it is down.";
+
+/** Mark a ship ready, not ready or in claim, from its line. */
 export async function markShip(_previous: ShipResult, formData: FormData): Promise<ShipResult> {
   const session = await signedIn();
   if (!session) return NOT_CONNECTED;
   const id = uuid(formData.get("id"));
-  const ready = formData.get("ready");
-  if (!id || (ready !== "yes" && ready !== "no")) return notThisPage(session, "ship.save");
-  const saved = await session.supabase.from("ships").update({ ready: ready === "yes" }).eq("id", id).select("id");
+  const mark = formData.get("mark");
+  if (!id || typeof mark !== "string" || !(mark in MARKS)) return notThisPage(session, "ship.save");
+  const saved = await session.supabase.from("ships").update(MARKS[mark as keyof typeof MARKS]).eq("id", id).select("id");
   if (saved.error) return { ok: false, message: await turnedDown(session.supabase, "ship.save", saved.error, explainRefusal(saved.error, "The mark could not be saved.")) };
   if (!saved.data || saved.data.length === 0) return { ok: false, message: await refused(session.supabase, "ship.save", "Only the owner or command marks a ship.") };
   refresh();
   return {
     ok: true,
-    message: ready === "yes" ? "Marked ready." : "Marked not ready. It is withdrawn from events whose roll is still open; where the roll has closed, whoever runs the event is shown it is down.",
+    message: mark === "ready" ? "Marked ready." : mark === "down" ? `Marked not ready. ${WITHDRAWN}` : `Marked in claim. ${WITHDRAWN}`,
     stamp: Date.now(),
   };
+}
+
+/** Command: the roles a model fills, and which is the primary. At least one. */
+export async function saveModelRoles(_previous: ShipResult, formData: FormData): Promise<ShipResult> {
+  const session = await signedIn();
+  if (!session) return NOT_CONNECTED;
+  const model = uuid(formData.get("model"));
+  if (!model) return notThisPage(session, "ship.roles");
+  const wanted = new Set<string>();
+  for (const [key, value] of formData.entries()) {
+    if (key.startsWith("role_") && value === "on") {
+      const id = uuid(key.slice("role_".length));
+      if (!id) return notThisPage(session, "ship.roles");
+      wanted.add(id);
+    }
+  }
+  if (wanted.size === 0) return { ok: false, message: "A model fills at least one role. Tick the ones it fills." };
+  const primary = uuid(formData.get("primary"));
+  if (!primary || !wanted.has(primary)) return { ok: false, message: "Choose the primary role from the ones ticked." };
+  const held = await session.supabase.from("ship_model_roles").select("role_id, is_primary").eq("model_id", model);
+  if (held.error) return { ok: false, message: await turnedDown(session.supabase, "ship.roles", held.error, "The model's roles could not be read.") };
+  const have = new Map((held.data ?? []).map((row) => [row.role_id as string, row.is_primary === true]));
+  // The primary first, so that the rest are never without one; then the others; then what is no longer wanted.
+  // Each step asks for the row back: a change the database quietly matched to nothing is a refusal too.
+  const steps: (() => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }>)[] = [];
+  if (!have.has(primary)) steps.push(() => session.supabase.from("ship_model_roles").insert({ model_id: model, role_id: primary, is_primary: true }).select("role_id"));
+  else if (!have.get(primary)) steps.push(() => session.supabase.from("ship_model_roles").update({ is_primary: true }).eq("model_id", model).eq("role_id", primary).select("role_id"));
+  for (const id of wanted) if (id !== primary && !have.has(id)) steps.push(() => session.supabase.from("ship_model_roles").insert({ model_id: model, role_id: id, is_primary: false }).select("role_id"));
+  for (const id of have.keys()) if (!wanted.has(id)) steps.push(() => session.supabase.from("ship_model_roles").delete().eq("model_id", model).eq("role_id", id).select("role_id"));
+  const notSaved = "The roles could not be saved. Command keeps them.";
+  for (const step of steps) {
+    const { data, error } = await step();
+    if (error) {
+      refresh();
+      return { ok: false, message: await turnedDown(session.supabase, "ship.roles", error, explainRefusal(error, notSaved)), stamp: Date.now() };
+    }
+    if (!Array.isArray(data) || data.length === 0) {
+      refresh();
+      return { ok: false, message: await refused(session.supabase, "ship.roles", notSaved), stamp: Date.now() };
+    }
+  }
+  // Nothing to do is still a save. Either way, what the model holds now is what was asked for.
+  const now = await session.supabase.from("ship_model_roles").select("role_id, is_primary").eq("model_id", model);
+  const holds = new Map((now.data ?? []).map((row) => [row.role_id as string, row.is_primary === true]));
+  if (!now.error && (holds.size !== wanted.size || [...wanted].some((id) => !holds.has(id)) || holds.get(primary) !== true)) {
+    refresh();
+    return { ok: false, message: await refused(session.supabase, "ship.roles", notSaved), stamp: Date.now() };
+  }
+  refresh();
+  return { ok: true, message: "Saved.", stamp: Date.now() };
 }
 
 /** Take a ship off the register. */

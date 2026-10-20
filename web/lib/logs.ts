@@ -98,6 +98,7 @@ const TABLES: Record<Exclude<LogKind, "sign-ins" | "refused">, string[]> = {
   structure: [
     "areas", "fleet_roles", "fleet_role_qualifications", "units", "positions", "qualifications", "position_qualifications",
     "grades", "ranks", "fleet_settings", "event_types", "lessons", "ship_models", "crew_templates", "crew_template_stations",
+    "ship_roles", "ship_model_roles",
   ],
   records: ["members"],
 };
@@ -143,6 +144,7 @@ type Names = {
   model: (id: unknown) => string;
   ship: (id: unknown) => string;
   template: (id: unknown) => string;
+  shipRole: (id: unknown) => string;
   role: (id: unknown) => string;
   area: (id: unknown) => string;
   event: (id: unknown) => string;
@@ -267,7 +269,7 @@ export async function readLog(filters: Filters): Promise<LogPage> {
 
 /** Everything a line needs to name the people and things it mentions. */
 async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>) {
-  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates] = await Promise.all([
+  const [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates, shipRoles] = await Promise.all([
     supabase.from("members").select("id, character_name, service"),
     supabase.from("member_accounts").select("member_id, discord_name"),
     supabase.from("positions").select("id, title, unit_id"),
@@ -285,8 +287,9 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     supabase.from("ship_models").select("id, name"),
     supabase.from("ships").select("id, model_id, name, owner_id"),
     supabase.from("crew_templates").select("id, model_id, name"),
+    supabase.from("ship_roles").select("id, name"),
   ]);
-  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates]) {
+  for (const result of [members, accounts, positions, units, qualifications, events, grades, ranks, roles, areas, eventTypes, eventPosts, objectives, lessons, models, ships, templates, shipRoles]) {
     if (result.error) throw new Error(`The names for the log could not be read: ${result.error.message}`);
   }
 
@@ -313,6 +316,7 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     }),
   );
   const templateName = new Map((templates.data ?? []).map((row) => [row.id as string, `the ${row.name} template of the ${modelName.get(row.model_id as string) ?? "model that is gone"}`]));
+  const shipRoleName = new Map((shipRoles.data ?? []).map((row) => [row.id as string, row.name as string]));
   const eventTitle = new Map((events.data ?? []).map((row) => [row.id as string, row.title as string]));
   const roleName = new Map((roles.data ?? []).map((row) => [row.id as string, row.name as string]));
   const areaName = new Map((areas.data ?? []).map((row) => [row.id as string, row.name as string]));
@@ -332,6 +336,7 @@ async function readNames(supabase: NonNullable<Awaited<ReturnType<typeof createC
     model: (id) => (typeof id === "string" ? (modelName.get(id) ?? "a model that is gone") : "a model"),
     ship: (id) => (typeof id === "string" ? (shipName.get(id) ?? "a ship that is off the register") : "a ship"),
     template: (id) => (typeof id === "string" ? (templateName.get(id) ?? "a template that is gone") : "a template"),
+    shipRole: (id) => (typeof id === "string" ? (shipRoleName.get(id) ?? "a ship role that is gone") : "a ship role"),
     event: (id) => (typeof id === "string" ? (eventTitle.get(id) ?? "an event that is gone") : "an event"),
     eventType: (key) => (typeof key === "string" ? (typeName.get(key) ?? key) : "no type"),
     extraPost: (id) => (typeof id === "string" ? (extraPostTitle.get(id) ?? "a post that is gone") : "a post"),
@@ -548,8 +553,26 @@ function describeChange(row: AuditRow, names: Names): LogLine | null {
       const owned = row.subject ? whose : "the fleet's";
       if (row.action === "insert") return line("personnel", `${actor} registered a ${model}${called}${ownerWords}`);
       if (row.action === "delete") return line("personnel", `${actor} took a ${model}${called} off the register${ownerWords}`);
+      if (changed("in_claim") && now.in_claim === true) return line("personnel", `${actor} marked ${owned} ${model}${called} in claim`);
       if (changed("ready")) return line("personnel", `${actor} marked ${owned} ${model}${called} ${now.ready ? "ready" : "not ready"}`);
+      if (changed("in_claim")) return line("personnel", `${actor} ended the claim on ${owned} ${model}${called}`);
       return line("personnel", `${actor} changed ${owned} ${model}${called} on the register`, changes(row, names));
+    }
+
+    case "ship_roles": {
+      if (row.action === "insert") return line("structure", `${actor} added the ship role ${now.name}`);
+      if (row.action === "delete") return line("structure", `${actor} removed the ship role ${was.name}`);
+      return line("structure", `${actor} changed the ship role ${was.name}`, changes(row, names));
+    }
+
+    case "ship_model_roles": {
+      const model = names.model(any.model_id);
+      const role = names.shipRole(any.role_id);
+      if (row.action === "insert") return line("structure", `${actor} gave the ${model} the role ${role}${now.is_primary === true ? ", its primary" : ""}`);
+      if (row.action === "delete") return line("structure", `${actor} took the role ${role} off the ${model}`);
+      if (now.is_primary === true) return line("structure", `${actor} made ${role} the primary role of the ${model}`);
+      if (was.is_primary === true) return line("structure", `${actor} stepped ${role} down from the primary role of the ${model}`);
+      return line("structure", `${actor} changed the role ${role} of the ${model}`, changes(row, names));
     }
 
     case "ship_notes": {

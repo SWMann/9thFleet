@@ -10,6 +10,7 @@ import { getFeedKey } from "@/lib/feed";
 import { getSession, isServing, isStaff, type Member, type Role, type Service, type Status } from "@/lib/member";
 import { originOf } from "@/lib/origin";
 import { getServiceRecord } from "@/lib/service-record";
+import { readRegister } from "@/lib/ships";
 import { getTrainingRecord } from "@/lib/training";
 import { orderName } from "@/lib/orders-form";
 import { getUnreadOrders } from "@/lib/routine-orders";
@@ -17,6 +18,7 @@ import { site } from "@/lib/site";
 import { signOut } from "./actions";
 import { FeedBox } from "./FeedBox";
 import { NamesForm } from "./NamesForm";
+import { YourShips } from "./YourShips";
 import { Icon, type IconName } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 
@@ -94,11 +96,12 @@ async function Record() {
   const status = statusNames[member.status];
   // Someone who has served has a record. A new applicant has only the day they signed in, which is not worth a tab.
   // One who was sent back out still has what went before.
-  const [read, orders, training, feed] = await Promise.all([
+  const [read, orders, training, feed, register] = await Promise.all([
     getServiceRecord(member.id, member.service),
     getUnreadOrders(),
     isServing(member) ? getTrainingRecord(member.id) : Promise.resolve([]),
     isServing(member) ? getFeedKey(member.id) : Promise.resolve(null),
+    isServing(member) ? readRegister(member) : Promise.resolve(null),
   ]);
   const record = member.status !== "applicant" || read.posts.length > 0 || read.statusLines.length > 1 ? read : null;
   const origin = isServing(member) ? originOf(await headers()) : "";
@@ -227,6 +230,7 @@ async function Record() {
 
   // Attendance is on the record of someone serving. The database sends nobody else a line of it.
   const posts = record.posts.length;
+  const hulls = register?.state === "ready" ? register.ships.filter((ship) => ship.ownerId === member.id).length : 0;
   return (
     <>
       {head}
@@ -235,6 +239,7 @@ async function Record() {
         tabs={[
           { id: "standing", label: "Standing", icon: "person" },
           { id: "service", label: "Service record", icon: "list", badge: posts > 0 ? (posts === 1 ? "1 post" : `${posts} posts`) : undefined },
+          ...(register ? [{ id: "ships", label: "Ships", icon: "anchor" as const, badge: hulls > 0 ? (hulls === 1 ? "1 hull" : `${hulls} hulls`) : undefined }] : []),
         ]}
       >
         <TabPanel id="standing">{standing}</TabPanel>
@@ -249,6 +254,11 @@ async function Record() {
           </div>
           <ServiceRecordView record={record} own attendance={isServing(member)} training={training} />
         </TabPanel>
+        {register ? (
+          <TabPanel id="ships">
+            <YourShips member={member} result={register} />
+          </TabPanel>
+        ) : null}
       </Tabs>
     </>
   );

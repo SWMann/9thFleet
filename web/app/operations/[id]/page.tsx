@@ -1322,7 +1322,7 @@ function Readiness({ event, readiness, runs }: { event: FleetEvent; readiness: R
                   {line.ship.owner}
                   {line.template ? ` · ${line.template.seats} ${line.template.seats === 1 ? "seat" : "seats"}` : ""}
                 </span>
-                {line.ship.ready ? null : <span className="chip chip-amber">Marked not ready</span>}
+                {line.ship.ready ? null : <span className="chip chip-amber">{line.ship.inClaim ? "Marked in claim" : "Marked not ready"}</span>}
               </li>
             ))}
           </ul>
@@ -1359,7 +1359,7 @@ function Readiness({ event, readiness, runs }: { event: FleetEvent; readiness: R
       <Pane id="bring" icon="anchor" title="What you can bring" wide>
         {readiness.mine.length === 0 ? (
           <p>
-            You have no ship marked ready on <Link href="/ships">the register</Link>.
+            You have no ship marked ready. Your ships are on <Link href="/profile?tab=ships">your record</Link>.
           </p>
         ) : offerable.length === 0 ? (
           <p>

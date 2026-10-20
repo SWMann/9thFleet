@@ -1,4 +1,5 @@
 import "server-only";
+import { shipKindOf, shipKinds } from "./ship-kinds";
 import { areaPictures, domains } from "@/lib/areas";
 import { gate } from "@/lib/admin";
 import { paragraphs, weapons } from "@/lib/operations-form";
@@ -47,11 +48,11 @@ export type FieldSpec =
 /** A field as the form is given it, with its choices filled in. */
 export type Field = Exclude<FieldSpec, { kind: "record" }> | (Common & { kind: "record"; source: Source; options: Option[] });
 
-export type SheetKey = "areas" | "roles" | "units" | "posts" | "qualifications" | "event-types" | "ships";
+export type SheetKey = "areas" | "roles" | "units" | "posts" | "qualifications" | "event-types" | "ships" | "ship-roles";
 
 export type Sheet = {
   key: SheetKey;
-  table: "areas" | "fleet_roles" | "units" | "positions" | "qualifications" | "event_types" | "ship_models";
+  table: "areas" | "fleet_roles" | "units" | "positions" | "qualifications" | "event_types" | "ship_models" | "ship_roles";
   /** What one record is called, and several. */
   one: string;
   many: string;
@@ -117,24 +118,8 @@ const unitKinds = [
 export const GRADES = ["E1", "E2", "E3", "E4", "E5", "E6", "E7", "OC", "O1", "O2", "O3", "O4", "O5", "O6", "O7", "O8", "O9", "O10"];
 const grades: Option[] = GRADES.map((code) => ({ value: code, label: code }));
 
-/** The kinds of hull, in the order the register lists them. */
-export const shipKinds: { key: string; name: string; many: string }[] = [
-  { key: "capital", name: "Capital ship", many: "Capital ships" },
-  { key: "frigate", name: "Frigate", many: "Frigates" },
-  { key: "corvette", name: "Corvette", many: "Corvettes" },
-  { key: "gunship", name: "Gunship", many: "Gunships" },
-  { key: "dropship", name: "Dropship", many: "Dropships" },
-  { key: "fighter", name: "Fighter", many: "Fighters" },
-  { key: "bomber", name: "Bomber", many: "Bombers" },
-  { key: "transport", name: "Transport", many: "Transports" },
-  { key: "medical", name: "Medical ship", many: "Medical ships" },
-  { key: "support", name: "Support ship", many: "Support ships" },
-  { key: "exploration", name: "Exploration ship", many: "Exploration ships" },
-  { key: "salvage", name: "Salvage ship", many: "Salvage ships" },
-  { key: "mining", name: "Mining ship", many: "Mining ships" },
-  { key: "runabout", name: "Runabout", many: "Runabouts" },
-];
-export const shipKindOf = (key: string) => shipKinds.find((kind) => kind.key === key) ?? { key, name: key, many: key };
+// The kinds of hull live in their own file, which a form in the browser may read.
+export { shipKinds, shipKindOf } from "./ship-kinds";
 
 export const sheets: Sheet[] = [
   {
@@ -335,6 +320,21 @@ export const sheets: Sheet[] = [
       order,
     ],
   },
+  {
+    key: "ship-roles",
+    table: "ship_roles",
+    one: "ship role",
+    many: "Ship roles",
+    about: "What a hull does for the fleet: escort, strike, logistics, and so on. A kind says what a model is; its roles say what it does, and a model may have several. Command gives each model its roles under Fleet admin, Ships; the fleet board narrows by them.",
+    inUse: "Some model still has this role. Take it off those models first, under Fleet admin, Ships.",
+    taken: "Another role already has that name or address.",
+    fields: [
+      { key: "name", label: "Name", kind: "text", max: 60, required: true, hint: "Escort, Fire support, Assault transport." },
+      { key: "slug", label: "Address", kind: "slug", required: true, onlyWhenNew: true, hint: "A short name for it that never changes: fire-support." },
+      { key: "description", label: "What it means", kind: "long", max: 300, rows: 2, hint: "One line, shown where the role is picked." },
+      order,
+    ],
+  },
 ];
 
 export const sheetOf = (key: string) => sheets.find((sheet) => sheet.key === key) ?? null;
@@ -451,6 +451,8 @@ export async function loadSheet(sheet: Sheet): Promise<Loaded> {
             note: `${row.maker ? `${row.maker}, ` : ""}crew ${row.crew_min === row.crew_max ? row.crew_min : `${row.crew_min} to ${row.crew_max}`}${row.flyable === true ? "" : ", not flyable yet"}`,
             group: shipKindOf(row.kind as string).many,
           };
+        case "ship-roles":
+          return { title: row.name as string, note: (row.description as string) || "", group: "" };
         default:
           return { title: row.name as string, note: String(row.code ?? ""), group: "" };
       }
@@ -495,7 +497,7 @@ export async function countStructure(): Promise<{ state: "no-database" } | { sta
     if (error) throw new Error(`The ${table} could not be counted: ${error.message}`);
     return (data ?? []).length;
   };
-  const [areas, roles, units, posts, qualifications, grades, eventTypes, ships] = await Promise.all([
+  const [areas, roles, units, posts, qualifications, grades, eventTypes, ships, shipRoles] = await Promise.all([
     read("areas", "id"),
     read("fleet_roles", "id"),
     read("units", "id"),
@@ -504,8 +506,9 @@ export async function countStructure(): Promise<{ state: "no-database" } | { sta
     read("grades", "code"),
     read("event_types", "id"),
     read("ship_models", "id"),
+    read("ship_roles", "id"),
   ]);
-  return { state: "ready", counts: { areas, roles, units, posts, qualifications, grades, "event-types": eventTypes, ships } };
+  return { state: "ready", counts: { areas, roles, units, posts, qualifications, grades, "event-types": eventTypes, ships, "ship-roles": shipRoles } };
 }
 
 export type RankTable =

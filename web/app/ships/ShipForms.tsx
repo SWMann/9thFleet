@@ -2,7 +2,8 @@
 
 import { useActionState } from "react";
 import { SHIP_NAME_LIMIT, SHIP_NOTE_LIMIT } from "@/lib/ships-form";
-import { deleteTemplate, markShip, offerShip, registerShip, removeShip, saveShip, saveStation, saveTemplate, type ShipResult } from "./actions";
+import { shipKinds } from "@/lib/ship-kinds";
+import { deleteTemplate, markShip, offerShip, registerShip, removeShip, saveModelRoles, saveShip, saveStation, saveTemplate, type ShipResult } from "./actions";
 
 const untouched: ShipResult = { ok: false, message: "" };
 
@@ -14,7 +15,7 @@ function Result({ result }: { result: ShipResult }) {
   );
 }
 
-export type ModelChoice = { id: string; name: string; kind: string; crew: string };
+export type ModelChoice = { id: string; name: string; kind: string; maker: string; crew: string };
 export type OwnerChoice = { id: string; name: string };
 
 /**
@@ -45,11 +46,20 @@ export function ShipForm({
           <option value="" disabled>
             Choose the model
           </option>
-          {models.map((model) => (
-            <option key={model.id} value={model.id}>
-              {model.name} ({model.crew})
-            </option>
-          ))}
+          {shipKinds
+            .filter((kind) => models.some((model) => model.kind === kind.key))
+            .map((kind) => (
+              <optgroup key={kind.key} label={kind.many}>
+                {models
+                  .filter((model) => model.kind === kind.key)
+                  .map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} ({model.maker ? `${model.maker}, ` : ""}
+                      {model.crew})
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
         </select>
         {ship && !command ? <input type="hidden" name="model" value={ship.modelId} /> : null}
       </div>
@@ -101,17 +111,66 @@ export function ShipForm({
   );
 }
 
-/** Mark a ship ready or not, from its line. */
-export function MarkForm({ id, ready }: { id: string; ready: boolean }) {
+/** Mark a ship ready, not ready or in claim, from its line: the two marks it is not. */
+export function MarkForm({ id, ready, inClaim }: { id: string; ready: boolean; inClaim: boolean }) {
   const [result, action, pending] = useActionState(markShip, untouched);
+  const marks: { value: string; label: string }[] = [
+    ...(ready ? [] : [{ value: "ready", label: "Mark ready" }]),
+    ...(ready || inClaim ? [{ value: "down", label: "Mark not ready" }] : []),
+    ...(inClaim ? [] : [{ value: "claim", label: "Mark in claim" }]),
+  ];
   return (
-    <form action={action} className="inline-form">
+    <form action={action} className="inline-form marks">
       <input type="hidden" name="id" value={id} />
-      <input type="hidden" name="ready" value={ready ? "no" : "yes"} />
-      <button className="button button-quiet button-small" type="submit" disabled={pending}>
-        {pending ? "Marking" : ready ? "Mark not ready" : "Mark ready"}
-      </button>
+      {marks.map((mark) => (
+        <button key={mark.value} className="button button-quiet button-small" type="submit" name="mark" value={mark.value} disabled={pending}>
+          {pending ? "Marking" : mark.label}
+        </button>
+      ))}
       {result.message ? <Result result={result} /> : null}
+    </form>
+  );
+}
+
+/** Command: the roles a model fills, one of them primary. */
+export function RolesForm({ model, roles, held }: { model: string; roles: { id: string; name: string; description: string }[]; held: { id: string; primary: boolean }[] }) {
+  const [result, action, pending] = useActionState(saveModelRoles, untouched);
+  const primary = held.find((role) => role.primary)?.id ?? held[0]?.id ?? "";
+  return (
+    <form action={action} className="roles-form" key={result.stamp ?? 0}>
+      <input type="hidden" name="model" value={model} />
+      <table className="roles-table">
+        <thead>
+          <tr>
+            <th scope="col">Role</th>
+            <th scope="col">Fills it</th>
+            <th scope="col">Primary</th>
+          </tr>
+        </thead>
+        <tbody>
+          {roles.map((role) => (
+            <tr key={role.id}>
+              <th scope="row">
+                <label htmlFor={`role_${model}_${role.id}`}>{role.name}</label>
+                {role.description ? <small>{role.description}</small> : null}
+              </th>
+              <td>
+                <input id={`role_${model}_${role.id}`} type="checkbox" name={`role_${role.id}`} defaultChecked={held.some((line) => line.id === role.id)} aria-label={`${role.name}: fills it`} />
+              </td>
+              <td>
+                <input type="radio" name="primary" value={role.id} defaultChecked={primary === role.id} aria-label={`${role.name}: the primary role`} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="form-end">
+        <button className="button button-quiet" type="submit" disabled={pending}>
+          {pending ? "Saving" : "Save the roles"}
+        </button>
+        <Result result={result} />
+      </div>
+      <p className="hint">A model fills at least one role. The primary is the one it is listed under where one role is wanted.</p>
     </form>
   );
 }

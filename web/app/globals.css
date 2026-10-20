@@ -8045,3 +8045,121 @@ a.mention:hover {
 .data-returns td {
   white-space: nowrap;
 }
+
+/* The fleet board, the models, and the roles editor */
+
+.chips-left {
+  justify-content: flex-start;
+  margin: 0 0 18px;
+}
+
+/* A thin break between the groups of chips: the kinds, the roles, the readiness. */
+.chips-break {
+  align-self: center;
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: var(--seam-2);
+}
+
+.seats-line {
+  margin: -6px 0 14px;
+  color: var(--white);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.data-board tbody th {
+  min-width: 13em;
+}
+
+.data-board td:last-child {
+  min-width: 14em;
+}
+
+.model-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.model-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--seam);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.model-name {
+  color: var(--white);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.model-facts {
+  flex: 1 1 18em;
+  color: var(--text-2);
+  font-size: 0.9375rem;
+}
+
+.marks .button + .button {
+  margin-left: 0;
+}
+
+.roles-form {
+  display: grid;
+  gap: 14px;
+  max-width: 44em;
+}
+
+.roles-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.roles-table th,
+.roles-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--seam);
+  text-align: left;
+  vertical-align: top;
+}
+
+.roles-table thead th {
+  color: var(--text-2);
+  font-size: 0.78125rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.roles-table tbody th {
+  color: var(--white);
+  font-weight: 600;
+}
+
+.roles-table tbody th small {
+  display: block;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.roles-table td {
+  width: 6em;
+  text-align: center;
+}
+
+.roles-table input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--green);
+}

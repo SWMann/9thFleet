@@ -31,6 +31,7 @@ or let someone promote themselves.
 | `migrations/…_routine_orders.sql` | Routine orders: drafted and issued by command, numbered and dated by the database, read by the serving fleet, each member marking an issue as read |
 | `migrations/…_training_records.sql` | Training records: each qualification as a course of lessons, signed off by instructors, with the qualification awarded once every lesson is passed |
 | `migrations/…_ship_register.sql` | The ship register: models, crew templates by role, each member's hulls with a ready mark and a private note, what an event's plan needs by model, and what owners offer |
+| `migrations/…_ship_board.sql` | The fleet board: ship roles (an admin's sheet) and each model's roles with one primary (command's); a hull in claim, a third mark beside ready and not ready; a first classification of the models |
 | `migrations/…_quick_wins.sql` | Calendar feed keys and the feed view, the monthly returns and the job that writes them, and the terms of secondary duties |
 | `tests/` | Tests that sign in as each kind of person and check what they can and cannot do |
 
@@ -57,11 +58,11 @@ Staff look after people, command makes appointments, and the admin owns the stru
 | --- | --- | --- |
 | Visitor, not signed in | Whether recruitment is open, the grades and the rank names, and the structure: areas, roles, units, positions and the qualifications each requires. Never who holds one | Send a piracy report, and read nothing back |
 | Applicant | The same, and their own record and their own application | Set a character name and an RSI handle, apply while recruitment is open, withdraw |
-| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position now and which qualification, every announced event with its orders, roll and report, their own service record, the hostile list as it stands today, issued routine orders, the training syllabus and their own lessons passed, the ship register, the models and crew templates, and what is offered for each event | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. Mark an issue of routine orders as read. Register their own ships, name them, mark them ready and write a note on each. Offer a ready ship for an event they are attending, until the roll closes. A full member can apply for the cadet course |
+| Recruit, auxiliary, member, reservist | The serving fleet, the order of battle, who holds which position now and which qualification, every announced event with its orders, roll and report, their own service record, the hostile list as it stands today, issued routine orders, the training syllabus and their own lessons passed, the ship register, the models and crew templates, and what is offered for each event | Change their RSI handle. Reply to an event until its roll closes. Stand in for an empty entry position if they hold none. Mark an issue of routine orders as read. Register their own ships, name them, mark them ready, not ready or in claim, and write a note on each. Offer a ready ship for an event they are attending, until the roll closes. A full member can apply for the cadet course |
 | Instructor | The same, and every member's lessons passed | Sign off a lesson for someone else, in their own name, and withdraw their own sign-off until the award. Award a qualification to someone else once every lesson of its course is passed. Draft an event of a type that is open to instructors, which at the start is training |
 | Staff | Everyone, every application and the interview notes, and any member's service record | Move applications through their stages. Move a member between recruit, auxiliary, member and reserve. Set a member's service |
-| Command | The same as staff, every entry of the hostile list: waiting, declined, lifted and lapsed, the piracy reports, the draft of routine orders and who has read each issue, and every owner's note on a ship | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event. Keep the hostile list. Handle and delete piracy reports. Draft, issue and correct routine orders. Edit the syllabus: the lessons of each course and what a course requires first. Register a ship for anyone or as the fleet's, correct any entry, offer the fleet's ships, and keep the crew templates |
-| Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, the areas and roles, the qualifications, the ship models and the rank names. Grant roles on the site, open recruitment, open a service, move the fleet to a new stage |
+| Command | The same as staff, every entry of the hostile list: waiting, declined, lifted and lapsed, the piracy reports, the draft of routine orders and who has read each issue, and every owner's note on a ship | Appoint members to positions, promote within a band, discharge and reinstate. Draft and run any event. Keep the hostile list. Handle and delete piracy reports. Draft, issue and correct routine orders. Edit the syllabus: the lessons of each course and what a course requires first. Register a ship for anyone or as the fleet's, correct any entry, offer the fleet's ships, and keep the crew templates and each model's roles |
+| Admin | Everything, including the audit log, the activity log and the page counts | Keep the order of battle, the areas and roles, the qualifications, the ship models, the ship roles and the rank names. Grant roles on the site, open recruitment, open a service, move the fleet to a new stage |
 
 Roles add up: an admin holds every role. Things the database decides for itself:
 
@@ -155,20 +156,27 @@ Roles add up: an admin holds every role. Things the database decides for itself:
   started, read with the reader's own access to the passes: a member their own, staff everyone's,
   an instructor those of the members they can see.
 - **A ship is its owner's, and the register is the fleet's to read.** A serving member registers
-  their own ships (the owner is set to them whatever they send), names them and marks them ready;
-  the database dates the mark and keeps who registered it. Command registers a hull for any
+  their own ships (the owner is set to them whatever they send), names them and marks them ready,
+  not ready or in claim; the database dates the mark and keeps who registered it. A hull is never
+  ready and in claim at once: marking it in claim clears ready, marking it ready ends the claim,
+  and a hull is not registered in claim. A discharge stands the leaver's ships down from inside
+  the status change, which the register's guard lets through as the database's own housekeeping;
+  the owner of a hull is checked against the serving fleet only when the owner changes, so command
+  still corrects a leaver's entry. Command registers a hull for any
   serving member or as the fleet's, and changes any entry. A note on a ship is read and written by
   the owner and command, and the log records that it was written, not what it said. An owner who
   is attending an announced event offers a ready ship of theirs until the roll closes, and
   withdraws it until then; command offers and withdraws the fleet's hulls, attending or not. An
   offer of an owner's ship goes by itself when they are no longer attending or their line on the
-  roll is removed, and when the ship is marked not ready or given to another owner while the roll
-  is still open. Once a roll has closed the offer stands: the owner cannot take the ship off the
+  roll is removed, and when the ship is marked not ready or in claim, or given to another owner,
+  while the roll is still open. Once a roll has closed the offer stands: the owner cannot take the ship off the
   register until the event is over, and command may. A member who leaves the serving fleet has
   their ships marked not ready and their offers withdrawn. A plan's ship picked from the models is
   named by its model and follows a rename. Models are an admin's, crew templates and their
   stations command's; one template is the standard for each model and stays while the model
-  does, and a station stays with its template.
+  does, and a station stays with its template. Ship roles are an admin's, and a role some model
+  holds is not removed; which roles a model fills is command's, and the database keeps exactly one
+  primary per model, handing it on when the primary is taken away.
 - **A calendar feed key is the member's own, and the feed is read by nobody in particular.**
   A serving member makes a key (`calendar_keys`; the database makes the key itself, 64 hex
   characters, and a change to the line makes a new one). The `calendar_feed` view is the one view

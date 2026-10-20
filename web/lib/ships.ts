@@ -1,5 +1,6 @@
 import "server-only";
 import { getSession, isServing, type Member, type Status } from "@/lib/member";
+import { boardRows, type BoardRow, type ModelRole, type ShipRole } from "@/lib/ships-board";
 import { shipKindOf, shipKinds } from "@/lib/structure";
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,6 +20,8 @@ export type ShipModel = {
   crewMax: number;
   flyable: boolean;
   sortOrder: number;
+  /** What it does for the fleet, the primary role first. */
+  roles: ModelRole[];
 };
 
 export type Station = { roleId: string; role: string; count: number };
@@ -31,6 +34,8 @@ export type Ship = {
   owner: string;
   name: string;
   ready: boolean;
+  /** Lost, with a claim pending. Never ready at the same time. */
+  inClaim: boolean;
   readyAsOf: string;
   registeredAt: string;
   /** The reader's own, or one of the fleet's that command keeps. */
@@ -61,9 +66,9 @@ async function allRows(query: (from: number, to: number) => PromiseLike<{ data: 
 
 /** Every ship on the register, as the database sends them to the reader. */
 const allShips = (supabase: Client) =>
-  allRows((from, to) => supabase.from("ships").select("id, model_id, owner_id, name, ready, ready_as_of, registered_at").order("registered_at").order("id").range(from, to), "The register");
+  allRows((from, to) => supabase.from("ships").select("id, model_id, owner_id, name, ready, in_claim, ready_as_of, registered_at").order("registered_at").order("id").range(from, to), "The register");
 
-const toModel = (row: Row): ShipModel => ({
+const toModel = (row: Row, roles: ModelRole[]): ShipModel => ({
   id: row.id as string,
   slug: row.slug as string,
   name: row.name as string,
@@ -73,25 +78,44 @@ const toModel = (row: Row): ShipModel => ({
   crewMax: Number(row.crew_max),
   flyable: row.flyable === true,
   sortOrder: Number(row.sort_order ?? 0),
+  roles,
 });
+
+/** A hull whose model has gone from the list, so that the register still reads. */
+const goneModel = (id: string): ShipModel => ({ id, slug: "", name: "A model that is gone", maker: "", kind: "runabout", crewMin: 1, crewMax: 1, flyable: false, sortOrder: 999, roles: [] });
 
 const kindOrder = new Map(shipKinds.map((kind, index) => [kind.key, index]));
 /** Models in the register's order: by kind, then by their place, then by name. */
 export const byModel = (a: ShipModel, b: ShipModel) =>
   (kindOrder.get(a.kind) ?? 99) - (kindOrder.get(b.kind) ?? 99) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
 
-/** Every model, and every crew template with its stations. */
-export async function getModels(supabase: Client): Promise<{ models: ShipModel[]; templates: CrewTemplate[] }> {
-  const [models, templates, stations, roles] = await Promise.all([
+/** Every model with its roles, every crew template with its stations, and the roles themselves. */
+export async function getModels(supabase: Client): Promise<{ models: ShipModel[]; templates: CrewTemplate[]; roles: ShipRole[] }> {
+  const [models, templates, stations, roles, shipRoles, modelRoles] = await Promise.all([
     supabase.from("ship_models").select("id, slug, name, maker, kind, crew_min, crew_max, flyable, sort_order"),
     supabase.from("crew_templates").select("id, model_id, name, is_default"),
     supabase.from("crew_template_stations").select("template_id, role_id, count, sort_order"),
     supabase.from("fleet_roles").select("id, name"),
+    supabase.from("ship_roles").select("id, slug, name, description, sort_order"),
+    supabase.from("ship_model_roles").select("model_id, role_id, is_primary"),
   ]);
-  for (const result of [models, templates, stations, roles]) {
+  for (const result of [models, templates, stations, roles, shipRoles, modelRoles]) {
     if (result.error) throw new Error(`The ship models could not be read: ${result.error.message}`);
   }
   const roleName = new Map(((roles.data ?? []) as Row[]).map((row) => [row.id as string, row.name as string]));
+  const roleList: ShipRole[] = ((shipRoles.data ?? []) as Row[])
+    .map((row) => ({ id: row.id as string, slug: row.slug as string, name: row.name as string, description: (row.description as string) ?? "", sortOrder: Number(row.sort_order ?? 0) }))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  const roleOf = new Map(roleList.map((role) => [role.id, role]));
+  const rolesOf = new Map<string, ModelRole[]>();
+  for (const row of (modelRoles.data ?? []) as Row[]) {
+    const role = roleOf.get(row.role_id as string);
+    if (!role) continue;
+    const list = rolesOf.get(row.model_id as string) ?? [];
+    list.push({ id: role.id, slug: role.slug, name: role.name, primary: row.is_primary === true });
+    rolesOf.set(row.model_id as string, list);
+  }
+  for (const list of rolesOf.values()) list.sort((a, b) => Number(b.primary) - Number(a.primary) || (roleOf.get(a.id)?.sortOrder ?? 0) - (roleOf.get(b.id)?.sortOrder ?? 0));
   const stationsOf = new Map<string, Station[]>();
   for (const row of ((stations.data ?? []) as Row[]).sort((a, b) => Number(a.sort_order) - Number(b.sort_order))) {
     const list = stationsOf.get(row.template_id as string) ?? [];
@@ -99,7 +123,8 @@ export async function getModels(supabase: Client): Promise<{ models: ShipModel[]
     stationsOf.set(row.template_id as string, list);
   }
   return {
-    models: ((models.data ?? []) as Row[]).map(toModel).sort(byModel),
+    models: ((models.data ?? []) as Row[]).map((row) => toModel(row, rolesOf.get(row.id as string) ?? [])).sort(byModel),
+    roles: roleList,
     templates: ((templates.data ?? []) as Row[])
       .map((row) => {
         const list = stationsOf.get(row.id as string) ?? [];
@@ -136,10 +161,17 @@ export type Register =
       ships: Ship[];
       models: ShipModel[];
       templates: CrewTemplate[];
+      roles: ShipRole[];
       /** For command: everyone serving, to register a hull for. */
       serving: Named[];
+      /** How many are serving, which the seats line is read against. */
+      servingCount: number;
       /** By kind: how many hulls are registered and how many are ready. */
       strength: { kind: string; name: string; hulls: number; ready: number }[];
+      /** The register summed by model, in the register's order. */
+      board: BoardRow[];
+      /** Seats aboard the hulls that are ready, by their standard templates. */
+      seatsReady: number;
       /** When the register was read, which "marked 3 days ago" counts from. */
       readAt: number;
     };
@@ -147,7 +179,11 @@ export type Register =
 export async function getRegister(): Promise<Register> {
   const session = await getSession();
   if (session.state !== "member") return { state: session.state };
-  const member = session.member;
+  return readRegister(session.member);
+}
+
+/** The register as one member reads it; `getRegister` for a page, or straight from a member already in hand. */
+export async function readRegister(member: Member): Promise<Register> {
   if (!isServing(member)) return { state: "outside" };
   const supabase = await createClient();
   if (!supabase) return { state: "no-database" };
@@ -169,11 +205,12 @@ export async function getRegister(): Promise<Register> {
       const ownerId = (row.owner_id as string | null) ?? null;
       return {
         id: row.id as string,
-        model: modelOf.get(row.model_id as string) ?? { id: row.model_id as string, slug: "", name: "A model that is gone", maker: "", kind: "runabout", crewMin: 1, crewMax: 1, flyable: false, sortOrder: 999 },
+        model: modelOf.get(row.model_id as string) ?? goneModel(row.model_id as string),
         ownerId,
         owner: ownerId ? (fleet.names[ownerId] ?? "a former member") : "The fleet",
         name: (row.name as string) ?? "",
         ready: row.ready === true,
+        inClaim: row.in_claim === true,
         readyAsOf: row.ready_as_of as string,
         registeredAt: row.registered_at as string,
         mine: ownerId === member.id || (ownerId === null && command),
@@ -188,6 +225,12 @@ export async function getRegister(): Promise<Register> {
       return { kind: kind.key, name: kind.many, hulls: hulls.length, ready: hulls.filter((ship) => ship.ready).length };
     })
     .filter((line) => line.hulls > 0);
+  const seatsOf = new Map(catalogue.templates.filter((template) => template.isDefault).map((template) => [template.modelId, template.seats]));
+  // The board is in the register's order: by model, whoever owns what.
+  const board = boardRows(
+    [...list].sort((a, b) => byModel(a.model, b.model) || a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name)),
+    (modelId) => seatsOf.get(modelId) ?? 0,
+  );
 
   return {
     state: "ready",
@@ -196,9 +239,46 @@ export async function getRegister(): Promise<Register> {
     ships: list,
     models: catalogue.models,
     templates: catalogue.templates,
+    roles: catalogue.roles,
     serving: command ? fleet.serving : [],
+    servingCount: fleet.serving.length,
     strength,
+    board,
+    seatsReady: board.reduce((sum, row) => sum + row.seatsReady, 0),
     readAt: Date.now(),
+  };
+}
+
+export type ModelPage =
+  | Outside
+  | { state: "not-found" }
+  | {
+      state: "ready";
+      member: Member;
+      command: boolean;
+      model: ShipModel;
+      templates: CrewTemplate[];
+      /** The fleet's hulls of this model, the fleet's own first, then by owner. */
+      hulls: Ship[];
+      readAt: number;
+    };
+
+/** One model's page: the model, its crew templates, and the fleet's hulls of it. */
+export async function getModel(slug: string): Promise<ModelPage> {
+  const register = await getRegister();
+  if (register.state !== "ready") return register;
+  const model = register.models.find((candidate) => candidate.slug === slug);
+  if (!model) return { state: "not-found" };
+  return {
+    state: "ready",
+    member: register.member,
+    command: register.command,
+    model,
+    templates: register.templates.filter((template) => template.modelId === model.id),
+    hulls: register.ships
+      .filter((ship) => ship.model.id === model.id)
+      .sort((a, b) => Number(a.ownerId !== null) - Number(b.ownerId !== null) || a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name)),
+    readAt: register.readAt,
   };
 }
 
@@ -286,11 +366,12 @@ export async function getReadiness(supabase: Client, eventId: string, member: Me
         row.id as string,
         {
           id: row.id as string,
-          model: modelOf.get(row.model_id as string) ?? { id: row.model_id as string, slug: "", name: "A model that is gone", maker: "", kind: "runabout", crewMin: 1, crewMax: 1, flyable: false, sortOrder: 999 },
+          model: modelOf.get(row.model_id as string) ?? goneModel(row.model_id as string),
           ownerId,
           owner: ownerId ? (fleet.names[ownerId] ?? "a former member") : "The fleet",
           name: (row.name as string) ?? "",
           ready: row.ready === true,
+          inClaim: row.in_claim === true,
           readyAsOf: row.ready_as_of as string,
           registeredAt: row.registered_at as string,
           mine: ownerId === member.id || (ownerId === null && command),
